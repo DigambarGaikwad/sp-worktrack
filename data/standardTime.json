@@ -1,0 +1,35 @@
+{
+  "Tubing": [
+    { "name": "Priority Panel Tubing", "standardTime": 120 },
+    { "name": "Hydrotest", "standardTime": 90 },
+    { "name": "Intensifier Tubing", "standardTime": 100 },
+    { "name": "Vent Tubing", "standardTime": 60 },
+    { "name": "Air Tubing", "standardTime": 45 },
+    { "name": "Other", "standardTime": 0 },
+    { "name": "Rework", "standardTime": 0 }
+  ],
+  "Mechanical": [
+    { "name": "Panel Assembly", "standardTime": 90 },
+    { "name": "Mounting", "standardTime": 60 },
+    { "name": "Other", "standardTime": 0 },
+    { "name": "Rework", "standardTime": 0 }
+  ],
+  "Electrical": [
+    { "name": "Wiring", "standardTime": 120 },
+    { "name": "Testing", "standardTime": 60 },
+    { "name": "Other", "standardTime": 0 },
+    { "name": "Rework", "standardTime": 0 }
+  ],
+  "Welding": [
+    { "name": "Bracket Welding", "standardTime": 60 },
+    { "name": "Base Frame Welding", "standardTime": 120 },
+    { "name": "Other", "standardTime": 0 },
+    { "name": "Rework", "standardTime": 0 }
+  ],
+  "Fitting": [
+    { "name": "Component Fitting", "standardTime": 60 },
+    { "name": "Pipe Fitting", "standardTime": 45 },
+    { "name": "Other", "standardTime": 0 },
+    { "name": "Rework", "standardTime": 0 }
+  ]
+}

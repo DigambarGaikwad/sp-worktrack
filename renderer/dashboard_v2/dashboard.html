@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>SP WorkTrack – Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <div class="dash">
+
+    <div class="dash-topbar">
+      <div class="brand">
+        <div class="title">SP WorkTrack</div>
+        <div class="sub">Production Analytics System (V2) • Shopfloor Wall</div>
+      </div>
+
+      <div class="actions">
+        <div class="sync" id="syncLine">Last Sync: —</div>
+        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn" id="backBtn">Back</button>
+      </div>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Remaining Time by Department (All Machines)</div>
+        <canvas id="pieDept"></canvas>
+        <div class="small" id="pieNote"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Department Std vs Consumed vs Overrun</div>
+        <canvas id="barDept"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Machine Status (All Machines)</div>
+      <div class="machine-grid" id="machineGrid"></div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="../config.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

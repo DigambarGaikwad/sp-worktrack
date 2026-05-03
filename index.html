@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>SP WorkTrack</title>
+  <link rel="stylesheet" href="renderer/style.css" />
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="left">
+        <img src="assets/logo (2).png" class="logo" alt="SP Logo" />
+        <div class="brand">
+          <div class="title">WorkTrack</div>
+          <div class="subtitle">Production Management System</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <span id="currentDate"></span>
+        <span class="about-btn" id="aboutBtn" title="About">ℹ</span>
+         <span class="about-btn" id="dashboardBtn" title="Dashboard">📊</span>
+        <span class="settings" title="Settings">⚙</span>
+       
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="content">
+
+      <!-- SECTION 1 -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Shift & Team Details</div>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label>Date</label>
+            <input type="date" id="workDate" />
+          </div>
+
+          <div class="field">
+            <label>Shift</label>
+            <select id="shiftSelect"></select>
+          </div>
+
+          <div class="field">
+            <label>Team Member</label>
+            <select id="employeeSelect"></select>
+          </div>
+
+          <div class="field">
+            <label>Work Type</label>
+            <select id="workTypeTop">
+              <option value="Normal">Normal</option>
+              <option value="Overtime">Overtime</option>
+            </select>
+          </div>
+
+          <div class="tip">
+            Tip: One person can work on multiple machines in a day (Machine is inside each work card).
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2 -->
+      <div class="card">
+        <!-- Additinal add work button on the top of work card -->
+        <!-- <div class="card-head row-between">
+          <div class="card-title">Work Entries</div>
+          <button class="btn orange" id="addWorkBtn">+ Add Work</button>
+        </div> -->
+
+        <div id="workContainer" class="work-list"></div>
+
+        <div class="work-actions-bottom">
+          <button class="btn orange" id="addWorkBtnBottom">+ Add Work</button>
+          <button class="btn grey" id="deleteLastBtn">Delete Last Work</button>
+        </div>
+      </div>
+
+      <!-- SECTION 3 -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Summary</div>
+        </div>
+
+        <div class="summary">
+          <div class="metric">
+            <div class="metric-label">Shift Available</div>
+            <div class="metric-value" id="availableMin">0 min</div>
+          </div>
+
+          <div class="metric">
+            <div class="metric-label">Utilized</div>
+            <div class="metric-value" id="utilizedMin">0 min</div>
+          </div>
+
+          <div class="metric">
+            <div class="metric-label">Remaining</div>
+            <div class="metric-value" id="remainingMin">0 min</div>
+          </div>
+
+          <div class="metric">
+            <div class="metric-label">Productivity</div>
+            <div class="metric-value" id="productivityPct">0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM ACTIONS -->
+      <div class="bottom-actions">
+        <button class="btn grey" id="saveBtn">Save</button>
+        <button class="btn green" id="submitBtn">Submit</button>
+      </div>
+<!-- app footer space beetween -->
+<!-- <div class="app-footer">
+    <div class="footer-left">
+    <span class="footer-brand">SP WorkTrack v1.0</span>
+    <span class="footer-dot">•</span>
+    <span class="footer-tag">Production Management System</span>
+    
+  </div>
+
+   <div class="footer-right">
+      <span class="footer-muted">Developed In-House by</span>
+      <span class="footer-name">Digambar Gaikwad</span>
+      <span class="footer-dot">•</span>
+       <span class="footer-muted">© 2026 Sopan Process Technologies</span>
+   </div>
+</div> -->
+<!-- app footers left -->
+ <div class="app-footer">
+  <div class="footer-top">
+    <span class="footer-title">SP WorkTrack v1.0</span>
+    <span class="footer-separator">|</span>
+    <span class="footer-subtitle"></span>
+  </div>
+
+  <div class="footer-bottom">
+    <span class="footer-developed">Developed by Digambar Gaikwad</span>
+    <span class="footer-separator">|</span>
+    <span class="footer-copyright">© 2026 Sopan Process Technologies</span>
+  </div>
+</div>
+
+
+    </div>
+  </div>
+
+  <!-- ADMIN MODAL -->
+  <div class="modal-backdrop hidden" id="adminModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Admin Settings</div>
+        <button class="icon-btn" id="adminCloseBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- LOGIN -->
+        <div class="admin-login" id="adminLoginBox">
+          <div class="field">
+            <label>Enter Admin PIN</label>
+            <input id="adminPinInput" type="password" placeholder="PIN" />
+          </div>
+          <div class="row">
+            <button class="btn green" id="adminLoginBtn">Login</button>
+            <button class="btn grey" id="adminCancelBtn">Cancel</button>
+          </div>
+          <div class="small-hint">PIN is stored in <b>data/adminOverrides.json</b></div>
+        </div>
+
+        <!-- PANEL -->
+        <div class="admin-panel hidden" id="adminPanel">
+          <div class="tabs">
+            <button class="tab active" data-tab="tabMachines">Machines</button>
+            <button class="tab" data-tab="tabEmployees">Employees</button>
+            <button class="tab" data-tab="tabShifts">Shifts</button>
+            <button class="tab" data-tab="tabWork">Work &amp; Sub Work</button>
+            <button class="tab" data-tab="tabPin">Change PIN</button>
+          </div>
+
+          <!-- Machines -->
+          <div class="tab-page" id="tabMachines">
+            <div class="row-between">
+              <div class="section-title">Machines</div>
+              <button class="btn orange" id="addMachineBtn">+ Add</button>
+            </div>
+            <div id="machinesList" class="list"></div>
+
+            <div class="small-hint">Tip: Mark machine as <b>Completed</b> to hide it from production entry.</div>
+          </div>
+
+          <!-- Employees -->
+          <div class="tab-page hidden" id="tabEmployees">
+            <div class="row-between">
+              <div class="section-title">Employees</div>
+              <button class="btn orange" id="addEmployeeBtn">+ Add</button>
+            </div>
+            <div id="employeesList" class="list"></div>
+          </div>
+
+          <!-- Shifts -->
+          <div class="tab-page hidden" id="tabShifts">
+            <div class="row-between">
+              <div class="section-title">Shifts</div>
+              <button class="btn orange" id="addShiftBtn">+ Add</button>
+            </div>
+            <div id="shiftsList" class="list"></div>
+            <div class="small-hint">Tip: Use 24-hour time like 09:00 to 18:00</div>
+          </div>
+
+          <!-- Work & Sub Work -->
+          <div class="tab-page hidden" id="tabWork">
+            <div class="row-between">
+              <div>
+                <div class="section-title">Work &amp; Sub Work</div>
+                <div class="small-hint">This controls Department list + Sub Work list + Standard Time (min).</div>
+              </div>
+              <div class="row">
+                <button class="btn grey" id="addTypeBtn">+ Add Machine Category</button>
+                <button class="btn grey" id="addMainWorkBtn">+ Add Main Work</button>
+                <button class="btn orange" id="addSubWorkBtn">+ Add Sub Work</button>
+              </div>
+            </div>
+
+            <div class="work-admin-grid">
+
+              <!-- (1) Machine Category -->
+              <div class="work-admin-panel">
+                <div class="work-admin-head">Machine Category</div>
+                <div class="small-hint">Select category to manage Department + Sub Work list.</div>
+
+                <div class="field" style="margin-top:10px;">
+                  <label>Machine Category</label>
+                  <select id="workTypeSelect" class="admin-select"></select>
+                </div>
+
+                <div style="margin-top:12px;" id="typeList"></div>
+
+                <div class="small-hint" style="margin-top:10px;">
+                  Tip: Keep different standard times for each machine category.
+                </div>
+              </div>
+
+              <!-- (2) Main Work (Department) -->
+              <div class="work-admin-panel">
+                <div class="work-admin-head">Main Work (Department)</div>
+                <div id="mainWorkList"></div>
+              </div>
+
+              <!-- (3) Sub Work Items -->
+              <div class="work-admin-panel">
+                <div class="work-admin-head">Sub Work Items</div>
+                <div class="small-hint">Editing: <b id="editingDeptLabel">None</b></div>
+                <div id="subWorkList"></div>
+              </div>
+
+            </div>
+          
+          </div>
+
+          <!-- PIN -->
+          <div class="tab-page hidden" id="tabPin">
+            <div class="section-title">Change Admin PIN</div>
+            <div class="grid-2">
+              <div class="field">
+                <label>New PIN</label>
+                <input id="newPin1" type="password" placeholder="New PIN" />
+              </div>
+              <div class="field">
+                <label>Confirm PIN</label>
+                <input id="newPin2" type="password" placeholder="Confirm PIN" />
+              </div>
+            </div>
+            <button class="btn green" id="savePinBtn">Save PIN</button>
+          </div>
+
+          <hr />
+
+          <div class="row-between">
+            <div class="small-hint">These changes apply immediately in the app after Save.</div>
+            <div class="row">
+              <button class="btn grey" id="adminLogoutBtn">Logout</button>
+              <button class="btn green" id="adminSaveBtn">Save Changes</button>
+            </div>
+          </div>
+
+        </div> <!-- /adminPanel -->
+      </div> <!-- /modal-body -->
+    </div> <!-- /modal -->
+  </div> <!-- /modal-backdrop -->
+
+  <!-- SUMMARY SCREEN (FULL PAGE) -->
+  <div class="summary-screen hidden" id="summaryScreen">
+    <div class="summary-wrap">
+      <div class="summary-top">
+        <div>
+          <div class="summary-title">Submission Summary</div>
+          <div class="summary-sub" id="sumMetaLine">—</div>
+        </div>
+        <div class="summary-actions">
+          <button class="btn grey" id="backToEntryBtn">Back</button>
+          <button class="btn green" id="newEntryBtn">+ New Entry</button>
+        </div>
+      </div>
+
+      <div class="summary-cards">
+        <div class="sum-card">
+          <div class="sum-card-label">Shift Available</div>
+          <div class="sum-card-val" id="sumShiftAvail">0 min</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-card-label">Utilized</div>
+          <div class="sum-card-val" id="sumUtilized">0 min</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-card-label">Remaining</div>
+          <div class="sum-card-val" id="sumRemaining">0 min</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-card-label">Productivity</div>
+          <div class="sum-card-val" id="sumProductivity">0%</div>
+        </div>
+      </div>
+
+      <div class="sum-table-wrap">
+        <div class="sum-table-title">Work Details</div>
+        <div class="sum-table" id="sumWorksTable"></div>
+      </div>
+    </div>
+  </div>
+<!-- ABOUT MODAL -->
+<div class="modal-backdrop hidden" id="aboutModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">About SP WorkTrack</div>
+      <button class="icon-btn" id="aboutCloseBtn">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div style="line-height:1.6; font-size:14px;margin-left: 25px;">
+        <strong>SP WorkTrack v1.0</strong><br/>
+        Production Management System<br/><br/>
+
+        <strong>Released:</strong> 19 Feb 2026<br/><br/>
+
+        <strong>Core Features:</strong>
+        <ul style="margin-top:6px;">
+          <li>Production Entry Tracking</li>
+          <li>Machine Category Mapping</li>
+          <li>Department & Sub Work Control</li>
+          <li>Rework Tracking with Root Area</li>
+          <li>Summary Dashboard</li>
+          <li>Google Sheets Integration</li>
+          <li>Real-time multi-device synchronization (simultaneous production entry)</li>
+        </ul>
+
+        <br/>
+        Developed by Digambar Gaikwad<br/>
+        © 2026 Sopan Process Technologies
+      </div>
+    </div>
+  </div>
+</div>
+
+  <script src="renderer/config.js"></script>
+  <script src="renderer/app.js"></script>
+</body>
+</html>

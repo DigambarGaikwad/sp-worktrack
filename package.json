@@ -1,0 +1,40 @@
+{
+  "name": "sp-worktrack",
+  "version": "1.0.0",
+  "description": "Production Entry Application",
+  "main": "main.js",
+  "author": "SP WorkTrack",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "jspdf": "^4.1.0"
+  },
+  "build": {
+    "appId": "com.sopan.spworktrack",
+    "productName": "SP WorkTrack",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "**/*",
+      "!release/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/app.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

@@ -1,0 +1,585 @@
+{
+  "admin": {
+    "pin": "1234"
+  },
+  "machineTypes": [
+    {
+      "id": "Online",
+      "name": "Online"
+    },
+    {
+      "id": "Booster-WaterCooled",
+      "name": "Booster - Water Cooled"
+    },
+    {
+      "id": "Booster-AirCool",
+      "name": "Booster - Air Cooled"
+    },
+    {
+      "id": "NewType-1771586955555",
+      "name": "STORE WORK"
+    }
+  ],
+  "machines": [
+    {
+      "id": 2,
+      "name": "BPCL 26015",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 3,
+      "name": "BPCL 26016",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 4,
+      "name": "VGL 26017",
+      "active": true,
+      "type": "Online"
+    },
+    {
+      "id": 5,
+      "name": "JITENDRA RAMANI 26011",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 6,
+      "name": "NARESH DHANDHUKIA 26012",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 7,
+      "name": "MNGL 26013",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 8,
+      "name": "MNGL 26014",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 9,
+      "name": "MNGL 26018",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 10,
+      "name": "MNGL 26019",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 11,
+      "name": "MNGL 26020",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 12,
+      "name": "MNGL 26021",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 13,
+      "name": "MNGL 26022",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 14,
+      "name": "MNGL 26023",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 15,
+      "name": "MNGL 26024",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 16,
+      "name": "MNGL 26025",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 17,
+      "name": "GAIL GAS 26026",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 18,
+      "name": "GAIL GAS 26027",
+      "active": true,
+      "type": "Booster-AirCool"
+    },
+    {
+      "id": 19,
+      "name": "Store",
+      "type": "NewType-1771586955555",
+      "active": true
+    }
+  ],
+  "employees": [
+    {
+      "empId": "SPT002",
+      "name": "MAINUDDIN MIYAN",
+      "active": true
+    },
+    {
+      "empId": "SPT003",
+      "name": "ANKUL",
+      "active": true
+    },
+    {
+      "empId": "SPT004",
+      "name": "ARJUN PRASAD",
+      "active": true
+    },
+    {
+      "empId": "SPT006",
+      "name": "MANUVAR ABDUL SAMAD",
+      "active": true
+    },
+    {
+      "empId": "SPT007",
+      "name": "AMINDER KUMAR",
+      "active": true
+    },
+    {
+      "empId": "SPT008",
+      "name": "PRITHIRAJ HALDAR",
+      "active": true
+    },
+    {
+      "empId": "SPT009",
+      "name": "RITESH KUMAR JHA",
+      "active": true
+    },
+    {
+      "empId": "SPT010",
+      "name": "AMAR SAMAL",
+      "active": true
+    },
+    {
+      "empId": "SPT011",
+      "name": "MUKESH SAH",
+      "active": true
+    },
+    {
+      "empId": "SPT012",
+      "name": "CHAUHAN RAKESHCHANDRA AMBALAL",
+      "active": true
+    },
+    {
+      "empId": "SPT013",
+      "name": "PUSPRAJ SINGH",
+      "active": true
+    },
+    {
+      "empId": "SPT014",
+      "name": "MUNEER AHMAD",
+      "active": true
+    },
+    {
+      "empId": "SPT015",
+      "name": "PRAVIN SINGH",
+      "active": true
+    },
+    {
+      "empId": "SPT016",
+      "name": "SAMANTHA RAJWAR",
+      "active": true
+    },
+    {
+      "empId": "SPT017",
+      "name": "RADHAMOHAN MISHRA",
+      "active": true
+    },
+    {
+      "empId": "SPT022",
+      "name": "TIWARI DHIRAJ SHITLA PRASAD",
+      "active": true
+    },
+    {
+      "empId": "SPT024",
+      "name": "JUNGADE NILESH SURESHRA",
+      "active": true
+    },
+    {
+      "empId": "SPT042",
+      "name": "MANGAL KUMAR SASMAL",
+      "active": true
+    },
+    {
+      "empId": "A2613",
+      "name": "VINAY KUMAR KHUSHWAH",
+      "active": true
+    },
+    {
+      "empId": "A2615",
+      "name": "GOVIND PANDIT",
+      "active": true
+    }
+  ],
+  "shifts": [
+    {
+      "id": "1771184868345",
+      "name": "General",
+      "start": "09:00",
+      "end": "18:00",
+      "breakMinutes": 75,
+      "active": true
+    },
+    {
+      "id": "1771190540626",
+      "name": "OT 1",
+      "start": "18:00",
+      "end": "23:00",
+      "breakMinutes": 30,
+      "active": true
+    },
+    {
+      "id": "1771190597502",
+      "name": "OT 2",
+      "start": "18:00",
+      "end": "01:00",
+      "breakMinutes": 50,
+      "active": true
+    }
+  ],
+  "mainWorks": [
+    "Tubing",
+    "Electrical",
+    "Mechanical",
+    "Welding fitting and Painting"
+  ],
+  "subWorks": {
+    "Tubing": [
+      {
+        "name": "Priority Panel",
+        "standardTime": 30
+      },
+      {
+        "name": "Hydrotesting",
+        "standardTime": 50
+      },
+      {
+        "name": "Intensifier Tubing",
+        "standardTime": 60
+      }
+    ],
+    "Electrical": [
+      {
+        "name": "Field Wiring",
+        "standardTime": 100
+      },
+      {
+        "name": "Panel Wiring",
+        "standardTime": 100
+      },
+      {
+        "name": "Technical support to Programming",
+        "standardTime": 60
+      }
+    ],
+    "Mechanical": [
+      {
+        "name": "Water Tank Assembly",
+        "standardTime": 60
+      },
+      {
+        "name": "Intensifier Assembly",
+        "standardTime": 60
+      },
+      {
+        "name": "Heat Exchanger Assembly",
+        "standardTime": 60
+      },
+      {
+        "name": "Machine Shifting",
+        "standardTime": 30
+      },
+      {
+        "name": "Machine packing and loading for Shipments",
+        "standardTime": 45
+      }
+    ],
+    "Welding fitting and Painting": [
+      {
+        "name": "Welding",
+        "standardTime": 60
+      },
+      {
+        "name": "Fitting",
+        "standardTime": 60
+      },
+      {
+        "name": "Painting",
+        "standardTime": 60
+      }
+    ]
+  },
+  "workCatalogByType": {
+    "Online": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          }
+        ]
+      }
+    },
+    "Booster-WaterCooled": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          }
+        ]
+      }
+    },
+    "Booster-AirCool": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical",
+        "Welding fitting and Painting"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ]
+      }
+    },
+    "NewType-1771586955555": {
+      "mainWorks": [
+        "STORE",
+        "Electrical",
+        "Mechanical",
+        "Welding fitting and Painting"
+      ],
+      "subWorks": {
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ],
+        "STORE": [
+          {
+            "name": "STORE",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ]
+      }
+    }
+  }
+}
