@@ -27,7 +27,38 @@ function doPost(e) {
     }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = String(body.action || "submitWork");
+const action = String(body.action || "submitWork");
+
+// ✅ SAVE ADMIN FROM APP TO GOOGLE SHEET ADMIN A2
+if (action === "saveAdminOverrides") {
+  if (!body.adminOverrides) {
+    return json_({ ok: false, error: "Missing adminOverrides payload" });
+  }
+
+  const sh = getAdminSheet_(ss);
+  sh.getRange("A2").setValue(JSON.stringify(body.adminOverrides || {}, null, 2));
+
+  rebuildStandardTimeMaster_(ss);
+
+  return json_({ ok: true, message: "Admin overrides saved to Google Sheet" });
+}
+
+// ✅ DASHBOARD FEED ROUTE
+    // ✅ SAVE ADMIN FROM APP TO GOOGLE SHEET ADMIN A2
+if (action === "saveAdminOverrides") {
+  if (!body.adminOverrides) {
+    return json_({ ok: false, error: "Missing adminOverrides payload" });
+  }
+
+  const sh = getAdminSheet_(ss);
+  sh.getRange("A2").setValue(JSON.stringify(body.adminOverrides || {}, null, 2));
+
+  rebuildStandardTimeMaster_(ss);
+
+  rebuildEmployeesMaster_(ss);
+
+  return json_({ ok: true, message: "Admin overrides saved to Google Sheet" });
+}
 
     // ✅ DASHBOARD FEED ROUTE
     if (action === "getDashboardFeed") {
@@ -307,262 +338,840 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ===================== DASHBOARD V2 =====================
-// MACHINE_PLAN_DEPT: MachineName | Type | StartDate | Department | Std_Min
-// DASHBOARD_FEED: MachineName | Type | StartDate | Std_Total_Min | Consumed_Total_Min | Remaining_Total_Min | Overrun_Total_Min | DeptJSON
+// ===================== DASHBOARD V3 =====================
+// STANDARD_TIME: Machine Category | Department | Sub Work | Std Time
+// MACHINE_LIST: Machine No | Machine Category
+// PLANNED_WORK: Machine No | Machine Category | Department | Sub Work | Std Time | Actual Time | Remaining Time
+// DASHBOARD_FEED: machine-wise summary for Electron dashboard
 
-function ensureMachinePlanDept_(ss) {
-  let sh = ss.getSheetByName("MACHINE_PLAN_DEPT");
-  if (!sh) {
-    sh = ss.insertSheet("MACHINE_PLAN_DEPT");
-    sh.getRange(1, 1, 1, 5).setValues([["MachineName","Type","StartDate","Department","Std_Min"]]);
+function ensureSheetHeader_(ss, name, headers) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+
+  const first = String(sh.getRange(1, 1).getValue() || "").trim();
+  if (!first) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
     sh.setFrozenRows(1);
   }
   return sh;
 }
 
-function ensureDashboardFeed_(ss) {
-  let sh = ss.getSheetByName("DASHBOARD_FEED");
-  if (!sh) sh = ss.insertSheet("DASHBOARD_FEED");
-
-  const headers = [
-    "MachineName","Type","StartDate",
-    "Std_Total_Min","Consumed_Total_Min","Remaining_Total_Min","Overrun_Total_Min",
-    "DeptJSON"
-  ];
-  sh.clearContents();
-  sh.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sh.setFrozenRows(1);
-  return sh;
+function headerMap_(headers) {
+  const map = {};
+  headers.forEach((h, i) => {
+    map[String(h || "").trim().toLowerCase()] = i;
+  });
+  return map;
 }
 
-// ✅ Snapshot/UPSERT machine plan (Machine + Dept) from ADMIN catalog
-// - Creates missing department rows if not present
-// - Avoids duplicates even if machine name has minor mismatch (trim/lower)
+function clean_(v) {
+  return String(v == null ? "" : v).trim();
+}
+
+function key_(v) {
+  return clean_(v).toLowerCase();
+}
+
+function makeKey_(arr) {
+  return arr.map(key_).join("||");
+}
+
+// Keep old doPost call safe
 function ensureMachinePlanSnapshotOnFirstEntry_(ss, body) {
-  const works = Array.isArray(body.works) ? body.works : [];
-  if (!works.length) return;
+  // V3 uses STANDARD_TIME + MACHINE_LIST + PLANNED_WORK.
+  // Nothing needed here.
+}
 
-  const first = works[0];
-  const machineName = String(first.machine || "").trim();
-  const typeId = String(first.machineTypeId || "").trim();        // from payload
-  const typeName = String(first.machineCategory || "").trim();    // display name
-  const startDate = normalizeWorkDate_(body.workDate);
+// ---------- 1) STANDARD_TIME from ADMIN ----------
+function rebuildStandardTimeMaster_(ss) {
+  const sh = ensureSheetHeader_(ss, "STANDARD_TIME", [
+    "Machine Category", "Department", "Sub Work", "Std Time"
+  ]);
 
-  if (!machineName || !typeId) return;
+  const admin = getAdminOverrides_(ss);
+  const rows = [];
 
-  const planSh = ensureMachinePlanDept_(ss);
+  const types = Array.isArray(admin.machineTypes) ? admin.machineTypes : [];
+  const typeNameById = {};
+  types.forEach(t => {
+    typeNameById[clean_(t.id)] = clean_(t.name);
+  });
+
+  const catalogByType = admin.workCatalogByType || {};
+
+  Object.keys(catalogByType).forEach(typeId => {
+    const catalog = catalogByType[typeId] || {};
+    const categoryName = typeNameById[typeId] || typeId;
+
+    const mainWorks = Array.isArray(catalog.mainWorks) ? catalog.mainWorks : [];
+    const subWorks = catalog.subWorks || {};
+
+    mainWorks.forEach(dept => {
+      const depName = clean_(dept);
+      const items = Array.isArray(subWorks[depName]) ? subWorks[depName] : [];
+
+      items.forEach(it => {
+        const sub = clean_(it.name);
+        const std = Number(it.standardTime || 0) || 0;
+        if (!categoryName || !depName || !sub) return;
+        rows.push([categoryName, depName, sub, std]);
+      });
+    });
+  });
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, 4).setValues([[
+    "Machine Category", "Department", "Sub Work", "Std Time"
+  ]]);
+  sh.setFrozenRows(1);
+
+  if (rows.length) {
+    sh.getRange(2, 1, rows.length, 4).setValues(rows);
+  }
+
+  return rows;
+}
+
+// ---------- 2) MACHINE_LIST from ADMIN + LOG ----------
+function rebuildMachineList_(ss, yyyy) {
+ const sh = ensureSheetHeader_(ss, "MACHINE_LIST", [
+  "Machine No", "Machine Category", "Status"
+]);
+
+  const machineMap = {};
+  const statusByMachine = {};
+
+  // From Admin machines
+  const admin = getAdminOverrides_(ss);
+  const typeNameById = {};
+  (admin.machineTypes || []).forEach(t => {
+    typeNameById[clean_(t.id)] = clean_(t.name);
+  });
+
+  (admin.machines || []).forEach(m => {
+  const machine = clean_(m.name);
+  const category = typeNameById[clean_(m.type)] || clean_(m.type);
+  const status = m.active === false ? "Completed" : "Active";
+
+  if (machine && category) {
+    statusByMachine[key_(machine)] = status;
+    machineMap[makeKey_([machine, category])] = [machine, category, status];
+  }
+});
+
+  // From LOG_YYYY also
+  const logSh = ss.getSheetByName("LOG_" + yyyy);
+  if (logSh && logSh.getLastRow() >= 2) {
+    const vals = logSh.getDataRange().getValues();
+    const headers = vals[0].map(String);
+    const h = headerMap_(headers);
+
+    const iMachine = h["machine"];
+    const iCat = h["machine category"];
+
+    if (iMachine != null && iCat != null) {
+      vals.slice(1).forEach(r => {
+        const machine = clean_(r[iMachine]);
+        const category = clean_(r[iCat]);
+        if (machine && category) {
+          // ---------- 2) MACHINE_LIST from ADMIN + LOG ----------
+// ---------- 2) MACHINE_LIST from ADMIN + LOG ----------
+function rebuildMachineList_(ss, yyyy) {
+  const sh = ensureSheetHeader_(ss, "MACHINE_LIST", [
+    "Machine No", "Machine Category", "Status"
+  ]);
+
+  const machineMap = {};
+  const statusByMachine = {};
+
   const admin = getAdminOverrides_(ss);
 
-  const catalog = (admin?.workCatalogByType && admin.workCatalogByType[typeId])
-    ? admin.workCatalogByType[typeId]
-    : null;
-
-  const deptList =
-    Array.isArray(catalog?.mainWorks) ? catalog.mainWorks :
-    Array.isArray(admin?.mainWorks) ? admin.mainWorks :
-    [];
-
-  if (!deptList.length) return;
-
-  // ---- Read existing plan rows for this machine ----
-  const last = planSh.getLastRow();
-  const existingDeptSet = {};  // deptNameLower -> true
-  const existingRows = [];     // { rowNum, machineNorm, deptNorm }
-
-  if (last >= 2) {
-    const data = planSh.getRange(2, 1, last - 1, 5).getValues();
-    data.forEach((r, i) => {
-      const m = String(r[0] || "").trim();
-      const d = String(r[3] || "").trim();
-      const mNorm = m.toLowerCase();
-      const dNorm = d.toLowerCase();
-      existingRows.push({ rowNum: i + 2, mNorm, dNorm });
-
-      if (mNorm === machineName.toLowerCase() && dNorm) {
-        existingDeptSet[dNorm] = true;
-      }
-    });
-  }
-
-  // ---- Build missing dept rows only ----
-  const outRows = [];
-  deptList.forEach(dep => {
-    const depName = String(dep || "").trim();
-    if (!depName) return;
-
-    const depNorm = depName.toLowerCase();
-    if (existingDeptSet[depNorm]) return; // already exists -> skip
-
-    const std =
-      sumStdFromSubWorks_(catalog?.subWorks?.[depName]) ||
-      sumStdFromSubWorks_(admin?.subWorks?.[depName]) ||
-      0;
-
-    outRows.push([machineName, typeName, startDate, depName, std]);
+  const typeNameById = {};
+  (admin.machineTypes || []).forEach(t => {
+    typeNameById[clean_(t.id)] = clean_(t.name);
   });
 
-  if (outRows.length) {
-    planSh.getRange(planSh.getLastRow() + 1, 1, outRows.length, 5).setValues(outRows);
+  // 1) Admin machines are source of truth for status
+  (admin.machines || []).forEach(m => {
+    const machine = clean_(m.name);
+    const category = typeNameById[clean_(m.type)] || clean_(m.type);
+    const status = m.active === false ? "Completed" : "Active";
+
+    if (machine && category) {
+      statusByMachine[key_(machine)] = status;
+      machineMap[makeKey_([machine, category])] = [machine, category, status];
+    }
+  });
+
+  // 2) LOG fallback: add only machines missing from Admin
+  const logSh = ss.getSheetByName("LOG_" + yyyy);
+  if (logSh && logSh.getLastRow() >= 2) {
+    const vals = logSh.getDataRange().getValues();
+    const headers = vals[0].map(String);
+    const h = headerMap_(headers);
+
+    const iMachine = h["machine"];
+    const iCat = h["machine category"];
+
+    if (iMachine != null && iCat != null) {
+      vals.slice(1).forEach(r => {
+        const machine = clean_(r[iMachine]);
+        const category = clean_(r[iCat]);
+
+        if (machine && category) {
+          const k = makeKey_([machine, category]);
+
+          if (!machineMap[k]) {
+            const status = statusByMachine[key_(machine)] || "Active";
+            machineMap[k] = [machine, category, status];
+          }
+        }
+      });
+    }
   }
+
+  const rows = Object.values(machineMap).map(r => [
+    r[0] || "",
+    r[1] || "",
+    r[2] || "Active"
+  ]);
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, 3).setValues([[
+    "Machine No", "Machine Category", "Status"
+  ]]);
+  sh.setFrozenRows(1);
+
+  if (rows.length) {
+    sh.getRange(2, 1, rows.length, 3).setValues(rows);
+  }
+
+  return rows;
 }
 
-function sumStdFromSubWorks_(arr) {
-  if (!Array.isArray(arr)) return 0;
-  let sum = 0;
-  arr.forEach(it => {
-    const v = Number(it?.standardTime ?? it?.stdMin ?? it?.std ?? 0) || 0;
-    sum += v;
-  });
-  return sum;
+        }
+      });
+    }
+  }
+
+  const rows = Object.values(machineMap).map(r => [
+  r[0] || "",
+  r[1] || "",
+  r[2] || "Active"
+]);
+
+  sh.clearContents();
+sh.getRange(1, 1, 1, 3).setValues([["Machine No", "Machine Category", "Status"]]);
+sh.setFrozenRows(1);
+  if (rows.length) {
+  sh.getRange(2, 1, rows.length, 3).setValues(rows);
 }
 
-// ✅ Build DASHBOARD_FEED from MACHINE_PLAN_DEPT + LOG_YYYY
-function buildDashboardFeedDynamic_(yyyy) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const planSh = ensureMachinePlanDept_(ss);
-  const feedSh = ensureDashboardFeed_(ss);
-
-  // Read MACHINE_PLAN_DEPT
-  const planLast = planSh.getLastRow();
-  const planData = planLast >= 2 ? planSh.getRange(2, 1, planLast - 1, 5).getValues() : [];
-
-  // planMap: machine -> {type,startDate,deptStd}
-  const planMap = {};
-  planData.forEach(r => {
-    const machine = String(r[0] || "").trim();
-    if (!machine) return;
-    const type = String(r[1] || "").trim();
-    const startDate = normalizeWorkDate_(r[2]);
-    const dept = String(r[3] || "").trim();
-    const std = Number(r[4] || 0) || 0;
-
-    planMap[machine] = planMap[machine] || { machine, type, startDate, deptStd: {} };
-    if (type) planMap[machine].type = type;
-    if (startDate) planMap[machine].startDate = startDate;
-    const prev = Number(planMap[machine].deptStd[dept] || 0) || 0;
-// If duplicates exist, keep the MAX (prevents doubling)
-planMap[machine].deptStd[dept] = Math.max(prev, std);
-  });
-
-  const logName = "LOG_" + yyyy;
-  const logSh = ss.getSheetByName(logName);
-
-  // If no LOG yet, still show plan-only rows (Consumed=0)
-  if (!logSh) {
-    const outNoLog = buildFeedFromPlanOnly_(planMap);
-    if (outNoLog.length) feedSh.getRange(2, 1, outNoLog.length, outNoLog[0].length).setValues(outNoLog);
-    return { ok: true, machines: outNoLog.length, note: "No LOG sheet yet. Showing plan only." };
-  }
-
-  const logLast = logSh.getLastRow();
-  if (logLast < 2) {
-    const outNoRows = buildFeedFromPlanOnly_(planMap);
-    if (outNoRows.length) feedSh.getRange(2, 1, outNoRows.length, outNoRows[0].length).setValues(outNoRows);
-    return { ok: true, machines: outNoRows.length, note: "No log rows yet. Showing plan only." };
-  }
-
-  const logHeaders = logSh.getRange(1, 1, 1, logSh.getLastColumn()).getValues()[0].map(v => String(v || "").trim());
-  const idxMachine = logHeaders.indexOf("Machine");
-  const idxDept = logHeaders.indexOf("Department");
-  const idxActual = logHeaders.indexOf("Actual Time");
-
-  if (idxMachine < 0 || idxDept < 0 || idxActual < 0) {
-    throw new Error("LOG header missing: Machine / Department / Actual Time");
-  }
-
-  const logData = logSh.getRange(2, 1, logLast - 1, logSh.getLastColumn()).getValues();
-  const consumedMap = {}; // machine -> dept -> actual
-
-  logData.forEach(r => {
-    const machine = String(r[idxMachine] || "").trim();
-    const dept = String(r[idxDept] || "").trim();
-    const actual = Number(r[idxActual] || 0) || 0;
-    if (!machine || !dept || actual <= 0) return;
-
-    consumedMap[machine] = consumedMap[machine] || {};
-    consumedMap[machine][dept] = (consumedMap[machine][dept] || 0) + actual;
-  });
-
-  // Build feed rows
-  const out = [];
-  Object.keys(planMap).forEach(machine => {
-    const p = planMap[machine];
-    const deptStd = p.deptStd || {};
-    const deptConsumed = consumedMap[machine] || {};
-
-    const depts = {};
-    Object.keys(deptStd).forEach(d => depts[d] = true);
-    Object.keys(deptConsumed).forEach(d => depts[d] = true);
-
-    let stdTotal = 0, consTotal = 0, remTotal = 0, ovTotal = 0;
-    const deptJSON = {};
-
-    Object.keys(depts).forEach(d => {
-      const s = Number(deptStd[d] || 0) || 0;
-      const c = Number(deptConsumed[d] || 0) || 0;
-
-      const rem = Math.max(0, s - c);
-      const ov = Math.max(0, c - s);
-
-      deptJSON[d] = { std: s, cons: c, rem: rem, ov: ov };
-
-      stdTotal += s;
-      consTotal += c;
-      remTotal += rem;
-      ovTotal += ov;
-    });
-
-    out.push([
-      machine,
-      p.type || "",
-      p.startDate || "",
-      stdTotal,
-      consTotal,
-      remTotal,
-      ovTotal,
-      JSON.stringify(deptJSON)
-    ]);
-  });
-
-  if (out.length > 0) {
-    feedSh.getRange(2, 1, out.length, out[0].length).setValues(out);
-  }
-
-  return { ok: true, machines: out.length };
+  return rows;
 }
 
-function buildFeedFromPlanOnly_(planMap) {
-  const out = [];
-  Object.keys(planMap).forEach(machine => {
-    const p = planMap[machine];
-    const deptStd = p.deptStd || {};
+// ---------- 3) Actual time from LOG ----------
+function readActualByMachineSubWork_(ss, yyyy) {
+  const out = {};
+  const logSh = ss.getSheetByName("LOG_" + yyyy);
+  if (!logSh || logSh.getLastRow() < 2) return out;
 
-    let stdTotal = 0;
-    const deptJSON = {};
+  const vals = logSh.getDataRange().getValues();
+  const headers = vals[0].map(String);
+  const h = headerMap_(headers);
 
-    Object.keys(deptStd).forEach(d => {
-      const s = Number(deptStd[d] || 0) || 0;
-      stdTotal += s;
-      deptJSON[d] = { std: s, cons: 0, rem: s, ov: 0 };
-    });
+  const iMachine = h["machine"];
+  const iCat = h["machine category"];
+  const iDept = h["department"];
+  const iSub = h["sub work"];
+  const iActual = h["actual time"];
+  const iEmp = h["emp name"];
+  const iDate = h["work date"];
+  const iType = h["type"];
+  const iDesc = h["description"];
+  const iRoot = h["root area"];
 
-    out.push([
-      machine,
-      p.type || "",
-      p.startDate || "",
-      stdTotal,
-      0,
-      stdTotal,
-      0,
-      JSON.stringify(deptJSON)
-    ]);
+  if (iMachine == null || iCat == null || iDept == null || iSub == null || iActual == null) {
+    throw new Error("LOG missing required columns: Machine / Machine Category / Department / Sub Work / Actual Time");
+  }
+
+  vals.slice(1).forEach(r => {
+    const machine = clean_(r[iMachine]);
+    const cat = clean_(r[iCat]);
+    const dept = clean_(r[iDept]);
+    const sub = clean_(r[iSub]);
+    const actual = Number(r[iActual] || 0) || 0;
+    const emp = iEmp != null ? clean_(r[iEmp]) : "";
+    const workDate = iDate != null ? normalizeWorkDate_(r[iDate]) : "";
+    const workType = iType != null ? clean_(r[iType]) : "Normal";
+    const desc = iDesc != null ? clean_(r[iDesc]) : "";
+    const root = iRoot != null ? clean_(r[iRoot]) : "";
+
+    if (!machine || !cat || !dept || !sub || actual <= 0) return;
+
+    const k = makeKey_([machine, cat, dept, sub]);
+
+    if (!out[k]) {
+      out[k] = {
+        actual: 0,
+        rework: 0,
+        other: 0,
+        employees: {},
+        latestDate: "",
+        lossDetails: []
+      };
+    }
+
+    const t = key_(workType);
+
+    if (t === "normal") {
+      out[k].actual += actual;
+    } else if (t === "rework") {
+      out[k].rework += actual;
+      out[k].lossDetails.push({ type: "Rework", actual, emp, workDate, desc, root });
+    } else {
+      out[k].other += actual;
+      out[k].lossDetails.push({ type: "Other", actual, emp, workDate, desc, root });
+    }
+
+    if (emp) out[k].employees[emp] = true;
+
+    if (workDate && (!out[k].latestDate || workDate > out[k].latestDate)) {
+      out[k].latestDate = workDate;
+    }
   });
+
   return out;
 }
 
-// Manual run if needed
+// ---------- 4) PLANNED_WORK = machine plan + actual ----------
+function rebuildPlannedWork_(ss, yyyy) {
+  const stdRows = rebuildStandardTimeMaster_(ss);
+  const machineRows = rebuildMachineList_(ss, yyyy);
+  const actualMap = readActualByMachineSubWork_(ss, yyyy);
+
+  const sh = ensureSheetHeader_(ss, "PLANNED_WORK", [
+    "Machine No", "Machine Category", "Department", "Sub Work",
+    "Std Time", "Actual Time", "Remaining Time", "Overrun Time",
+    "Rework Time", "Other Time", "Done By", "Done Date"
+  ]);
+
+  const stdByCategory = {};
+  stdRows.forEach(r => {
+    const cat = clean_(r[0]);
+    stdByCategory[key_(cat)] = stdByCategory[key_(cat)] || [];
+    stdByCategory[key_(cat)].push({
+      category: cat,
+      dept: clean_(r[1]),
+      sub: clean_(r[2]),
+      std: Number(r[3] || 0) || 0
+    });
+  });
+
+  const out = [];
+
+  machineRows.forEach(mr => {
+    const machine = clean_(mr[0]);
+    const category = clean_(mr[1]);
+    const stdList = stdByCategory[key_(category)] || [];
+
+    stdList.forEach(s => {
+      const k = makeKey_([machine, category, s.dept, s.sub]);
+      const actualObj = actualMap[k] || {};
+
+      const actual = Number(actualObj.actual || 0) || 0; // Normal only
+      const rework = Number(actualObj.rework || 0) || 0;
+      const other = Number(actualObj.other || 0) || 0;
+
+      const remaining = Math.max(0, s.std - actual);
+      const overrun = Math.max(0, actual - s.std);
+
+      const doneByList = actualObj.employees ? Object.keys(actualObj.employees) : [];
+      const doneBy = doneByList.length ? doneByList.join(", ") : "Pending";
+      const doneDate = actualObj.latestDate || "Pending";
+
+      out.push([
+        machine,
+        category,
+        s.dept,
+        s.sub,
+        s.std,
+        actual,
+        remaining,
+        overrun,
+        rework,
+        other,
+        doneBy,
+        doneDate
+      ]);
+    });
+  });
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, 12).setValues([[
+    "Machine No", "Machine Category", "Department", "Sub Work",
+    "Std Time", "Actual Time", "Remaining Time", "Overrun Time",
+    "Rework Time", "Other Time", "Done By", "Done Date"
+  ]]);
+  sh.setFrozenRows(1);
+
+  if (out.length) {
+    sh.getRange(2, 1, out.length, 12).setValues(out);
+  }
+
+  return out;
+}
+
+// ---------- 5) DASHBOARD_FEED from PLANNED_WORK ----------
+function buildDashboardFeedDynamic_(yyyy) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1) Rebuild detailed plan
+  const plannedRows = rebuildPlannedWork_(ss, yyyy);
+
+  // 2) Rebuild machine summary
+  const summaryRows = rebuildMachineSummary_(ss, plannedRows);
+
+  const feedSh = ensureSheetHeader_(ss, "DASHBOARD_FEED", [
+    "MachineName",
+    "Type",
+    "Std_Total_Min",
+    "Consumed_Total_Min",
+    "Remaining_Total_Min",
+    "Overrun_Total_Min",
+    "Progress_Pct",
+    "Remaining_Pct",
+    "Overrun_Pct",
+    "Rework_Total_Min",
+    "Other_Total_Min",
+    "DeptJSON"
+  ]);
+
+  const machineMap = {};
+   
+   // 🔹 Read MACHINE_LIST for status
+const machineStatusMap = {};
+const mlSh = ss.getSheetByName("MACHINE_LIST");
+
+if (mlSh && mlSh.getLastRow() >= 2) {
+  const vals = mlSh.getDataRange().getValues();
+  vals.slice(1).forEach(r => {
+    const machine = clean_(r[0]);
+    const category = clean_(r[1]);
+    const status = clean_(r[2]) || "Active";
+
+    const k = makeKey_([machine, category]);
+    machineStatusMap[k] = status;
+  });
+}
+
+
+  summaryRows.forEach(r => {
+    const section = clean_(r[0]);
+    const machine = clean_(r[1]);
+    const category = clean_(r[2]);
+    const dept = clean_(r[3]);
+
+    const std = Number(r[4] || 0);
+    const actual = Number(r[5] || 0);
+    const progressPct = Number(r[6] || 0);
+    const remaining = Number(r[7] || 0);
+    const remainingPct = Number(r[8] || 0);
+    const overrun = Number(r[9] || 0);
+    const overrunPct = Number(r[10] || 0);
+    const rework = Number(r[11] || 0);
+    const other = Number(r[12] || 0);
+
+    const k = makeKey_([machine, category]);
+
+    if (section === "MACHINE_TOTAL") {
+      machineMap[k] = machineMap[k] || {
+        machine,
+        category,
+        std: 0,
+        actual: 0,
+        remaining: 0,
+        overrun: 0,
+        progressPct: 0,
+        remainingPct: 0,
+        overrunPct: 0,
+        rework: 0,
+        other: 0,
+        dept: {}
+      };
+
+      machineMap[k].std = std;
+      machineMap[k].actual = actual;
+      machineMap[k].remaining = remaining;
+      machineMap[k].overrun = overrun;
+      machineMap[k].progressPct = progressPct;
+      machineMap[k].remainingPct = remainingPct;
+      machineMap[k].overrunPct = overrunPct;
+      machineMap[k].rework = rework;
+      machineMap[k].other = other;
+    }
+
+    if (section === "DEPARTMENT") {
+      machineMap[k] = machineMap[k] || {
+        machine,
+        category,
+        std: 0,
+        actual: 0,
+        remaining: 0,
+        overrun: 0,
+        progressPct: 0,
+        remainingPct: 0,
+        overrunPct: 0,
+        rework: 0,
+        other: 0,
+        dept: {}
+      };
+
+      machineMap[k].dept[dept] = {
+        std,
+        cons: actual,
+        rem: remaining,
+        ov: overrun,
+        progressPct,
+        remainingPct,
+        overrunPct,
+        rework,
+        other
+      };
+    }
+  });
+
+ const out = Object.values(machineMap).map(m => {
+  const k = makeKey_([m.machine, m.category]);
+  const status = machineStatusMap[k] || "Active";
+
+  return [
+    m.machine,
+    m.category,
+    status,
+    m.std,
+    m.actual,
+    m.remaining,
+    m.overrun,
+    m.progressPct,
+    m.remainingPct,
+    m.overrunPct,
+    m.rework,
+    m.other,
+    JSON.stringify(m.dept)
+  ];
+});
+
+  feedSh.clearContents();
+  feedSh.getRange(1, 1, 1, 13).setValues([[
+    "MachineName",
+    "Type",
+    "Status",
+    "Std_Total_Min",
+    "Consumed_Total_Min",
+    "Remaining_Total_Min",
+    "Overrun_Total_Min",
+    "Progress_Pct",
+    "Remaining_Pct",
+    "Overrun_Pct",
+    "Rework_Total_Min",
+    "Other_Total_Min",
+    "DeptJSON"
+  ]]);
+  feedSh.setFrozenRows(1);
+
+  if (out.length) {
+    feedSh.getRange(2, 1, out.length, 13).setValues(out);
+  }
+
+  return {
+    ok: true,
+    machines: out.length,
+    plannedRows: plannedRows.length,
+    summaryRows: summaryRows.length
+  };
+}
+
 function rebuildDashboardNow() {
   const yyyy = String(new Date().getFullYear());
   Logger.log(buildDashboardFeedDynamic_(yyyy));
+}
+
+// ===================== EMPLOYEE MASTER FROM ADMIN =====================
+// EMPLOYEES: Emp ID | Emp Name | Active
+
+function rebuildEmployeesMaster_(ss) {
+  const sh = ensureSheetHeader_(ss, "EMPLOYEES", [
+    "Emp ID", "Emp Name", "Active"
+  ]);
+
+  const admin = getAdminOverrides_(ss);
+  const employees = Array.isArray(admin.employees) ? admin.employees : [];
+
+  const rows = employees
+    .filter(e => String(e.empId || "").trim())
+    .map(e => [
+      String(e.empId || "").trim(),
+      String(e.name || "").trim(),
+      e.active === false ? "FALSE" : "TRUE"
+    ]);
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, 3).setValues([["Emp ID", "Emp Name", "Active"]]);
+  sh.setFrozenRows(1);
+
+  if (rows.length) {
+    sh.getRange(2, 1, rows.length, 3).setValues(rows);
+  }
+
+  return { ok: true, employees: rows.length };
+}
+function rebuildEmployeesNow() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const r = rebuildEmployeesMaster_(ss);
+  Logger.log(r);
+}
+
+// ===================== MACHINE SUMMARY =====================
+// MACHINE_SUMMARY: one row per machine + department progress JSON
+
+function rebuildMachineSummary_(ss, plannedRows) {
+  const sh = ensureSheetHeader_(ss, "MACHINE_SUMMARY", [
+    "Section",
+    "Machine No",
+    "Machine Category",
+    "Department",
+    "Std Total",
+    "Actual Total",
+    "Progress %",
+    "Remaining Total",
+    "Remaining %",
+    "Overrun Total",
+    "Overrun %",
+    "Rework Time",
+    "Other Time"
+  ]);
+
+  const machineMap = {};
+
+  plannedRows.forEach(r => {
+    const machine = clean_(r[0]);
+    const category = clean_(r[1]);
+    const dept = clean_(r[2]);
+
+    const std = Number(r[4] || 0);
+    const actual = Number(r[5] || 0);
+    const remaining = Number(r[6] || 0);
+    const overrun = Number(r[7] || 0);
+    const rework = Number(r[8] || 0);
+    const other = Number(r[9] || 0);
+
+    const key = makeKey_([machine, category]);
+
+    if (!machineMap[key]) {
+      machineMap[key] = {
+        machine,
+        category,
+        std: 0,
+        actual: 0,
+        remaining: 0,
+        overrun: 0,
+        rework: 0,
+        other: 0,
+        dept: {}
+      };
+    }
+
+    const m = machineMap[key];
+
+    m.std += std;
+    m.actual += actual;
+    m.remaining += remaining;
+    m.overrun += overrun;
+    m.rework += rework;
+    m.other += other;
+
+    if (!m.dept[dept]) {
+      m.dept[dept] = {
+        std: 0,
+        actual: 0,
+        remaining: 0,
+        overrun: 0,
+        rework: 0,
+        other: 0
+      };
+    }
+
+    const d = m.dept[dept];
+
+    d.std += std;
+    d.actual += actual;
+    d.remaining += remaining;
+    d.overrun += overrun;
+    d.rework += rework;
+    d.other += other;
+  });
+
+  const out = [];
+
+  Object.values(machineMap).forEach(m => {
+
+    const progressPct = m.std > 0 ? Math.min(100, (m.actual / m.std) * 100) : 0;
+    const remainingPct = m.std > 0 ? (m.remaining / m.std) * 100 : 0;
+    const overrunPct = m.std > 0 ? (m.overrun / m.std) * 100 : 0;
+
+    // 🔷 MACHINE TOTAL ROW
+    out.push([
+      "MACHINE_TOTAL",
+      m.machine,
+      m.category,
+      "ALL",
+      m.std,
+      m.actual,
+      Number(progressPct.toFixed(1)),
+      m.remaining,
+      Number(remainingPct.toFixed(1)),
+      m.overrun,
+      Number(overrunPct.toFixed(1)),
+      m.rework,
+      m.other
+    ]);
+
+    // 🔶 DEPARTMENT ROWS
+    Object.entries(m.dept).forEach(([dept, d]) => {
+
+      const depProgressPct = d.std > 0 ? Math.min(100, (d.actual / d.std) * 100) : 0;
+      const depRemainingPct = d.std > 0 ? (d.remaining / d.std) * 100 : 0;
+      const depOverrunPct = d.std > 0 ? (d.overrun / d.std) * 100 : 0;
+
+      out.push([
+        "DEPARTMENT",
+        m.machine,
+        m.category,
+        dept,
+        d.std,
+        d.actual,
+        Number(depProgressPct.toFixed(1)),
+        d.remaining,
+        Number(depRemainingPct.toFixed(1)),
+        d.overrun,
+        Number(depOverrunPct.toFixed(1)),
+        d.rework,
+        d.other
+      ]);
+    });
+  });
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, 13).setValues([[
+    "Section",
+    "Machine No",
+    "Machine Category",
+    "Department",
+    "Std Total",
+    "Actual Total",
+    "Progress %",
+    "Remaining Total",
+    "Remaining %",
+    "Overrun Total",
+    "Overrun %",
+    "Rework Time",
+    "Other Time"
+  ]]);
+  sh.setFrozenRows(1);
+
+  if (out.length) {
+    sh.getRange(2, 1, out.length, 13).setValues(out);
+  }
+
+  return out;
+}// ===================== SEED ABSENTEES =====================
+// Creates Absent rows for all active employees for today's active shifts.
+// If employee already has row for Date + Shift, it will not duplicate.
+
+function seedAbsenteesForToday() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  rebuildEmployeesMaster_(ss);
+
+  const employeesSh = ss.getSheetByName("EMPLOYEES");
+  if (!employeesSh) throw new Error("EMPLOYEES sheet not found.");
+
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const yyyy = getYear_(today);
+  const attName = "ATT_" + yyyy;
+
+  let attSh = ss.getSheetByName(attName);
+  if (!attSh) {
+    attSh = ss.insertSheet(attName);
+    writeAttendanceHeader_(attSh);
+  }
+
+  // ✅ Only General shift should be seeded as Absent
+  const shiftsToSeed = ["General"];
+
+  const lastRow = employeesSh.getLastRow();
+  if (lastRow < 2) return;
+
+  const empData = employeesSh
+    .getRange(2, 1, lastRow - 1, 3)
+    .getValues()
+    .filter(r => String(r[0]).trim() && String(r[2]).toLowerCase() !== "false");
+
+  const existing = getAttendanceKeysForDate_(attSh, today);
+  const rowsToAdd = [];
+
+  shiftsToSeed.forEach(shiftName => {
+    empData.forEach(r => {
+      const empId = String(r[0]).trim();
+      const empName = String(r[1] || "").trim();
+      const key = `${today}|${empId}|${shiftName}`;
+
+      if (!existing.has(key)) {
+        rowsToAdd.push([
+          new Date(),
+          today,
+          empId,
+          empName,
+          shiftName,
+          "",
+          "Absent",
+          0,
+          0,
+          "0.00",
+          0,
+          "0.00",
+          0
+        ]);
+      }
+    });
+  });
+
+  if (rowsToAdd.length > 0) {
+    attSh.getRange(attSh.getLastRow() + 1, 1, rowsToAdd.length, rowsToAdd[0].length).setValues(rowsToAdd);
+  }
+
+  Logger.log("General absent rows added: " + rowsToAdd.length);
+}
+
+function getAttendanceKeysForDate_(attSh, workDate) {
+  const set = new Set();
+  const lastRow = attSh.getLastRow();
+  if (lastRow < 2) return set;
+
+  const data = attSh.getRange(2, 1, lastRow - 1, 5).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    const d = normalizeWorkDate_(data[i][1]);
+    if (d !== workDate) continue;
+
+    const empId = String(data[i][2] || "").trim();
+    const shift = String(data[i][4] || "").trim();
+
+    if (empId && shift) {
+      set.add(`${workDate}|${empId}|${shift}`);
+    }
+  }
+
+  return set;
 }

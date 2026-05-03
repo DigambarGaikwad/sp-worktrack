@@ -85,6 +85,23 @@ ipcMain.handle("save-admin-overrides", async (_event, overrides) => {
     return { ok: false, error: e.message };
   }
 });
+//for data in google sheet 
+ipcMain.handle("sync-admin-overrides-to-sheets", async (_event, payload) => {
+  try {
+    if (!payload || !payload.webAppUrl) throw new Error("Missing webAppUrl");
+    if (!payload.secret) throw new Error("Missing secret");
+    if (!payload.adminOverrides) throw new Error("Missing adminOverrides");
+
+    return await postJSON(payload.webAppUrl, {
+      secret: payload.secret,
+      action: "saveAdminOverrides",
+      adminOverrides: payload.adminOverrides
+    });
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
 
 // Submit → Google Sheets web app
 ipcMain.handle("submit-to-sheets", async (_event, payload) => {

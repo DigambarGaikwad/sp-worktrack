@@ -12,9 +12,13 @@ contextBridge.exposeInMainWorld("api", {
   // Admin overrides
   getAdminOverrides: () => ipcRenderer.invoke("get-admin-overrides"),
   saveAdminOverrides: (overrides) => ipcRenderer.invoke("save-admin-overrides", overrides),
+  
+   //Admin data to google sheet
+  syncAdminOverridesToSheets: (payload) => ipcRenderer.invoke("sync-admin-overrides-to-sheets", payload),
 
   // Submit
   submitToSheets: (payload) => ipcRenderer.invoke("submit-to-sheets", payload),
+
 
   // ✅ Dashboard feed (Sheets → App)
   getDashboardFeed: (payload) => ipcRenderer.invoke("get-dashboard-feed", payload),

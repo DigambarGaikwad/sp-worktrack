@@ -18,6 +18,10 @@
     {
       "id": "NewType-1771586955555",
       "name": "STORE WORK"
+    },
+    {
+      "id": "trial",
+      "name": "trial catogary 123"
     }
   ],
   "machines": [
@@ -128,6 +132,12 @@
       "name": "Store",
       "type": "NewType-1771586955555",
       "active": true
+    },
+    {
+      "id": 20,
+      "name": "trial with my friend Chat gpt",
+      "type": "trial",
+      "active": false
     }
   ],
   "employees": [
@@ -229,6 +239,11 @@
     {
       "empId": "A2615",
       "name": "GOVIND PANDIT",
+      "active": true
+    },
+    {
+      "empId": "XYZ123",
+      "name": "YYZ123",
       "active": true
     }
   ],
@@ -576,6 +591,154 @@
           },
           {
             "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ]
+      }
+    },
+    "NewType-1777794224307": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical",
+        "Welding fitting and Painting"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ]
+      }
+    },
+    "trial": {
+      "mainWorks": [
+        "trial with my friend Chat gpt",
+        "haha trial with my friend Chat gpt",
+        "Mechanical",
+        "Welding fitting and Painting"
+      ],
+      "subWorks": {
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ],
+        "trial with my friend Chat gpt": [
+          {
+            "name": "trial with my friend Chat gpt",
+            "standardTime": 100
+          },
+          {
+            "name": "2trial with my friend Chat gpt",
+            "standardTime": 80
+          },
+          {
+            "name": "3rd trial with my friend Chat gpt",
+            "standardTime": 60
+          }
+        ],
+        "haha trial with my friend Chat gpt": [
+          {
+            "name": "1",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
             "standardTime": 60
           }
         ]

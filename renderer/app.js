@@ -1307,6 +1307,22 @@ async function adminSaveChanges() {
       alert("❌ Save failed: " + (res?.error || "Unknown"));
       return;
     }
+    // Sync admin data to Google Sheet also
+const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
+const secret = window.SPWT_CONFIG?.SECRET;
+
+if (webAppUrl && secret && window.api.syncAdminOverridesToSheets) {
+  const syncRes = await window.api.syncAdminOverridesToSheets({
+    webAppUrl,
+    secret,
+    adminOverrides
+  });
+
+  if (!syncRes?.ok) {
+    alert("⚠ Local saved, but Google sync failed: " + (syncRes?.error || "Unknown"));
+    return;
+  }
+}
 
     alert("✅ Admin changes saved.");
 
