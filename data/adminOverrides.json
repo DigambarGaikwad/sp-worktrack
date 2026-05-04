@@ -22,6 +22,10 @@
     {
       "id": "trial",
       "name": "trial catogary 123"
+    },
+    {
+      "id": "NewType-1777831475150",
+      "name": "New Category"
     }
   ],
   "machines": [
@@ -129,15 +133,15 @@
     },
     {
       "id": 19,
-      "name": "Store",
+      "name": "Store 1",
       "type": "NewType-1771586955555",
-      "active": true
+      "active": false
     },
     {
       "id": 20,
-      "name": "trial with my friend Chat gpt",
-      "type": "trial",
-      "active": false
+      "name": "",
+      "type": "Online",
+      "active": true
     }
   ],
   "employees": [
@@ -224,7 +228,7 @@
     {
       "empId": "SPT024",
       "name": "JUNGADE NILESH SURESHRA",
-      "active": true
+      "active": false
     },
     {
       "empId": "SPT042",
@@ -244,7 +248,7 @@
     {
       "empId": "XYZ123",
       "name": "YYZ123",
-      "active": true
+      "active": false
     }
   ],
   "shifts": [
@@ -262,15 +266,8 @@
       "start": "18:00",
       "end": "23:00",
       "breakMinutes": 30,
-      "active": true
-    },
-    {
-      "id": "1771190597502",
-      "name": "OT 2",
-      "start": "18:00",
-      "end": "01:00",
-      "breakMinutes": 50,
-      "active": true
+      "active": true,
+      "flexible": true
     }
   ],
   "mainWorks": [
@@ -356,29 +353,77 @@
         "Tubing": [
           {
             "name": "Priority Panel",
-            "standardTime": 30
+            "standardTime": 70,
+            "checkpoints": [
+              {
+                "name": "xyz",
+                "standardTime": 40
+              },
+              {
+                "name": "yyz",
+                "standardTime": 30
+              }
+            ],
+            "qualityCheckpoints": [
+              {
+                "name": "Parameter",
+                "inputType": "reading",
+                "mandatory": true
+              },
+              {
+                "name": "Pressure",
+                "inputType": "status",
+                "mandatory": true
+              },
+              {
+                "name": "Leakages",
+                "inputType": "status",
+                "mandatory": true
+              },
+              {
+                "name": "Continuity",
+                "inputType": "status",
+                "mandatory": true
+              }
+            ]
           },
           {
             "name": "Hydrotesting",
-            "standardTime": 50
+            "standardTime": 50,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           },
           {
             "name": "Intensifier Tubing",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": []
+          },
+          {
+            "name": "new sub work",
+            "standardTime": 0,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           }
         ],
         "Electrical": [
           {
             "name": "Field Wiring",
-            "standardTime": 100
+            "standardTime": 100,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           },
           {
             "name": "Panel Wiring",
-            "standardTime": 100
+            "standardTime": 100,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           },
           {
             "name": "Technical support to Programming",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           }
         ],
         "Mechanical": [
@@ -459,29 +504,117 @@
         "Tubing": [
           {
             "name": "Priority Panel",
-            "standardTime": 30
+            "standardTime": 30,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           },
           {
             "name": "Hydrotesting",
-            "standardTime": 50
+            "standardTime": 50,
+            "checkpoints": [
+              {
+                "name": "50% complition",
+                "standardTime": 25
+              },
+              {
+                "name": "100%complition",
+                "standardTime": 50
+              }
+            ],
+            "qualityCheckpoints": [
+              {
+                "name": "Hydrotest",
+                "inputType": "status",
+                "mandatory": true
+              },
+              {
+                "name": "Leakage test",
+                "inputType": "status",
+                "mandatory": true
+              }
+            ]
           },
           {
             "name": "Intensifier Tubing",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           }
         ],
         "Electrical": [
           {
             "name": "Field Wiring",
-            "standardTime": 100
+            "standardTime": 100,
+            "checkpoints": [
+              {
+                "name": "Motar Wiring",
+                "standardTime": 25
+              },
+              {
+                "name": "SOV wiring",
+                "standardTime": 25
+              },
+              {
+                "name": "Emergency Switch Wiring",
+                "standardTime": 25
+              },
+              {
+                "name": "GD wiring",
+                "standardTime": 15
+              },
+              {
+                "name": "FD wiring",
+                "standardTime": 15
+              }
+            ],
+            "qualityCheckpoints": [
+              {
+                "name": "continuity",
+                "inputType": "status",
+                "mandatory": false
+              }
+            ]
           },
           {
             "name": "Panel Wiring",
-            "standardTime": 100
+            "standardTime": 100,
+            "checkpoints": [
+              {
+                "name": "Cable Glanding",
+                "standardTime": 30
+              },
+              {
+                "name": "Cable Laying",
+                "standardTime": 50
+              },
+              {
+                "name": "Termination",
+                "standardTime": 40
+              }
+            ],
+            "qualityCheckpoints": []
           },
           {
             "name": "Technical support to Programming",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": [
+              {
+                "name": "Earth Continuty check",
+                "inputType": "status",
+                "mandatory": true
+              },
+              {
+                "name": "Emr Reading at Start",
+                "inputType": "reading",
+                "mandatory": true
+              },
+              {
+                "name": "Reading At End",
+                "inputType": "reading",
+                "mandatory": false
+              }
+            ]
           }
         ],
         "Mechanical": [
@@ -509,15 +642,46 @@
         "Welding fitting and Painting": [
           {
             "name": "Welding",
-            "standardTime": 60
+            "standardTime": 100,
+            "checkpoints": [
+              {
+                "name": "tube clamp",
+                "standardTime": 30
+              },
+              {
+                "name": "Hose Clamp",
+                "standardTime": 30
+              },
+              {
+                "name": "Emergency Support",
+                "standardTime": 20
+              }
+            ],
+            "qualityCheckpoints": [
+              {
+                "name": "DPT test",
+                "inputType": "status",
+                "mandatory": true
+              }
+            ]
           },
           {
             "name": "Fitting",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": []
           },
           {
             "name": "Painting",
-            "standardTime": 60
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": [
+              {
+                "name": "Paint Qulity",
+                "inputType": "status",
+                "mandatory": true
+              }
+            ]
           }
         ]
       }
@@ -743,6 +907,93 @@
           }
         ]
       }
+    },
+    "NewType-1777831475150": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical",
+        "Welding fitting and Painting",
+        "New Department"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ],
+        "New Department": []
+      }
     }
-  }
+  },
+  "lossReasons": [
+    "No power",
+    "Short Leave",
+    "Site work"
+  ],
+  "rootAreas": [
+    "Engineering",
+    "Quality",
+    "Vendor",
+    "xxy"
+  ]
 }

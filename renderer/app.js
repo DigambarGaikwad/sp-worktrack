@@ -14,6 +14,8 @@ let workCatalogByType = {};    // { typeId: { mainWorks:[], subWorks:{} }, ... }
 let workCount = 0;
 
 let adminOverrides = null;
+let lossReasons = [];
+let rootAreas = [];
 let isAdminLoggedIn = false;
 
 // Admin Work tab state (type-wise)
@@ -69,24 +71,43 @@ async function loadData() {
   applyOverrides();
 }
 
+function normalizeNameList(list, fallback) {
+  const arr = Array.isArray(list) && list.length ? list : fallback;
+  return arr
+    .map(x => {
+      if (typeof x === "string") return x.trim();
+      if (x && typeof x === "object") return String(x.name || x.reason || x.label || "").trim();
+      return "";
+    })
+    .filter(Boolean);
+}
+
 function applyOverrides() {
   if (!adminOverrides) return;
 
-  // apply lists
   if (Array.isArray(adminOverrides.machines) && adminOverrides.machines.length) machines = adminOverrides.machines;
   if (Array.isArray(adminOverrides.employees) && adminOverrides.employees.length) employees = adminOverrides.employees;
   if (Array.isArray(adminOverrides.shifts) && adminOverrides.shifts.length) shifts = adminOverrides.shifts;
 
-  // Work/SubWork overrides (global/fallback)
+  lossReasons = normalizeNameList(adminOverrides.lossReasons, [
+    "No Power", "No Load", "Short Leave", "Meeting", "5S", "Training",
+    "Material Waiting", "Machine Breakdown", "Others"
+  ]);
+
+  rootAreas = normalizeNameList(adminOverrides.rootAreas, [
+    "Engineering", "Vendor", "Production", "Quality", "Site Team (O&M)", "Customer Change", "Others"
+  ]);
+
+  adminOverrides.lossReasons = [...lossReasons];
+  adminOverrides.rootAreas = [...rootAreas];
+
   if (Array.isArray(adminOverrides.mainWorks) && adminOverrides.mainWorks.length) mainWorks = adminOverrides.mainWorks;
   if (adminOverrides.subWorks && Object.keys(adminOverrides.subWorks).length) subWorksMap = adminOverrides.subWorks;
 
-  // Clean dangerous empty dept key ""
   if (subWorksMap && typeof subWorksMap === "object" && Object.prototype.hasOwnProperty.call(subWorksMap, "")) {
     delete subWorksMap[""];
   }
 
-  // Machine types
   if (Array.isArray(adminOverrides.machineTypes) && adminOverrides.machineTypes.length) {
     machineTypes = adminOverrides.machineTypes;
   } else {
@@ -99,14 +120,10 @@ function applyOverrides() {
     ];
   }
 
-  // Type-wise catalog
-  if (adminOverrides.workCatalogByType && typeof adminOverrides.workCatalogByType === "object") {
-    workCatalogByType = adminOverrides.workCatalogByType;
-  } else {
-    workCatalogByType = {};
-  }
+  workCatalogByType = adminOverrides.workCatalogByType && typeof adminOverrides.workCatalogByType === "object"
+    ? adminOverrides.workCatalogByType
+    : {};
 
-  // Clean empty dept key inside each catalog too
   Object.keys(workCatalogByType || {}).forEach(typeId => {
     const cat = workCatalogByType[typeId];
     if (cat?.subWorks && typeof cat.subWorks === "object" && Object.prototype.hasOwnProperty.call(cat.subWorks, "")) {
@@ -134,40 +151,51 @@ function setCurrentDate() {
 
 // ===================== HEADER DROPDOWNS =====================
 function populateHeaderDropdowns() {
-  // Shifts
   const shiftSelect = document.getElementById("shiftSelect");
   if (shiftSelect) {
     shiftSelect.innerHTML = `<option value="">Select Shift</option>`;
-    shifts
-      .filter(s => s.active !== false)
-      .forEach((s) => {
-        const opt = document.createElement("option");
-        opt.value = String(s.id ?? s.name);
-        opt.textContent = `${s.name} (${s.start}-${s.end})`;
-        shiftSelect.appendChild(opt);
-      });
-
-    // IMPORTANT: use onchange to avoid duplicate listeners
-    shiftSelect.onchange = updateSummaryDebounced;
+    shifts.filter(s => s.active !== false).forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = String(s.id ?? s.name);
+      opt.textContent = s.flexible === true ? `${s.name} (Flexible)` : `${s.name} (${s.start}-${s.end})`;
+      shiftSelect.appendChild(opt);
+    });
+    shiftSelect.onchange = () => { updateFlexibleShiftBox(); updateSummaryDebounced(); };
   }
 
-  // Employees
   const employeeSelect = document.getElementById("employeeSelect");
   if (employeeSelect) {
     employeeSelect.innerHTML = `<option value="">Select Team Member</option>`;
-    employees
-      .filter(e => e.active !== false)
-      .forEach((e) => {
-        const opt = document.createElement("option");
-        opt.value = e.empId;
-        opt.textContent = `${e.empId} - ${e.name}`;
-        employeeSelect.appendChild(opt);
-      });
+    employees.filter(e => e.active !== false).forEach((e) => {
+      const opt = document.createElement("option");
+      opt.value = e.empId;
+      opt.textContent = `${e.empId} - ${e.name}`;
+      employeeSelect.appendChild(opt);
+    });
   }
 
-  // IMPORTANT: use onchange to avoid duplicate listeners
   const workTypeTop = document.getElementById("workTypeTop");
   if (workTypeTop) workTypeTop.onchange = updateSummaryDebounced;
+
+  const lossReasonSelect = document.getElementById("lossReasonSelect");
+  if (lossReasonSelect) {
+    lossReasonSelect.innerHTML = `<option value="">No Major Loss</option>` +
+      (lossReasons || []).map(r => `<option value="${escapeAttr(r)}">${escapeHtml(r)}</option>`).join("");
+    lossReasonSelect.onchange = updateSummaryDebounced;
+  }
+
+  const lossTime = document.getElementById("lossRemark");
+  if (lossTime) {
+    lossTime.type = "number";
+    lossTime.min = "0";
+    lossTime.placeholder = "Loss time in minutes";
+    lossTime.oninput = updateSummaryDebounced;
+    const lbl = lossTime.closest(".field")?.querySelector("label");
+    if (lbl) lbl.textContent = "Loss Time (min)";
+  }
+
+  const flexibleMin = document.getElementById("flexibleShiftMinutes");
+  if (flexibleMin) flexibleMin.oninput = updateSummaryDebounced;
 
   const workDate = document.getElementById("workDate");
   if (workDate) workDate.onchange = updateSummaryDebounced;
@@ -242,6 +270,12 @@ function wireButtonsOnce() {
   const addShiftBtn = document.getElementById("addShiftBtn");
   if (addShiftBtn) addShiftBtn.onclick = () => adminAddShift();
 
+  const addLossReasonBtn = document.getElementById("addLossReasonBtn");
+  if (addLossReasonBtn) addLossReasonBtn.onclick = () => adminAddLossReason();
+
+  const addRootAreaBtn = document.getElementById("addRootAreaBtn");
+  if (addRootAreaBtn) addRootAreaBtn.onclick = () => adminAddRootArea();
+
   const addTypeBtn = document.getElementById("addTypeBtn");
   if (addTypeBtn) addTypeBtn.onclick = () => adminAddType();
 
@@ -262,9 +296,17 @@ function wireButtonsOnce() {
 
   const newEntryBtn = document.getElementById("newEntryBtn");
   if (newEntryBtn) newEntryBtn.onclick = () => {
-    clearEntryAndStartNew();
-    hideSummaryScreen();
+    localStorage.removeItem("spwt_last_save");
+    window.location.reload();
   };
+}
+
+function updateFlexibleShiftBox() {
+  const shiftId = document.getElementById("shiftSelect")?.value;
+  const shift = shifts.find((s) => String(s.id ?? s.name) === String(shiftId));
+  const box = document.getElementById("flexibleShiftBox");
+  if (!box) return;
+  box.style.display = shift && shift.flexible === true ? "flex" : "none";
 }
 
 // ===================== SHIFT MINUTES =====================
@@ -273,17 +315,35 @@ function convertToMinutes(time) {
   return (h * 60) + (m || 0);
 }
 
-function getShiftAvailableMinutes() {
+function getMajorLossMinutes() {
+  const selectedLoss = document.getElementById("lossReasonSelect")?.value || "";
+  const lossMin = Number(document.getElementById("lossRemark")?.value || 0);
+  return selectedLoss ? Math.max(0, lossMin) : 0;
+}
+
+function getGrossShiftAvailableMinutes() {
   const shiftId = document.getElementById("shiftSelect")?.value;
   const shift = shifts.find((s) => String(s.id ?? s.name) === String(shiftId));
   if (!shift) return 0;
+
+  if (shift.flexible === true) {
+    const flex = Number(document.getElementById("flexibleShiftMinutes")?.value || 0);
+    return Math.max(0, flex);
+  }
 
   const start = convertToMinutes(shift.start);
   const end = convertToMinutes(shift.end);
 
   let total = end - start;
-  if (total < 0) total += 24 * 60; // overnight
-  return total - (Number(shift.breakMinutes) || 0);
+  if (total < 0) total += 24 * 60;
+  total = total - (Number(shift.breakMinutes) || 0);
+  return Math.max(0, total);
+}
+
+function getShiftAvailableMinutes() {
+  const gross = getGrossShiftAvailableMinutes();
+  const loss = getMajorLossMinutes();
+  return Math.max(0, gross - loss);
 }
 
 // ===================== WORK CARDS =====================
@@ -295,6 +355,365 @@ function resetWorkCards(count = 1) {
   updateSummary();
 }
 
+
+function parseChecklistLines(text) {
+  return String(text || "")
+    .split(/\n|;/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(line => {
+      const m = line.match(/^(.*?)\s*(?:=|:)\s*(\d+)\s*$/);
+      if (m) return { name: m[1].trim(), standardTime: Number(m[2] || 0) };
+      return { name: line, standardTime: 0 };
+    });
+}
+
+function normalizeBookingPoints(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map(x => {
+      if (typeof x === "string") return { name: x, standardTime: 0 };
+      return {
+        name: String(x?.name || "").trim(),
+        standardTime: Number(x?.standardTime || 0)
+      };
+    });
+  }
+  return parseChecklistLines(raw);
+}
+
+function normalizeQualityPoints(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map(x => {
+      if (typeof x === "string") {
+        return { name: x, inputType: "status", mandatory: false };
+      }
+      return {
+        name: String(x?.name || "").trim(),
+        inputType: x?.inputType === "reading" ? "reading" : "status",
+        mandatory: x?.mandatory === true
+      };
+    });
+  }
+
+  return String(raw || "")
+    .split(/\n|;/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(x => ({ name: x, inputType: "status", mandatory: false }));
+}
+
+function ensureSubWorkDetails(item) {
+  if (!item || typeof item !== "object") return;
+
+  item.checkpoints = normalizeBookingPoints(
+    item.checkpoints || item.bookingPoints || item.subSubWorks || item.workCheckpoints || []
+  );
+
+  item.qualityCheckpoints = normalizeQualityPoints(
+    item.qualityCheckpoints || item.qualityFields || []
+  );
+}
+
+function getCurrentSubWorkItem(card) {
+  const typeId = card.dataset.typeId || "";
+  const dep = card.querySelector(".deptSelect")?.value || "";
+  const subName = card.querySelector(".subWorkSelect")?.value || "";
+  const catalog = getCatalogForType(typeId);
+  const items = Array.isArray(catalog.subWorks?.[dep]) ? catalog.subWorks[dep] : [];
+  return items.find(x => String(x.name || x) === String(subName)) || null;
+}
+
+function normalizeCheckpointArray(raw) {
+  if (Array.isArray(raw)) return raw.map(x => typeof x === "string" ? { name: x, standardTime: 0 } : x).filter(x => x && x.name);
+  return parseChecklistLines(raw);
+}
+
+async function renderCheckpointFields(card) {
+  const workBox = card.querySelector(".workCheckpointField");
+  const workList = card.querySelector(".workCheckpointList");
+  const qualBox = card.querySelector(".qualityCheckpointField");
+  const qualList = card.querySelector(".qualityCheckpointList");
+  const recheckBox = card.querySelector(".qualityRecheckField");
+  const recheckInput = card.querySelector(".qualityRecheckInput");
+  const std = card.querySelector(".standardTime");
+
+  const item = getCurrentSubWorkItem(card);
+  ensureSubWorkDetails(item);
+
+  const workNature = card.querySelector(".typeSelect")?.value || "Normal";
+  const qualityPoints = normalizeQualityPoints(item?.qualityCheckpoints || []);
+
+  // Upper booking checkpoint box disabled because lower booking box is used
+  if (workBox && workList) {
+    workBox.style.display = "none";
+    workList.innerHTML = "";
+  }
+
+  // Show recheck option only for Rework/Other
+  if (recheckBox) {
+    if (workNature === "Rework" || workNature === "Other") {
+      recheckBox.style.display = "flex";
+    } else {
+      recheckBox.style.display = "none";
+      if (recheckInput) recheckInput.checked = false;
+    }
+  }
+
+  const allowQuality =
+    workNature === "Normal" ||
+    ((workNature === "Rework" || workNature === "Other") && recheckInput?.checked);
+
+  if (qualBox && qualList) {
+    if (!allowQuality || qualityPoints.length === 0) {
+      qualBox.style.display = "none";
+      qualList.innerHTML = "";
+    } else {
+      qualBox.style.display = "block";
+      qualList.innerHTML = `
+        <div class="small-hint">Checking previous quality records...</div>
+      `;
+
+      const machine = card.querySelector(".machineSelect")?.value || "";
+      const department = card.querySelector(".deptSelect")?.value || "";
+      const subWork = card.querySelector(".subWorkSelect")?.value || "";
+
+      const machineObj = (machines || []).find(m => String(m.name) === String(machine));
+      const typeId = String(machineObj?.type || "");
+      const typeObj = (adminOverrides?.machineTypes || machineTypes || []).find(t => String(t.id) === typeId);
+      const machineCategory = typeObj?.name || typeId || "";
+
+      const completedQuality = await getCompletedQualityPointsFromSheet(
+        machine,
+        machineCategory,
+        department,
+        subWork
+      );
+
+      const completedMap = {};
+      completedQuality.forEach(q => {
+        completedMap[String(q.point || "").trim().toLowerCase()] = q;
+      });
+
+      qualList.innerHTML = qualityPoints.map((qp) => {
+        const name = String(qp.name || "").trim();
+        const label = escapeHtml(name);
+        const mandatory = qp.mandatory === true ? "1" : "0";
+        const old = completedMap[name.toLowerCase()];
+        const isDone = !!old;
+
+        // Already done: show recheck checkbox first
+        if (isDone) {
+          return `
+            <div class="quality-entry-row quality-done-row">
+              <label>
+                ${label}${qp.mandatory === true ? " *" : ""}
+                <div class="small-hint">
+                  Already checked: ${escapeHtml(old.value || "")}
+                  ${old.date ? " on " + escapeHtml(old.date) : ""}
+                </div>
+              </label>
+
+              <div>
+               
+                <label class="quality-recheck-line">
+
+                  <input type="checkbox"
+                         class="qualityRecheckPointInput"
+                         data-target-quality="${escapeAttr(name)}" />
+                  Recheck / update
+                </label>
+
+                <div class="qualityRecheckValueBox" style="display:none;">
+                  ${qp.inputType === "reading" ? `
+                    <input type="text"
+                           class="qualityValueInput"
+                           data-quality-name="${escapeAttr(name)}"
+                           data-quality-type="reading"
+                           data-quality-mandatory="${mandatory}"
+                           placeholder="Enter new reading e.g. 250 bar" />
+                  ` : `
+                    <select class="qualityValueInput"
+                            data-quality-name="${escapeAttr(name)}"
+                            data-quality-type="status"
+                            data-quality-mandatory="${mandatory}">
+                      <option value="">Select Status</option>
+                      <option value="OK">OK</option>
+                      <option value="NOT OK">NOT OK</option>
+                    </select>
+                  `}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // Not done: normal entry field
+        if (qp.inputType === "reading") {
+          return `
+            <div class="quality-entry-row">
+              <label>${label}${qp.mandatory === true ? " *" : ""}</label>
+              <input type="text"
+                     class="qualityValueInput"
+                     data-quality-name="${escapeAttr(name)}"
+                     data-quality-type="reading"
+                     data-quality-mandatory="${mandatory}"
+                     placeholder="Enter reading e.g. 250 bar" />
+            </div>
+          `;
+        }
+
+        return `
+          <div class="quality-entry-row">
+            <label>${label}${qp.mandatory === true ? " *" : ""}</label>
+            <select class="qualityValueInput"
+                    data-quality-name="${escapeAttr(name)}"
+                    data-quality-type="status"
+                    data-quality-mandatory="${mandatory}">
+              <option value="">Select Status</option>
+              <option value="OK">OK</option>
+              <option value="NOT OK">NOT OK</option>
+            </select>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  if (recheckInput) {
+    recheckInput.onchange = () => {
+      renderCheckpointFields(card);
+      updateSummaryDebounced();
+    };
+  }
+
+  card.querySelectorAll(".qualityRecheckPointInput").forEach(chk => {
+    chk.onchange = () => {
+      const box = chk.closest(".quality-entry-row")?.querySelector(".qualityRecheckValueBox");
+      if (box) box.style.display = chk.checked ? "block" : "none";
+
+      if (!chk.checked && box) {
+        box.querySelectorAll(".qualityValueInput").forEach(inp => inp.value = "");
+      }
+
+      updateSummaryDebounced();
+    };
+  });
+
+  card.querySelectorAll(".qualityValueInput").forEach(inp => {
+    inp.oninput = () => updateSummaryDebounced();
+    inp.onchange = () => updateSummaryDebounced();
+  });
+
+  if (std && workNature !== "Normal") {
+    std.value = "0";
+  }
+
+  updateSummaryDebounced();
+}
+
+function recalcStdFromCheckpoints(card) {
+  const std = card.querySelector(".standardTime");
+  const cps = Array.from(card.querySelectorAll(".workCheckpointInput"));
+  if (!std) return;
+  if (!cps.length) {
+    const base = Number(card.dataset.baseStd || std.value || 0);
+    std.value = String(base);
+    return;
+  }
+  const selectedWithStd = cps.filter(cb => cb.checked).reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
+  const totalWithStd = cps.reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
+  if (totalWithStd > 0) {
+    std.value = String(selectedWithStd);
+  }
+}
+
+function getCheckedValues(card, selector) {
+  return Array.from(card.querySelectorAll(selector))
+    .filter(x => x.checked)
+    .map(x => x.value)
+    .filter(Boolean);
+}
+// ✅ Get completed booking points from backend
+async function getCompletedBookingPointsFromSheet(machine, machineCategory, department, subWork) {
+  try {
+    if (!window.api?.submitToSheets) return [];
+
+    const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
+    const secret = window.SPWT_CONFIG?.SECRET;
+
+    if (!webAppUrl || !secret) return [];
+
+    const res = await window.api.submitToSheets({
+      webAppUrl,
+      data: {
+        secret,
+        action: "getCompletedBookingPoints",
+        machine,
+        machineCategory,
+        department,
+        subWork
+      }
+    });
+
+    if (!res || !res.ok) return [];
+    return Array.isArray(res.completed) ? res.completed : [];
+  } catch (err) {
+    console.warn("Completed booking fetch failed:", err);
+    return [];
+  }
+}
+
+async function getCompletedQualityPointsFromSheet(machine, machineCategory, department, subWork) {
+  try {
+    if (!window.api?.submitToSheets) return [];
+
+    const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
+    const secret = window.SPWT_CONFIG?.SECRET;
+
+    if (!webAppUrl || !secret) return [];
+
+    const res = await window.api.submitToSheets({
+      webAppUrl,
+      data: {
+        secret,
+        action: "getCompletedQualityPoints",
+        machine,
+        machineCategory,
+        department,
+        subWork
+      }
+    });
+
+    if (!res || !res.ok) return [];
+    return Array.isArray(res.completed) ? res.completed : [];
+  } catch (err) {
+    console.warn("Completed quality fetch failed:", err);
+    return [];
+  }
+}
+
+function getQualityValues(card) {
+  return Array.from(card.querySelectorAll(".qualityValueInput"))
+    .filter(inp => {
+      const box = inp.closest(".qualityRecheckValueBox");
+
+      // If this quality point is already done and Recheck is NOT selected,
+      // ignore it completely so mandatory validation will not trigger.
+      if (box) {
+        const recheck = inp.closest(".quality-entry-row")?.querySelector(".qualityRecheckPointInput");
+        return recheck?.checked === true;
+      }
+
+      return true;
+    })
+    .map(inp => ({
+      point: inp.dataset.qualityName || "",
+      inputType: inp.dataset.qualityType || "status",
+      mandatory: inp.dataset.qualityMandatory === "1",
+      value: (inp.value || "").trim()
+    }))
+    .filter(q => q.point);
+}
 function addWorkCard(scroll = true) {
   workCount++;
   const container = document.getElementById("workContainer");
@@ -338,8 +757,25 @@ function addWorkCard(scroll = true) {
         </select>
       </div>
 
+      <div class="field workCheckpointField" style="display:none; grid-column: 1 / -1;">
+        <label>Sub-Sub Work / Booking Checkpoints</label>
+        <div class="checkpoint-list workCheckpointList"></div>
+      </div>
+
+      <div class="field qualityRecheckField" style="display:none; grid-column: 1 / -1;">
+  <label class="quality-recheck-line">
+    <input type="checkbox" class="qualityRecheckInput" />
+    As you are doing Rework/Other, do you want to check Quality Point again?
+  </label>
+</div>
+
+<div class="field qualityCheckpointField" style="display:none; grid-column: 1 / -1;">
+  <label>Quality Checkpoints</label>
+  <div class="checkpoint-list qualityCheckpointList"></div>
+</div>
+
       <div class="field">
-        <label>Type</label>
+        <label>Work Nature</label>
         <select class="typeSelect">
           <option value="Normal">Normal</option>
           <option value="Other">Other</option>
@@ -356,13 +792,7 @@ function addWorkCard(scroll = true) {
         <label>Root Area (for Rework)</label>
         <select class="rootAreaSelect">
           <option value="">Select Root Area</option>
-          <option value="Engineering">Engineering</option>
-          <option value="Vendor">Vendor</option>
-          <option value="Production">Production</option>
-          <option value="Quality">Quality</option>
-          <option value="Site Team (O&M)">Site Team (O&M)</option>
-          <option value="Customer Change">Customer Change</option>
-          <option value="Others">Others</option>
+          ${(rootAreas || []).map(r => `<option value="${escapeAttr(r)}">${escapeHtml(r)}</option>`).join("")}
         </select>
       </div>
 
@@ -374,6 +804,11 @@ function addWorkCard(scroll = true) {
       <div class="field">
         <label>Actual Time (min)</label>
         <input class="actualTime" type="number" min="0" placeholder="Minutes"/>
+      </div>
+
+      <div class="field efficiencyReasonField" style="display:none; grid-column: 1 / -1;">
+        <label>Reason for Low Efficiency (Required when Actual Time > 120% of Standard Time)</label>
+        <input class="efficiencyReasonInput" type="text" placeholder="Example: material issue / re-setting / tool problem / drawing clarification / waiting..."/>
       </div>
     </div>
   `;
@@ -398,8 +833,24 @@ function attachCardEvents(card) {
   const descInput = card.querySelector(".descInput");
   const std = card.querySelector(".standardTime");
   const act = card.querySelector(".actualTime");
+  const efficiencyReasonField = card.querySelector(".efficiencyReasonField");
+  const efficiencyReasonInput = card.querySelector(".efficiencyReasonInput");
   const rootAreaField = card.querySelector(".rootAreaField");
   const rootAreaSelect = card.querySelector(".rootAreaSelect");
+
+  function checkEfficiencyReason() {
+    const standard = parseInt(std?.value || "0", 10) || 0;
+    const actual = parseInt(act?.value || "0", 10) || 0;
+    const needsReason = standard > 0 && actual > (standard * 1.2);
+
+    if (efficiencyReasonField) {
+      efficiencyReasonField.style.display = needsReason ? "flex" : "none";
+    }
+
+    if (!needsReason && efficiencyReasonInput) {
+      efficiencyReasonInput.value = "";
+    }
+  }
 
   function applyCatalogFromMachine() {
     const machineName = machineSel?.value || "";
@@ -413,10 +864,14 @@ function attachCardEvents(card) {
     sub.innerHTML = `<option value="">Select Sub Work</option>`;
     sub.disabled = true;
     std.value = "0";
+    renderCheckpointFields(card);
+
+    checkEfficiencyReason();
   }
 
   machineSel.onchange = () => {
     applyCatalogFromMachine();
+    checkEfficiencyReason();
     updateSummaryDebounced();
   };
 
@@ -429,47 +884,193 @@ function attachCardEvents(card) {
     setSubWorkOptions(sub, items);
 
     std.value = "0";
+    renderCheckpointFields(card);
+    checkEfficiencyReason();
     updateSummaryDebounced();
   };
 
-  sub.onchange = () => {
-    const opt = sub.selectedOptions[0];
-    const t = opt ? parseInt(opt.dataset.time || "0", 10) : 0;
-    std.value = String(t);
+ sub.onchange = () => {
+  const opt = sub.selectedOptions[0];
+  const t = opt ? parseInt(opt.dataset.time || "0", 10) : 0;
+
+  std.value = String(t);
+  card.dataset.baseStd = String(t);
+
+  const selectedSubWork = opt?.value || "";
+  const typeId = card.dataset.typeId || "";
+  const catalog = getCatalogForType(typeId);
+
+  const deptName = dept.value;
+  const subList = catalog?.subWorks?.[deptName] || [];
+  const subObj = subList.find(s => s.name === selectedSubWork);
+
+  // 🔥 NEW: Booking Points (priority)
+  renderBookingPoints(card, subObj);
+
+  // Existing logic (keep)
+  renderCheckpointFields(card);
+
+  checkEfficiencyReason();
+  updateSummaryDebounced();
+};
+
+ type.onchange = () => {
+  const v = type.value;
+
+  if (v === "Rework") {
+    if (rootAreaField) rootAreaField.style.display = "flex";
+  } else {
+    if (rootAreaField) rootAreaField.style.display = "none";
+    if (rootAreaSelect) rootAreaSelect.value = "";
+  }
+
+  if (v === "Other" || v === "Rework") {
+    descField.style.display = "flex";
+    descInput?.focus();
+  } else {
+    descField.style.display = "none";
+    if (descInput) descInput.value = "";
+  }
+
+  const subObj = getCurrentSubWorkItem(card);
+
+  const workNature = card.querySelector(".typeSelect")?.value || "Normal";
+const recheckBox = card.querySelector(".qualityRecheckField");
+const recheckInput = card.querySelector(".qualityRecheckInput");
+
+if (recheckBox) {
+  if (workNature === "Rework" || workNature === "Other") {
+    recheckBox.style.display = "flex";
+  } else {
+    recheckBox.style.display = "none";
+    if (recheckInput) recheckInput.checked = false;
+  }
+}
+
+  renderBookingPoints(card, subObj);
+  renderCheckpointFields(card);
+
+  checkEfficiencyReason();
+  updateSummaryDebounced();
+};
+
+  act.oninput = () => {
+    checkEfficiencyReason();
     updateSummaryDebounced();
   };
 
-  type.onchange = () => {
-    const v = type.value;
-
-    if (v === "Rework") {
-      if (rootAreaField) rootAreaField.style.display = "flex";
-    } else {
-      if (rootAreaField) rootAreaField.style.display = "none";
-      if (rootAreaSelect) rootAreaSelect.value = "";
-    }
-
-    if (v === "Other" || v === "Rework") {
-      descField.style.display = "flex";
-      descInput?.focus();
-    } else {
-      descField.style.display = "none";
-      if (descInput) descInput.value = "";
-    }
-
+  act.onblur = () => {
+    checkEfficiencyReason();
     updateSummaryDebounced();
   };
 
-  // Smooth typing (debounced)
-  act.oninput = () => updateSummaryDebounced();
-  if (rootAreaSelect) rootAreaSelect.onchange = () => updateSummaryDebounced();
+  std.onchange = () => {
+    checkEfficiencyReason();
+    updateSummaryDebounced();
+  };
+
+  if (efficiencyReasonInput) {
+    efficiencyReasonInput.oninput = () => updateSummaryDebounced();
+  }
+
+  if (rootAreaSelect) {
+    rootAreaSelect.onchange = () => updateSummaryDebounced();
+  }
+}
+async function renderBookingPoints(card, subObj) {
+  let box = card.querySelector(".bookingPointsBox");
+
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "bookingPointsBox";
+    box.style.marginTop = "10px";
+    card.appendChild(box);
+  }
+
+  const workNature = card.querySelector(".typeSelect")?.value || "Normal";
+  const std = card.querySelector(".standardTime");
+  const machine = card.querySelector(".machineSelect")?.value || "";
+  const department = card.querySelector(".deptSelect")?.value || "";
+  const subWork = card.querySelector(".subWorkSelect")?.value || "";
+
+  const machineObj = (machines || []).find(m => String(m.name) === String(machine));
+  const typeId = String(machineObj?.type || "");
+  const typeObj = (adminOverrides?.machineTypes || machineTypes || []).find(t => String(t.id) === typeId);
+  const machineCategory = typeObj?.name || typeId || "";
+
+  if (workNature !== "Normal") {
+    box.style.display = "none";
+    box.innerHTML = "";
+    if (std) std.value = "0";
+    updateSummaryDebounced();
+    return;
+  }
+
+  if (!subObj || !Array.isArray(subObj.checkpoints) || subObj.checkpoints.length === 0) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  box.style.display = "block";
+  box.innerHTML = `
+    <div style="font-weight:700; margin-bottom:8px;">Booking Points</div>
+    <div class="small-hint">Checking completed booking points...</div>
+  `;
+
+  const completed = await getCompletedBookingPointsFromSheet(
+    machine,
+    machineCategory,
+    department,
+    subWork
+  );
+
+  const completedSet = new Set(
+    completed.map(x => String(x || "").trim().toLowerCase())
+  );
+
+  box.innerHTML = `
+    <div style="font-weight:700; margin-bottom:8px;">Booking Points</div>
+    ${subObj.checkpoints.map((cp) => {
+      const name = String(cp.name || "").trim();
+      const done = completedSet.has(name.toLowerCase());
+
+      return `
+        <label class="booking-point-row ${done ? "booking-point-done" : ""}">
+          <input type="checkbox"
+                 class="bpCheck"
+                 value="${escapeAttr(name)}"
+                 data-time="${Number(cp.standardTime || 0)}"
+                 ${done ? "disabled" : "checked"} />
+          <span>${escapeHtml(name)} (${Number(cp.standardTime || 0)} min)${done ? " — Completed" : ""}</span>
+        </label>
+      `;
+    }).join("")}
+  `;
+
+  function recalcBookingStd() {
+    let total = 0;
+
+    box.querySelectorAll(".bpCheck:checked:not(:disabled)").forEach(c => {
+      total += Number(c.dataset.time || 0);
+    });
+
+    if (std) std.value = String(total);
+    updateSummaryDebounced();
+  }
+
+  box.querySelectorAll(".bpCheck").forEach(chk => {
+    chk.onchange = recalcBookingStd;
+  });
+
+  recalcBookingStd();
 }
 
 function deleteLastWorkCard() {
   const cards = document.querySelectorAll(".work-card");
   if (cards.length === 0) return;
   cards[cards.length - 1].remove();
-  workCount = Math.max(workCount - 1, 0);
+  renumberWorkCards();
   updateSummaryDebounced();
 }
 
@@ -478,14 +1079,16 @@ function updateSummary() {
   const available = getShiftAvailableMinutes();
 
   let utilized = 0;
-  document.querySelectorAll(".work-card .actualTime").forEach((inp) => {
-    utilized += parseInt(inp.value || "0", 10) || 0;
+  let standardBooked = 0;
+  document.querySelectorAll(".work-card").forEach((card) => {
+    utilized += parseInt(card.querySelector(".actualTime")?.value || "0", 10) || 0;
+    standardBooked += parseInt(card.querySelector(".standardTime")?.value || "0", 10) || 0;
   });
 
   let remaining = available - utilized;
   if (remaining < 0) remaining = 0;
 
-  const productivity = available > 0 ? ((utilized / available) * 100) : 0;
+  const productivity = available > 0 ? ((standardBooked / available) * 100) : 0;
 
   const av = document.getElementById("availableMin");
   const ut = document.getElementById("utilizedMin");
@@ -517,6 +1120,9 @@ function buildPayload() {
   const shiftId = document.getElementById("shiftSelect")?.value || "";
   const empId = document.getElementById("employeeSelect")?.value || "";
   const workType = document.getElementById("workTypeTop")?.value || "Normal";
+  const majorLossReason = document.getElementById("lossReasonSelect")?.value || "";
+  const majorLossRemark = (document.getElementById("lossRemark")?.value || "").trim();
+  const flexibleShiftMinutes = Number(document.getElementById("flexibleShiftMinutes")?.value || 0);
 
   const shiftObj = shifts.find(s => String(s.id ?? s.name) === String(shiftId)) || null;
   const empObj = employees.find(e => String(e.empId) === String(empId)) || null;
@@ -525,6 +1131,7 @@ function buildPayload() {
 
   const works = [];
   let utilized = 0;
+  let standardBooked = 0;
 
   document.querySelectorAll(".work-card").forEach((card) => {
     const machine = card.querySelector(".machineSelect")?.value || "";
@@ -533,6 +1140,10 @@ function buildPayload() {
     const type = card.querySelector(".typeSelect")?.value || "Normal";
     const description = (card.querySelector(".descInput")?.value || "").trim();
     const rootArea = card.querySelector(".rootAreaSelect")?.value || "";
+    const efficiencyReason = (card.querySelector(".efficiencyReasonInput")?.value || "").trim();
+
+    const workCheckpoints = getCheckedValues(card, ".bpCheck");
+    const qualityValues = getQualityValues(card);
 
     const standard = parseInt(card.querySelector(".standardTime")?.value || "0", 10) || 0;
     const actual = parseInt(card.querySelector(".actualTime")?.value || "0", 10) || 0;
@@ -540,7 +1151,17 @@ function buildPayload() {
     const hasAnything = machine || department || subWork || description || actual > 0 || standard > 0;
     if (!hasAnything) return;
 
+    const missingQuality = qualityValues.filter(q => q.mandatory && !q.value);
+    if (missingQuality.length > 0) {
+      alert(
+        "Please fill mandatory quality fields:\n\n" +
+        missingQuality.map(m => "- " + m.point).join("\n")
+      );
+      throw new Error("Quality validation failed");
+    }
+
     utilized += actual;
+    standardBooked += standard;
 
     const mObj = (machines || []).find(mm => String(mm.name) === String(machine));
     const typeId = (mObj?.type || "").toString();
@@ -557,13 +1178,16 @@ function buildPayload() {
       type,
       description,
       rootArea,
+      efficiencyReason,
+      workCheckpoints,
+      quality: qualityValues,
       standardTime: standard,
       actualTime: actual,
     });
   });
 
   const remaining = Math.max(0, shiftAvailable - utilized);
-  const productivity = shiftAvailable > 0 ? Number(((utilized / shiftAvailable) * 100).toFixed(1)) : 0;
+  const productivity = shiftAvailable > 0 ? Number(((standardBooked / shiftAvailable) * 100).toFixed(1)) : 0;
 
   return {
     secret: window.SPWT_CONFIG?.SECRET || "",
@@ -574,6 +1198,9 @@ function buildPayload() {
     shiftEnd: shiftObj?.end || "",
     breakMinutes: shiftObj?.breakMinutes || 0,
     workType,
+    majorLossReason,
+    majorLossRemark,
+    flexibleShiftMinutes,
     teamMemberId: empObj?.empId || empId,
     teamMemberName: empObj?.name || "",
     summary: { shiftAvailable, utilized, remaining, productivity },
@@ -581,9 +1208,128 @@ function buildPayload() {
   };
 }
 
+// ===================== ENTRY VALIDATION HELPERS =====================
+function getDuplicateWorkKeys(works) {
+  const seen = new Map();
+  const duplicates = [];
+
+  (works || []).forEach((w, idx) => {
+    const key = [
+      String(w.machine || "").trim().toLowerCase(),
+      String(w.department || "").trim().toLowerCase(),
+      String(w.subWork || "").trim().toLowerCase(),
+      String(w.type || "Normal").trim().toLowerCase(),
+      String(w.description || "").trim().toLowerCase(),
+      String(w.rootArea || "").trim().toLowerCase(),
+    ].join("|");
+
+    if (!String(w.machine || "").trim() && !String(w.department || "").trim() && !String(w.subWork || "").trim()) return;
+
+    if (seen.has(key)) {
+      duplicates.push({ first: seen.get(key) + 1, second: idx + 1 });
+    } else {
+      seen.set(key, idx);
+    }
+  });
+
+  return duplicates;
+}
+
+function validateEntryPayload(payload) {
+  const errs = [];
+  const warnings = [];
+
+  if (!payload.workDate) errs.push("Work Date is required");
+  if (!payload.shiftId) errs.push("Shift is required");
+  if (!payload.teamMemberId) errs.push("Team Member is required");
+  const sh = (shifts || []).find(s => String(s.id ?? s.name) === String(payload.shiftId));
+  if (sh?.flexible === true && (!payload.flexibleShiftMinutes || Number(payload.flexibleShiftMinutes) <= 0)) errs.push("Flexible Shift Minutes is required for flexible shift");
+  if (!payload.works || payload.works.length === 0) errs.push("Add at least 1 work entry");
+
+  (payload.works || []).forEach((w, idx) => {
+    const i = idx + 1;
+    if (!w.machine) errs.push(`Work ${i}: Machine is required`);
+    if (!w.department) errs.push(`Work ${i}: Department is required`);
+    if (!w.subWork) errs.push(`Work ${i}: Sub Work is required`);
+    if (!w.actualTime || Number(w.actualTime) <= 0) errs.push(`Work ${i}: Actual Time must be > 0`);
+
+    if (Number(w.standardTime || 0) > 0 && Number(w.actualTime || 0) > Number(w.standardTime || 0) * 1.2 && !String(w.efficiencyReason || "").trim()) {
+      errs.push(`Work ${i}: Reason for low efficiency is required because Actual Time is more than 120% of Standard Time`);
+    }
+
+    const t = String(w.type || "").toLowerCase();
+    if ((t === "other" || t === "rework") && !String(w.description || "").trim()) {
+      errs.push(`Work ${i}: Description required for Other/Rework`);
+    }
+    if (t === "rework" && !String(w.rootArea || "").trim()) {
+      errs.push(`Work ${i}: Root Area is required for Rework`);
+    }
+  });
+
+  (payload.works || []).forEach((w, idx) => {
+    if (Number(w.standardTime || 0) > 0 && Number(w.actualTime || 0) > Number(w.standardTime || 0) * 1.2) {
+      warnings.push(`Work ${idx + 1}: Actual Time is more than 120% of Standard Time; reason will be saved in Google Sheet`);
+    }
+  });
+
+  getDuplicateWorkKeys(payload.works).forEach(d => {
+    warnings.push(`Duplicate-looking entry: Work ${d.second} looks same as Work ${d.first}`);
+  });
+
+  if (payload.summary?.shiftAvailable > 0 && payload.summary?.utilized > payload.summary?.shiftAvailable) {
+    warnings.push(`Utilized time (${payload.summary.utilized} min) is more than shift available time (${payload.summary.shiftAvailable} min)`);
+  }
+
+  return { errs, warnings };
+}
+
+function renumberWorkCards() {
+  document.querySelectorAll(".work-card").forEach((card, idx) => {
+    card.dataset.index = String(idx + 1);
+    const title = card.querySelector(".work-title");
+    if (title) title.textContent = `Work ${idx + 1}`;
+  });
+  workCount = document.querySelectorAll(".work-card").length;
+}
+
+
+function showEntryMessage(message, type = "error") {
+  let box = document.getElementById("entryMessageBox");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "entryMessageBox";
+    box.style.cssText = "position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;max-width:720px;width:calc(100% - 32px);padding:12px 16px;border-radius:12px;box-shadow:0 6px 22px rgba(0,0,0,.22);font-weight:600;white-space:pre-line;display:none;";
+    document.body.appendChild(box);
+  }
+  box.textContent = message;
+  box.style.background = type === "success" ? "#e8fff0" : type === "warn" ? "#fff8df" : "#fff1f1";
+  box.style.color = type === "success" ? "#105c2f" : type === "warn" ? "#6b4b00" : "#8a1f1f";
+  box.style.border = type === "success" ? "1px solid #84d39b" : type === "warn" ? "1px solid #e2c34d" : "1px solid #e39797";
+  box.style.display = "block";
+  clearTimeout(window.__spwtEntryMsgTimer);
+  window.__spwtEntryMsgTimer = setTimeout(() => { box.style.display = "none"; }, 7000);
+}
+
+function focusFirstEntryError() {
+  const cards = Array.from(document.querySelectorAll(".work-card"));
+  for (const card of cards) {
+    const std = Number(card.querySelector(".standardTime")?.value || 0);
+    const act = Number(card.querySelector(".actualTime")?.value || 0);
+    const reasonField = card.querySelector(".efficiencyReasonField");
+    const reasonInput = card.querySelector(".efficiencyReasonInput");
+    if (std > 0 && act > std * 1.2 && reasonInput && !reasonInput.value.trim()) {
+      if (reasonField) reasonField.style.display = "flex";
+      reasonInput.focus();
+      reasonInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    }
+  }
+  return false;
+}
+
 // ===================== SUBMIT (LOCKED) =====================
 async function submit() {
-  if (isSubmitting) return; // prevent double click multi popup
+  if (isSubmitting) return;
   isSubmitting = true;
 
   const submitBtn = document.getElementById("submitBtn");
@@ -594,53 +1340,44 @@ async function submit() {
     if (saveBtn) saveBtn.disabled = true;
 
     const payload = buildPayload();
-    const errs = [];
-
-    if (!payload.workDate) errs.push("Work Date is required");
-    if (!payload.shiftId) errs.push("Shift is required");
-    if (!payload.teamMemberId) errs.push("Team Member is required");
-    if (!payload.works || payload.works.length === 0) errs.push("Add at least 1 work entry");
-
-    (payload.works || []).forEach((w, idx) => {
-      const i = idx + 1;
-      if (!w.machine) errs.push(`Work ${i}: Machine is required`);
-      if (!w.department) errs.push(`Work ${i}: Department is required`);
-      if (!w.subWork) errs.push(`Work ${i}: Sub Work is required`);
-      if (!w.actualTime || Number(w.actualTime) <= 0) errs.push(`Work ${i}: Actual Time must be > 0`);
-
-      const t = String(w.type || "").toLowerCase();
-      if ((t === "other" || t === "rework") && !String(w.description || "").trim()) {
-        errs.push(`Work ${i}: Description required for Other/Rework`);
-      }
-      if (t === "rework" && !String(w.rootArea || "").trim()) {
-        errs.push(`Work ${i}: Root Area is required for Rework`);
-      }
-    });
+    const { errs, warnings } = validateEntryPayload(payload);
 
     if (errs.length > 0) {
-      alert("Please fix:\n\n• " + errs.join("\n• "));
+      showEntryMessage("Please fix:\n• " + errs.join("\n• "), "error");
+      focusFirstEntryError();
       return;
+    }
+
+    if (warnings.length > 0) {
+      showEntryMessage("Warning:\n• " + warnings.join("\n• ") + "\n\nPress Submit again if everything is correct.", "warn");
+      const now = Date.now();
+      if (!window.__spwtLastWarningSubmit || now - window.__spwtLastWarningSubmit > 10000) {
+        window.__spwtLastWarningSubmit = now;
+        return;
+      }
     }
 
     const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
     if (!webAppUrl) {
-      alert("❌ Google Sheet URL not found in renderer/config.js");
+      showEntryMessage("Google Sheet URL not found in renderer/config.js", "error");
       return;
     }
 
     const res = await window.api.submitToSheets({ webAppUrl, data: payload });
     if (!res || !res.ok) {
-      alert("❌ Save Failed: " + (res?.error || "Unknown"));
+      showEntryMessage("Save Failed: " + (res?.error || "Unknown"), "error");
+      focusFirstEntryError();
       return;
     }
 
-    // Show summary screen and clear entry
+    showEntryMessage("Saved successfully.", "success");
     showSummaryScreen(payload);
     clearEntryAndStartNew();
 
   } catch (e) {
     console.error(e);
-    alert("Submit Error: " + (e?.message || e));
+    showEntryMessage("Submit Error: " + (e?.message || e), "error");
+    focusFirstEntryError();
   } finally {
     isSubmitting = false;
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Submit"; }
@@ -699,6 +1436,8 @@ function switchAdminTab(tabId) {
   if (tabId === "tabMachines") renderAdminMachines();
   if (tabId === "tabEmployees") renderAdminEmployees();
   if (tabId === "tabShifts") renderAdminShifts();
+  if (tabId === "tabLossReasons") renderAdminLossReasons();
+  if (tabId === "tabRootAreas") renderAdminRootAreas();
   if (tabId === "tabWork") renderAdminWorkSub();
 }
 
@@ -923,69 +1662,50 @@ function adminAddEmployee() {
 
 // ----- SHIFTS -----
 function renderAdminShifts() {
-  if (!mustAdmin()) return;
   const host = document.getElementById("shiftsList");
   if (!host) return;
+  adminOverrides.shifts = adminOverrides.shifts || [];
 
   host.innerHTML = `
     <table class="admin-table">
       <thead>
         <tr>
-          <th style="width:25%">Name</th>
-          <th style="width:15%">Start</th>
-          <th style="width:15%">End</th>
-          <th style="width:15%">Break</th>
-          <th style="width:10%">Active</th>
-          <th style="width:20%">Action</th>
+          <th>Name</th><th>Start</th><th>End</th><th>Break</th><th>Flexible?</th><th>Active</th><th>Action</th>
         </tr>
       </thead>
       <tbody>
-        ${adminOverrides.shifts.map((s, idx) => {
-          const name = (s?.name ?? "").toString();
-          const start = (s?.start ?? "09:00").toString();
-          const end = (s?.end ?? "18:00").toString();
-          const br = Number(s?.breakMinutes ?? 0);
-          const active = s?.active !== false;
-
-          return `
-            <tr>
-              <td><input class="admin-input" data-s-idx="${idx}" data-field="name" value="${escapeAttr(name)}"/></td>
-              <td><input class="admin-input" data-s-idx="${idx}" data-field="start" type="time" value="${escapeAttr(start)}"/></td>
-              <td><input class="admin-input" data-s-idx="${idx}" data-field="end" type="time" value="${escapeAttr(end)}"/></td>
-              <td><input class="admin-input" data-s-idx="${idx}" data-field="breakMinutes" type="number" min="0" value="${br}"/></td>
-              <td>
-                <select class="admin-select" data-s-idx="${idx}" data-field="active">
-                  <option value="true" ${active ? "selected" : ""}>Yes</option>
-                  <option value="false" ${!active ? "selected" : ""}>No</option>
-                </select>
-              </td>
-              <td><button class="btn grey" data-s-del="${idx}">Delete</button></td>
-            </tr>
-          `;
-        }).join("")}
+        ${adminOverrides.shifts.map((s, idx) => `
+          <tr>
+            <td><input class="admin-input" data-sh-idx="${idx}" data-field="name" value="${escapeAttr(s.name || '')}"/></td>
+            <td><input class="admin-input" data-sh-idx="${idx}" data-field="start" type="time" value="${escapeAttr(s.start || '')}" ${s.flexible === true ? 'disabled' : ''}/></td>
+            <td><input class="admin-input" data-sh-idx="${idx}" data-field="end" type="time" value="${escapeAttr(s.end || '')}" ${s.flexible === true ? 'disabled' : ''}/></td>
+            <td><input class="admin-input" data-sh-idx="${idx}" data-field="breakMinutes" type="number" min="0" value="${Number(s.breakMinutes || 0)}" ${s.flexible === true ? 'disabled' : ''}/></td>
+            <td style="text-align:center;"><input type="checkbox" data-sh-idx="${idx}" data-field="flexible" ${s.flexible === true ? 'checked' : ''}/></td>
+            <td style="text-align:center;"><input type="checkbox" data-sh-idx="${idx}" data-field="active" ${s.active !== false ? 'checked' : ''}/></td>
+            <td><button class="btn grey" data-sh-del="${idx}">Delete</button></td>
+          </tr>
+        `).join('')}
       </tbody>
     </table>
+    <div class="small-hint">Flexible shift is useful for overtime hours. Operator enters available minutes during entry.</div>
   `;
 
-  host.querySelectorAll("[data-s-idx]").forEach(el => {
-    const idx = Number(el.getAttribute("data-s-idx"));
-    const field = el.getAttribute("data-field");
-
+  host.querySelectorAll('[data-sh-idx]').forEach(el => {
+    const idx = Number(el.getAttribute('data-sh-idx'));
+    const field = el.getAttribute('data-field');
     const apply = () => {
-      if (field === "name") adminOverrides.shifts[idx].name = el.value.trim();
-      if (field === "start") adminOverrides.shifts[idx].start = el.value;
-      if (field === "end") adminOverrides.shifts[idx].end = el.value;
-      if (field === "breakMinutes") adminOverrides.shifts[idx].breakMinutes = Number(el.value || 0);
-      if (field === "active") adminOverrides.shifts[idx].active = (el.value === "true");
+      if (field === 'breakMinutes') adminOverrides.shifts[idx][field] = Number(el.value || 0);
+      else if (field === 'active' || field === 'flexible') adminOverrides.shifts[idx][field] = !!el.checked;
+      else adminOverrides.shifts[idx][field] = el.value;
+      if (field === 'flexible') renderAdminShifts();
     };
-
     el.oninput = apply;
     el.onchange = apply;
   });
 
-  host.querySelectorAll("[data-s-del]").forEach(btn => {
+  host.querySelectorAll('[data-sh-del]').forEach(btn => {
     btn.onclick = () => {
-      const idx = Number(btn.getAttribute("data-s-del"));
+      const idx = Number(btn.getAttribute('data-sh-del'));
       adminOverrides.shifts.splice(idx, 1);
       renderAdminShifts();
     };
@@ -1004,7 +1724,126 @@ function adminAddShift() {
   });
   renderAdminShifts();
 }
+// ----- LOSS REASONS -----
+function renderAdminLossReasons() {
+  const host = document.getElementById("lossReasonsList");
+  if (!host) return;
 
+  adminOverrides.lossReasons = normalizeNameList(adminOverrides.lossReasons, []);
+
+  host.innerHTML = `
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Loss Reason</th>
+          <th style="width:160px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${adminOverrides.lossReasons.map((r, idx) => `
+          <tr>
+            <td>
+              <input class="admin-input"
+                     data-loss-idx="${idx}"
+                     value="${escapeAttr(r || "")}"
+                     placeholder="No Power / No Load / Meeting / 5S / Short Leave" />
+            </td>
+            <td>
+              <button class="btn grey" data-loss-del="${idx}">Delete</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div class="small-hint">Only define loss reason here. Operator enters loss time during entry.</div>
+  `;
+
+  host.querySelectorAll("[data-loss-idx]").forEach(inp => {
+    inp.oninput = () => {
+      const idx = Number(inp.getAttribute("data-loss-idx"));
+      adminOverrides.lossReasons[idx] = inp.value.trim();
+      lossReasons = normalizeNameList(adminOverrides.lossReasons, []);
+    };
+  });
+
+  host.querySelectorAll("[data-loss-del]").forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.getAttribute("data-loss-del"));
+      adminOverrides.lossReasons.splice(idx, 1);
+      lossReasons = normalizeNameList(adminOverrides.lossReasons, []);
+      renderAdminLossReasons();
+    };
+  });
+}
+
+function adminAddLossReason() {
+  if (!mustAdmin()) return;
+  adminOverrides.lossReasons = normalizeNameList(adminOverrides.lossReasons, []);
+  adminOverrides.lossReasons.push("");
+  renderAdminLossReasons();
+}
+
+
+// ----- REWORK ROOT AREAS -----
+function renderAdminRootAreas() {
+  const host = document.getElementById("rootAreasList");
+  if (!host) return;
+
+  adminOverrides.rootAreas = Array.isArray(adminOverrides.rootAreas)
+    ? adminOverrides.rootAreas
+    : [];
+
+  host.innerHTML = `
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Root Area</th>
+          <th style="width:160px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${adminOverrides.rootAreas.map((r, idx) => `
+          <tr>
+            <td>
+              <input class="admin-input"
+                     data-root-idx="${idx}"
+                     value="${escapeAttr(r || "")}"
+                     placeholder="Design / Manufacturing / Assembly / Supplier / Customer" />
+            </td>
+            <td>
+              <button class="btn grey" data-root-del="${idx}">Delete</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  host.querySelectorAll("[data-root-idx]").forEach(inp => {
+    inp.oninput = () => {
+      const idx = Number(inp.getAttribute("data-root-idx"));
+      adminOverrides.rootAreas[idx] = inp.value.trim();
+    };
+  });
+
+  host.querySelectorAll("[data-root-del]").forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.getAttribute("data-root-del"));
+      adminOverrides.rootAreas.splice(idx, 1);
+      renderAdminRootAreas();
+    };
+  });
+}
+
+function adminAddRootArea() {
+  if (!mustAdmin()) return;
+  adminOverrides.rootAreas = Array.isArray(adminOverrides.rootAreas)
+    ? adminOverrides.rootAreas
+    : [];
+
+  adminOverrides.rootAreas.push("");
+  renderAdminRootAreas();
+}
 // ----- WORK & SUB WORK (TYPE-WISE) -----
 function renderAdminWorkSub() {
   if (!mustAdmin()) return;
@@ -1036,7 +1875,7 @@ function renderAdminWorkSub() {
   if (!catalog) return;
 
   catalog.mainWorks = Array.isArray(catalog.mainWorks) ? catalog.mainWorks : [];
-  catalog.subWorks = (catalog.subWorks && typeof catalog.subWorks === "object") ? catalog.subWorks : {};
+  catalog.subWorks = catalog.subWorks && typeof catalog.subWorks === "object" ? catalog.subWorks : {};
   if (Object.prototype.hasOwnProperty.call(catalog.subWorks, "")) delete catalog.subWorks[""];
 
   if (!selectedDeptForTypeEdit || !catalog.mainWorks.includes(selectedDeptForTypeEdit)) {
@@ -1045,14 +1884,19 @@ function renderAdminWorkSub() {
 
   mainHost.innerHTML = `
     <table class="admin-table">
-      <thead><tr><th>Main Work (Department)</th><th style="width:220px;">Action</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Main Work / Department</th>
+          <th style="width:220px;">Action</th>
+        </tr>
+      </thead>
       <tbody>
         ${catalog.mainWorks.map((d, idx) => `
           <tr>
             <td><input class="admin-input" data-tmw-idx="${idx}" value="${escapeAttr(d)}"/></td>
             <td style="display:flex;gap:10px;">
-              <button class="btn grey" data-tmw-edit="${idx}">Edit</button>
-              <button class="btn grey" data-tmw-del="${idx}">Delete</button>
+              <button type="button" class="btn grey" data-tmw-edit="${idx}">Edit</button>
+              <button type="button" class="btn grey" data-tmw-del="${idx}">Delete</button>
             </td>
           </tr>
         `).join("")}
@@ -1066,7 +1910,11 @@ function renderAdminWorkSub() {
       const oldName = catalog.mainWorks[idx];
       const newName = (inp.value || "").trim();
 
-      if (!newName) { inp.value = oldName; return; }
+      if (!newName) {
+        inp.value = oldName;
+        return;
+      }
+
       if (oldName === newName) return;
 
       catalog.mainWorks[idx] = newName;
@@ -1080,8 +1928,7 @@ function renderAdminWorkSub() {
 
   mainHost.querySelectorAll("[data-tmw-edit]").forEach(btn => {
     btn.onclick = () => {
-      const idx = Number(btn.getAttribute("data-tmw-edit"));
-      selectedDeptForTypeEdit = catalog.mainWorks[idx] || "";
+      selectedDeptForTypeEdit = catalog.mainWorks[Number(btn.getAttribute("data-tmw-edit"))] || "";
       renderAdminWorkSub();
     };
   });
@@ -1090,10 +1937,8 @@ function renderAdminWorkSub() {
     btn.onclick = () => {
       const idx = Number(btn.getAttribute("data-tmw-del"));
       const name = catalog.mainWorks[idx];
-
       catalog.mainWorks.splice(idx, 1);
       if (name) delete catalog.subWorks[name];
-
       selectedDeptForTypeEdit = catalog.mainWorks[0] || "";
       renderAdminWorkSub();
     };
@@ -1104,57 +1949,210 @@ function renderAdminWorkSub() {
   const items = Array.isArray(catalog.subWorks[selectedDeptForTypeEdit])
     ? catalog.subWorks[selectedDeptForTypeEdit]
     : [];
+
   catalog.subWorks[selectedDeptForTypeEdit] = items;
+  items.forEach(ensureSubWorkDetails);
 
   subHost.innerHTML = `
-    <table class="admin-table">
-      <thead><tr><th>Sub Work</th><th style="width:180px;">Std Time (min)</th><th style="width:120px;">Action</th></tr></thead>
-      <tbody>
-        ${items.map((it, idx) => `
-          <tr>
-            <td><input class="admin-input" data-tsw-idx="${idx}" data-field="name" value="${escapeAttr(it.name || "")}"/></td>
-            <td><input class="admin-input" data-tsw-idx="${idx}" data-field="standardTime" type="number" min="0" value="${Number(it.standardTime || 0)}"/></td>
-            <td><button class="btn grey" data-tsw-del="${idx}">Delete</button></td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
+    <div class="admin-subwork-list">
+      ${items.map((it, idx) => `
+        <div class="admin-subwork-card wide-admin-card">
+          <div class="admin-subwork-head">
+            <div>
+              <b>Sub Work ${idx + 1}</b>
+              <div class="small-hint">Define base time, optional booking points, and optional quality points.</div>
+            </div>
+            <button type="button" class="btn grey" data-tsw-del="${idx}">Delete Sub Work</button>
+          </div>
+
+          <div class="admin-grid">
+            <div class="field">
+              <label>Sub Work Name</label>
+              <input class="admin-input" data-tsw-idx="${idx}" data-field="name" value="${escapeAttr(it.name || "")}" />
+            </div>
+
+            <div class="field">
+              <label>Base Std Time (min)</label>
+              <input class="admin-input" data-tsw-idx="${idx}" data-field="standardTime" type="number" min="0" value="${Number(it.standardTime || 0)}" />
+            </div>
+          </div>
+
+          <div class="admin-section-box">
+            <div class="admin-subwork-head">
+              <div>
+                <b>Booking Points</b>
+                <div class="small-hint">Operator will see checkbox list. Std time will be booked from selected points.</div>
+              </div>
+              <button type="button" class="btn blue" data-add-booking="${idx}">+ Add Booking Point</button>
+            </div>
+
+            <div class="mini-table">
+              ${(it.checkpoints || []).map((bp, bpIdx) => `
+                <div class="mini-row booking-row">
+                  <input class="admin-input"
+                         data-bp-time="${idx}:${bpIdx}"
+                         type="number"
+                         min="0"
+                         value="${Number(bp.standardTime || 0)}"
+                         placeholder="Std min" />
+
+                  <input class="admin-input"
+                         data-bp-name="${idx}:${bpIdx}"
+                         value="${escapeAttr(bp.name || "")}"
+                         placeholder="Description e.g. Motor wiring" />
+
+                  <button type="button" class="btn grey" data-bp-del="${idx}:${bpIdx}">Delete</button>
+                </div>
+              `).join("") || `<div class="small-hint">No booking points. Full sub work standard time will be used.</div>`}
+            </div>
+          </div>
+
+          <div class="admin-section-box">
+            <div class="admin-subwork-head">
+              <div>
+                <b>Quality Points</b>
+                <div class="small-hint">Operator enters reading/status only. Other details will be automatic.</div>
+              </div>
+              <button type="button" class="btn blue" data-add-quality="${idx}">+ Add Quality Point</button>
+            </div>
+
+            <div class="mini-table">
+              ${(it.qualityCheckpoints || []).map((qp, qpIdx) => `
+                <div class="mini-row quality-row">
+                  <input class="admin-input"
+                         data-qp-name="${idx}:${qpIdx}"
+                         value="${escapeAttr(qp.name || "")}"
+                         placeholder="Parameter e.g. Pressure / Leakage / Continuity" />
+
+                  <select class="admin-select" data-qp-type="${idx}:${qpIdx}">
+                    <option value="status" ${qp.inputType !== "reading" ? "selected" : ""}>OK / Not OK</option>
+                    <option value="reading" ${qp.inputType === "reading" ? "selected" : ""}>Reading</option>
+                  </select>
+
+                  <label class="mini-check">
+                    <input type="checkbox" data-qp-mandatory="${idx}:${qpIdx}" ${qp.mandatory === true ? "checked" : ""}/>
+                    Mandatory
+                  </label>
+
+                  <button type="button" class="btn grey" data-qp-del="${idx}:${qpIdx}">Delete</button>
+                </div>
+              `).join("") || `<div class="small-hint">No quality points for this sub work.</div>`}
+            </div>
+          </div>
+        </div>
+      `).join("") || `<div class="small-hint">No sub work added for this department.</div>`}
+    </div>
   `;
 
   subHost.querySelectorAll("[data-tsw-idx]").forEach(el => {
     const idx = Number(el.getAttribute("data-tsw-idx"));
     const field = el.getAttribute("data-field");
-
     const apply = () => {
       if (field === "name") items[idx].name = el.value.trim();
       if (field === "standardTime") items[idx].standardTime = Number(el.value || 0);
     };
-
     el.oninput = apply;
     el.onchange = apply;
   });
 
   subHost.querySelectorAll("[data-tsw-del]").forEach(btn => {
     btn.onclick = () => {
-      const idx = Number(btn.getAttribute("data-tsw-del"));
-      items.splice(idx, 1);
+      items.splice(Number(btn.getAttribute("data-tsw-del")), 1);
+      renderAdminWorkSub();
+    };
+  });
+
+  subHost.querySelectorAll("[data-add-booking]").forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.getAttribute("data-add-booking"));
+      ensureSubWorkDetails(items[idx]);
+      items[idx].checkpoints.push({ name: "", standardTime: 0 });
+      renderAdminWorkSub();
+    };
+  });
+
+  subHost.querySelectorAll("[data-bp-name]").forEach(inp => {
+    inp.oninput = () => {
+      const [idx, bpIdx] = inp.getAttribute("data-bp-name").split(":").map(Number);
+      items[idx].checkpoints[bpIdx].name = inp.value.trim();
+    };
+  });
+
+  subHost.querySelectorAll("[data-bp-time]").forEach(inp => {
+    inp.oninput = () => {
+      const [idx, bpIdx] = inp.getAttribute("data-bp-time").split(":").map(Number);
+      items[idx].checkpoints[bpIdx].standardTime = Number(inp.value || 0);
+    };
+  });
+
+  subHost.querySelectorAll("[data-bp-del]").forEach(btn => {
+    btn.onclick = () => {
+      const [idx, bpIdx] = btn.getAttribute("data-bp-del").split(":").map(Number);
+      items[idx].checkpoints.splice(bpIdx, 1);
+      renderAdminWorkSub();
+    };
+  });
+
+  subHost.querySelectorAll("[data-add-quality]").forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.getAttribute("data-add-quality"));
+      ensureSubWorkDetails(items[idx]);
+      items[idx].qualityCheckpoints.push({
+        name: "",
+        inputType: "status",
+        mandatory: false
+      });
+      renderAdminWorkSub();
+    };
+  });
+
+  subHost.querySelectorAll("[data-qp-name]").forEach(inp => {
+    inp.oninput = () => {
+      const [idx, qpIdx] = inp.getAttribute("data-qp-name").split(":").map(Number);
+      items[idx].qualityCheckpoints[qpIdx].name = inp.value.trim();
+    };
+  });
+
+  subHost.querySelectorAll("[data-qp-type]").forEach(sel => {
+    sel.onchange = () => {
+      const [idx, qpIdx] = sel.getAttribute("data-qp-type").split(":").map(Number);
+      items[idx].qualityCheckpoints[qpIdx].inputType = sel.value === "reading" ? "reading" : "status";
+    };
+  });
+
+  subHost.querySelectorAll("[data-qp-mandatory]").forEach(chk => {
+    chk.onchange = () => {
+      const [idx, qpIdx] = chk.getAttribute("data-qp-mandatory").split(":").map(Number);
+      items[idx].qualityCheckpoints[qpIdx].mandatory = chk.checked === true;
+    };
+  });
+
+  subHost.querySelectorAll("[data-qp-del]").forEach(btn => {
+    btn.onclick = () => {
+      const [idx, qpIdx] = btn.getAttribute("data-qp-del").split(":").map(Number);
+      items[idx].qualityCheckpoints.splice(qpIdx, 1);
       renderAdminWorkSub();
     };
   });
 }
 
-function adminAddMainWork() {
+function adminAddSubWork() {
   if (!mustAdmin()) return;
   if (!selectedTypeForWorkEdit) return alert("Select a Machine Category first.");
+  if (!selectedDeptForTypeEdit) return alert("Select a Main Work first.");
 
   const catalog = adminOverrides.workCatalogByType[selectedTypeForWorkEdit];
   if (!catalog) return alert("Catalog not found for selected category.");
 
-  const name = "New Department";
-  catalog.mainWorks.push(name);
-  catalog.subWorks[name] = catalog.subWorks[name] || [];
+  catalog.subWorks[selectedDeptForTypeEdit] = catalog.subWorks[selectedDeptForTypeEdit] || [];
 
-  selectedDeptForTypeEdit = name;
+  catalog.subWorks[selectedDeptForTypeEdit].push({
+    name: "New Sub Work",
+    standardTime: 0,
+    checkpoints: [],
+    qualityCheckpoints: []
+  });
+
   renderAdminWorkSub();
 }
 
@@ -1167,7 +2165,7 @@ function adminAddSubWork() {
   if (!catalog) return alert("Catalog not found for selected category.");
 
   catalog.subWorks[selectedDeptForTypeEdit] = catalog.subWorks[selectedDeptForTypeEdit] || [];
-  catalog.subWorks[selectedDeptForTypeEdit].push({ name: "New Sub Work", standardTime: 0 });
+  catalog.subWorks[selectedDeptForTypeEdit].push({ name: "New Sub Work", standardTime: 0, checkpoints: [], qualityCheckpoints: [] });
 
   renderAdminWorkSub();
 }
@@ -1324,14 +2322,13 @@ if (webAppUrl && secret && window.api.syncAdminOverridesToSheets) {
   }
 }
 
-    alert("✅ Admin changes saved.");
+    showEntryMessage("✅ Admin changes saved. Admin screen is still open; use ✕ Close when finished.", "success");
 
-    // Reload runtime data, repopulate dropdowns, rebuild fresh cards
+    // Reload runtime data and keep admin screen open for multiple changes
     await loadData();
     populateHeaderDropdowns();
-    resetWorkCards(1);
-
-    closeAdminModal();
+    const activeTab = document.querySelector(".tab.active")?.dataset?.tab || "tabMachines";
+    switchAdminTab(activeTab);
   } catch (e) {
     console.error(e);
     alert("❌ Save error: " + (e?.message || e));
@@ -1520,4 +2517,75 @@ function clearEntryAndStartNew(){
   updateSummaryDebounced();
 
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ===================== ADMIN BOOKING / QUALITY BUTTON FIX =====================
+function getCurrentAdminSubWorkItems_() {
+  if (!adminOverrides) return null;
+  if (!selectedTypeForWorkEdit || !selectedDeptForTypeEdit) return null;
+
+  const catalog = adminOverrides.workCatalogByType?.[selectedTypeForWorkEdit];
+  if (!catalog) return null;
+
+  catalog.subWorks = catalog.subWorks || {};
+  catalog.subWorks[selectedDeptForTypeEdit] = Array.isArray(catalog.subWorks[selectedDeptForTypeEdit])
+    ? catalog.subWorks[selectedDeptForTypeEdit]
+    : [];
+
+  catalog.subWorks[selectedDeptForTypeEdit].forEach(ensureSubWorkDetails);
+
+  return catalog.subWorks[selectedDeptForTypeEdit];
+}
+
+function adminAddBookingPointByIndex(idx) {
+  const items = getCurrentAdminSubWorkItems_();
+  if (!items || !items[idx]) return;
+
+  ensureSubWorkDetails(items[idx]);
+
+  items[idx].checkpoints.push({
+    name: "",
+    standardTime: 0
+  });
+
+  renderAdminWorkSub();
+}
+
+function adminAddQualityPointByIndex(idx) {
+  const items = getCurrentAdminSubWorkItems_();
+  if (!items || !items[idx]) return;
+
+  ensureSubWorkDetails(items[idx]);
+
+  items[idx].qualityCheckpoints.push({
+    name: "",
+    inputType: "status",
+    mandatory: false
+  });
+
+  renderAdminWorkSub();
+}
+
+if (!window.__spwtAdminPointButtonsFixed) {
+  window.__spwtAdminPointButtonsFixed = true;
+
+  document.addEventListener("click", function (e) {
+    const bookingBtn = e.target.closest("[data-add-booking]");
+    if (bookingBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = Number(bookingBtn.getAttribute("data-add-booking"));
+      adminAddBookingPointByIndex(idx);
+      return;
+    }
+
+    const qualityBtn = e.target.closest("[data-add-quality]");
+    if (qualityBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = Number(qualityBtn.getAttribute("data-add-quality"));
+      adminAddQualityPointByIndex(idx);
+      return;
+    }
+  }, true);
 }

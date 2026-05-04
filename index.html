@@ -54,15 +54,32 @@
           </div>
 
           <div class="field">
-            <label>Work Type</label>
+            <label>Shift Work Type</label>
             <select id="workTypeTop">
               <option value="Normal">Normal</option>
               <option value="Overtime">Overtime</option>
             </select>
           </div>
 
+          <div class="field" id="flexibleShiftBox" style="display:none;">
+            <label>Flexible Shift / OT Minutes</label>
+            <input type="number" id="flexibleShiftMinutes" min="0" placeholder="Example: 120" />
+          </div>
+
+          <div class="field">
+            <label>Major Loss Reason</label>
+            <select id="lossReasonSelect">
+              <option value="">No Major Loss</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Loss Remark</label>
+            <input type="text" id="lossRemark" placeholder="Optional details..." />
+          </div>
+
           <div class="tip">
-            Tip: One person can work on multiple machines in a day (Machine is inside each work card).
+            Tip: Select shift work type here. Work nature (Normal / Other / Rework) is selected inside each work card.
           </div>
         </div>
       </div>
@@ -181,38 +198,50 @@
             <button class="tab active" data-tab="tabMachines">Machines</button>
             <button class="tab" data-tab="tabEmployees">Employees</button>
             <button class="tab" data-tab="tabShifts">Shifts</button>
+            <button class="tab" data-tab="tabLossReasons">Loss Reasons</button>
+            <button class="tab" data-tab="tabRootAreas">Root Areas</button>
             <button class="tab" data-tab="tabWork">Work &amp; Sub Work</button>
             <button class="tab" data-tab="tabPin">Change PIN</button>
           </div>
 
           <!-- Machines -->
           <div class="tab-page" id="tabMachines">
-            <div class="row-between">
-              <div class="section-title">Machines</div>
-              <button class="btn orange" id="addMachineBtn">+ Add</button>
-            </div>
+            <div class="section-title">Machines</div>
             <div id="machinesList" class="list"></div>
 
             <div class="small-hint">Tip: Mark machine as <b>Completed</b> to hide it from production entry.</div>
+            <div class="admin-floating-actions"><button class="btn orange" id="addMachineBtn">+ Add Machine</button></div>
           </div>
 
           <!-- Employees -->
           <div class="tab-page hidden" id="tabEmployees">
-            <div class="row-between">
-              <div class="section-title">Employees</div>
-              <button class="btn orange" id="addEmployeeBtn">+ Add</button>
-            </div>
+            <div class="section-title">Employees</div>
             <div id="employeesList" class="list"></div>
+            <div class="admin-floating-actions"><button class="btn orange" id="addEmployeeBtn">+ Add Employee</button></div>
           </div>
 
           <!-- Shifts -->
           <div class="tab-page hidden" id="tabShifts">
-            <div class="row-between">
-              <div class="section-title">Shifts</div>
-              <button class="btn orange" id="addShiftBtn">+ Add</button>
-            </div>
+            <div class="section-title">Shifts</div>
             <div id="shiftsList" class="list"></div>
-            <div class="small-hint">Tip: Use 24-hour time like 09:00 to 18:00</div>
+            <div class="small-hint">Tip: Use 24-hour time like 09:00 to 18:00. Mark flexible for overtime-style entry.</div>
+            <div class="admin-floating-actions"><button class="btn orange" id="addShiftBtn">+ Add Shift</button></div>
+          </div>
+
+          <!-- Loss Reasons -->
+          <div class="tab-page hidden" id="tabLossReasons">
+            <div class="section-title">Major Loss Reasons</div>
+            <div class="small-hint">These options appear in Shift &amp; Team Details.</div>
+            <div id="lossReasonsList" class="list"></div>
+            <div class="admin-floating-actions"><button class="btn orange" id="addLossReasonBtn">+ Add Loss Reason</button></div>
+          </div>
+
+          <!-- Root Areas -->
+          <div class="tab-page hidden" id="tabRootAreas">
+            <div class="section-title">Rework Root Areas</div>
+            <div class="small-hint">These options appear when Work Nature = Rework.</div>
+            <div id="rootAreasList" class="list"></div>
+            <div class="admin-floating-actions"><button class="btn orange" id="addRootAreaBtn">+ Add Root Area</button></div>
           </div>
 
           <!-- Work & Sub Work -->
@@ -221,11 +250,6 @@
               <div>
                 <div class="section-title">Work &amp; Sub Work</div>
                 <div class="small-hint">This controls Department list + Sub Work list + Standard Time (min).</div>
-              </div>
-              <div class="row">
-                <button class="btn grey" id="addTypeBtn">+ Add Machine Category</button>
-                <button class="btn grey" id="addMainWorkBtn">+ Add Main Work</button>
-                <button class="btn orange" id="addSubWorkBtn">+ Add Sub Work</button>
               </div>
             </div>
 
@@ -262,7 +286,11 @@
               </div>
 
             </div>
-          
+            <div class="admin-floating-actions">
+              <button class="btn grey" id="addTypeBtn">+ Add Machine Category</button>
+              <button class="btn grey" id="addMainWorkBtn">+ Add Main Work</button>
+              <button class="btn orange" id="addSubWorkBtn">+ Add Sub Work</button>
+            </div>
           </div>
 
           <!-- PIN -->
@@ -287,6 +315,7 @@
             <div class="small-hint">These changes apply immediately in the app after Save.</div>
             <div class="row">
               <button class="btn grey" id="adminLogoutBtn">Logout</button>
+              <button class="btn grey" onclick="document.getElementById('adminModal')?.classList.add('hidden')">Close</button>
               <button class="btn green" id="adminSaveBtn">Save Changes</button>
             </div>
           </div>
