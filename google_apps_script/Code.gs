@@ -79,7 +79,20 @@ if (action === "getCompletedQualityPoints") {
       const vals = feed ? feed.getDataRange().getValues() : [];
       return json_({ ok: true, source: "live", build: build, table: vals });
     }
+    
+        // ---------- MACHINE DASHBOARD DETAIL ROUTE ----------
+    if (action === "getMachineDashboardDetails") {
+      const yyyy = String(body.year || new Date().getFullYear());
+      const machine = String(body.machine || "");
+      const machineCategory = String(body.machineCategory || body.type || "");
 
+      if (!machine) {
+        return json_({ ok: false, error: "Missing machine for dashboard details" });
+      }
+
+      const details = getMachineDashboardDetails_(ss, yyyy, machine, machineCategory);
+      return json_(details);
+    }
     // ---------- OPTIONAL MANUAL REBUILD ROUTES ----------
     if (action === "rebuildDashboard") {
       const yyyy = String(body.year || new Date().getFullYear());
@@ -1016,6 +1029,238 @@ function upsertAttendance_(attSh, workDate, empId, empName, shiftName, workType,
   } else {
     attSh.getRange(attSh.getLastRow() + 1, 1, 1, rowValues[0].length).setValues(rowValues);
   }
+}
+
+function getMachineDashboardDetails_(ss, yyyy, machine, machineCategory) {
+  yyyy = String(yyyy || new Date().getFullYear());
+  machine = clean_(machine);
+  machineCategory = clean_(machineCategory);
+
+  const plannedRows = getPlannedWorkDetailsForMachine_(ss, machine, machineCategory);
+  const qualityChecklist = getQualityChecklistForMachine_(ss, machine, machineCategory);
+  const lastSixWorkDays = getLastSixWorkDaysForMachine_(ss, yyyy, machine, machineCategory);
+  const shortageMaterial = []; // Phase 4 placeholder. Later: MATERIAL_SHORTAGE_LOG
+
+  return {
+    ok: true,
+    machine: machine,
+    machineCategory: machineCategory,
+    remainingWork: plannedRows.remainingWork,
+    completedWork: plannedRows.completedWork,
+    qualityChecklist: qualityChecklist,
+    lastSixWorkDays: lastSixWorkDays,
+    shortageMaterial: shortageMaterial
+  };
+}
+function getPlannedWorkDetailsForMachine_(ss, machine, machineCategory) {
+  const out = {
+    remainingWork: [],
+    completedWork: []
+  };
+
+  const sh = ss.getSheetByName("PLANNED_WORK");
+  if (!sh || sh.getLastRow() < 2) return out;
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  vals.slice(1).forEach(function(r) {
+    const machineNo = clean_(r[h["machine no"]]);
+    const category = clean_(r[h["machine category"]]);
+
+    const sameMachine =
+      key_(machineNo) === key_(machine) &&
+      (!machineCategory || key_(category) === key_(machineCategory));
+
+    if (!sameMachine) return;
+
+    const item = {
+      machine: machineNo,
+      machineCategory: category,
+      department: clean_(r[h["department"]]),
+      subWork: clean_(r[h["sub work"]]),
+      stdTime: Number(r[h["std time"]] || 0) || 0,
+      actualTime: Number(r[h["actual time"]] || 0) || 0,
+      remainingTime: Number(r[h["remaining time"]] || 0) || 0,
+      overrunTime: Number(r[h["overrun time"]] || 0) || 0,
+      reworkTime: Number(r[h["rework time"]] || 0) || 0,
+      otherTime: Number(r[h["other time"]] || 0) || 0,
+      doneBy: clean_(r[h["done by"]]),
+      doneDate: clean_(r[h["done date"]]),
+      startDate: clean_(r[h["start date"]])
+    };
+
+    if (item.remainingTime > 0) {
+      out.remainingWork.push(item);
+    } else {
+      out.completedWork.push(item);
+    }
+  });
+
+  return out;
+}
+
+function getQualityChecklistForMachine_(ss, machine, machineCategory) {
+  const out = [];
+
+  const sh = ss.getSheetByName("QUALITY_LOG");
+  if (!sh || sh.getLastRow() < 2) return out;
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  vals.slice(1).forEach(function(r) {
+    const machineNo = clean_(r[h["machine"]]);
+    const category = clean_(r[h["machine category"]]);
+
+    const sameMachine =
+      key_(machineNo) === key_(machine) &&
+      (!machineCategory || key_(category) === key_(machineCategory));
+
+    if (!sameMachine) return;
+
+    out.push({
+      machine: machineNo,
+      machineCategory: category,
+      department: clean_(r[h["department"]]),
+      subWork: clean_(r[h["sub work"]]),
+      qualityPoint: clean_(r[h["quality point"]]),
+      inputType: clean_(r[h["input type"]]),
+      readingStatus: clean_(r[h["reading/status"]]),
+      result: clean_(r[h["result"]]),
+      doneById: clean_(r[h["done by id"]]),
+      doneByName: clean_(r[h["done by name"]]),
+      shift: clean_(r[h["shift"]]),
+      status: clean_(r[h["status"]]),
+      doneDate: normalizeWorkDate_(r[h["work date"]]),
+      timestamp: r[h["timestamp"]] instanceof Date
+        ? Utilities.formatDate(r[h["timestamp"]], Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm")
+        : clean_(r[h["timestamp"]])
+    });
+  });
+
+  return out;
+}
+
+function getLastSixWorkDaysForMachine_(ss, yyyy, machine, machineCategory) {
+  const out = {
+    dates: [],
+    actualMin: 0,
+    actualHours: 0,
+    stdTotalMin: 0,
+    workDonePct: 0
+  };
+
+  const logSh = ss.getSheetByName("LOG_" + yyyy);
+  if (!logSh || logSh.getLastRow() < 2) return out;
+
+  const vals = logSh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  const iMachine = h["machine"];
+  const iCat = h["machine category"];
+  const iWorkDate = h["work date"];
+  const iActual = h["actual time"];
+
+  if (iMachine == null || iWorkDate == null || iActual == null) return out;
+
+  const dateMap = {};
+
+  vals.slice(1).forEach(function(r) {
+    const machineNo = clean_(r[iMachine]);
+    const category = iCat != null ? clean_(r[iCat]) : "";
+
+    const sameMachine =
+      key_(machineNo) === key_(machine) &&
+      (!machineCategory || key_(category) === key_(machineCategory));
+
+    if (!sameMachine) return;
+
+    const actual = Number(r[iActual] || 0) || 0;
+    if (actual <= 0) return;
+
+    const d = normalizeWorkDate_(r[iWorkDate]);
+    if (!d) return;
+
+    if (!dateMap[d]) dateMap[d] = 0;
+    dateMap[d] += actual;
+  });
+
+  const sortedDates = Object.keys(dateMap).sort(function(a, b) {
+    return dateToSortable_(b) - dateToSortable_(a);
+  });
+
+  const lastSixDates = sortedDates.slice(0, 6);
+  const actualMin = lastSixDates.reduce(function(sum, d) {
+    return sum + Number(dateMap[d] || 0);
+  }, 0);
+
+  const stdTotalMin = getStdTotalFromDashboardFeed_(ss, machine, machineCategory);
+  const pct = stdTotalMin > 0 ? (actualMin / stdTotalMin) * 100 : 0;
+
+  out.dates = lastSixDates;
+  out.actualMin = actualMin;
+  out.actualHours = Number((actualMin / 60).toFixed(2));
+  out.stdTotalMin = stdTotalMin;
+  out.workDonePct = Number(pct.toFixed(1));
+
+  return out;
+}
+
+function dateToSortable_(dateText) {
+  const s = String(dateText || "").trim();
+
+  // DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const parts = s.split("/").map(Number);
+    const d = parts[0];
+    const m = parts[1];
+    const y = parts[2];
+    return new Date(y, m - 1, d).getTime();
+  }
+
+  // fallback for date-like text
+  const d2 = new Date(s);
+  return isNaN(d2.getTime()) ? 0 : d2.getTime();
+}
+
+function getStdTotalFromDashboardFeed_(ss, machine, machineCategory) {
+  const sh = ss.getSheetByName("DASHBOARD_FEED");
+  if (!sh || sh.getLastRow() < 2) return 0;
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  vals.slice(1).forEach(function(r) {
+    const machineName = clean_(r[h["machinename"]]);
+    const category = clean_(r[h["type"]]);
+
+    const sameMachine =
+      key_(machineName) === key_(machine) &&
+      (!machineCategory || key_(category) === key_(machineCategory));
+
+    if (sameMachine) {
+      return Number(r[h["std_total_min"]] || 0) || 0;
+    }
+  });
+
+  // Apps Script forEach return does not return from parent function,
+  // so use normal loop below.
+  for (let i = 1; i < vals.length; i++) {
+    const r = vals[i];
+    const machineName = clean_(r[h["machinename"]]);
+    const category = clean_(r[h["type"]]);
+
+    const sameMachine =
+      key_(machineName) === key_(machine) &&
+      (!machineCategory || key_(category) === key_(machineCategory));
+
+    if (sameMachine) {
+      return Number(r[h["std_total_min"]] || 0) || 0;
+    }
+  }
+
+  return 0;
 }
 
 // ===================== DASHBOARD / MASTER DATA =====================
