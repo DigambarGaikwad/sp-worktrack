@@ -1,4 +1,25 @@
-# SP WorkTrack – Phase 3 Final
+# SP WorkTrack – Phase 4 Development
+
+---
+
+## Phase 4 Status
+
+🚧 Phase 4 development started on separate branch: `phase-4`
+### Phase 4 Modules
+
+1. Machine Dashboard
+2. Team Dashboard
+3. Capacity Planning Page
+
+### Phase 4 Focus Areas
+
+- Improve dashboard UI and machine-wise visibility
+- Add better production analytics
+- Strengthen attendance and absence tracking
+- Improve Google Sheets backend stability
+- Keep Phase 3 stable as production-ready backup
+
+---
 
 ## Overview
 SP WorkTrack is a Production Management System designed to track machine-wise work progress, booking checkpoints, and quality verification in real time.
