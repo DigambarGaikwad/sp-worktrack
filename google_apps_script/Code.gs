@@ -1231,18 +1231,7 @@ function getStdTotalFromDashboardFeed_(ss, machine, machineCategory) {
   const vals = sh.getDataRange().getValues();
   const h = headerMap_(vals[0]);
 
-  vals.slice(1).forEach(function(r) {
-    const machineName = clean_(r[h["machinename"]]);
-    const category = clean_(r[h["type"]]);
-
-    const sameMachine =
-      key_(machineName) === key_(machine) &&
-      (!machineCategory || key_(category) === key_(machineCategory));
-
-    if (sameMachine) {
-      return Number(r[h["std_total_min"]] || 0) || 0;
-    }
-  });
+ 
 
   // Apps Script forEach return does not return from parent function,
   // so use normal loop below.
@@ -2127,4 +2116,18 @@ function qualityPointTextFromAdmin_(arr) {
     const mandatory = x.mandatory === true ? "Mandatory" : "Optional";
     return name ? name + " [" + type + ", " + mandatory + "]" : "";
   }).filter(Boolean).join("; ");
+}
+
+
+function testMachineDashboardDetails() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const result = getMachineDashboardDetails_(
+    ss,
+    "2026",
+    "MNGL 26020",
+    "Booster - Air Cooled"
+  );
+
+  Logger.log(JSON.stringify(result, null, 2));
 }
