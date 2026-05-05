@@ -15,9 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function wireEvents() {
   el("refreshBtn")?.addEventListener("click", loadDashboard);
 
-  el("backBtn")?.addEventListener("click", () => {
-    window.location.href = "../../index.html";
-  });
+ 
 
   el("statusFilter")?.addEventListener("change", applyFilters);
   el("typeFilter")?.addEventListener("change", applyFilters);

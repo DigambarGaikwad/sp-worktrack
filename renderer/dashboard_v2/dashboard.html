@@ -2,40 +2,43 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>SP WorkTrack – Machine Dashboard</title>
+  <title>SP WorkTrack – Production Management System</title>
   <link rel="stylesheet" href="dashboard.css" />
+  <link rel="stylesheet" href="../shared/appShell.css" />
 </head>
 
 <body>
+  <div class="sp-app-shell">
+  <div class="sp-page">
+    <div id="spAppHeader"></div>
   <div class="dash-shell">
 
-    <!-- TOP BAR -->
-    <header class="dash-topbar">
-      <div class="brand-block">
-        <div class="brand-title">SP WorkTrack</div>
-        <div class="brand-subtitle">Phase 4 • Machine Dashboard</div>
-      </div>
+  <!-- FILTER PANEL -->
+<header class="dash-topbar">
+  <div class="brand-block">
+    <div class="brand-title">Machine Dashboard</div>
+    <div class="brand-subtitle">Filter machines by status, type and machine number</div>
+  </div>
 
-      <div class="filter-bar">
-        <select id="statusFilter" class="dash-select">
-          <option value="All">Status: All</option>
-          <option value="Active" selected>Status: Active</option>
-          <option value="Completed">Status: Completed</option>
-          <option value="Inactive">Status: Inactive</option>
-        </select>
+  <div class="filter-bar">
+    <select id="statusFilter" class="dash-select">
+      <option value="All">Status: All</option>
+      <option value="Active" selected>Status: Active</option>
+      <option value="Completed">Status: Completed</option>
+      <option value="Inactive">Status: Inactive</option>
+    </select>
 
-        <select id="typeFilter" class="dash-select">
-          <option value="All">Type: All</option>
-        </select>
+    <select id="typeFilter" class="dash-select">
+      <option value="All">Type: All</option>
+    </select>
 
-        <select id="machineFilter" class="dash-select">
-          <option value="All">Machine: All</option>
-        </select>
+    <select id="machineFilter" class="dash-select">
+      <option value="All">Machine: All</option>
+    </select>
 
-        <button class="dash-btn primary" id="refreshBtn">Refresh</button>
-        <button class="dash-btn" id="backBtn">Back</button>
-      </div>
-    </header>
+    <button class="dash-btn primary" id="refreshBtn">Refresh</button>
+  </div>
+</header>
 
     <!-- OVERALL SUMMARY -->
     <section class="kpi-grid" id="overallKpiGrid">
@@ -295,9 +298,24 @@
     </section>
 
   </div>
+  </div>
+</div>
+<div id="spSharedModals"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="../config.js"></script>
-  <script src="dashboard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="../config.js"></script>
+<script src="../shared/appModals.js"></script>
+<script src="../shared/appHeader.js"></script>
+
+<script>
+  window.SPWT.renderSharedModals();
+
+  window.SPWT.renderAppHeader({
+    title: "SP WorkTrack",
+    subtitle: "Production Management System"
+  });
+</script>
+
+<script src="dashboard.js"></script>
 </body>
 </html>
