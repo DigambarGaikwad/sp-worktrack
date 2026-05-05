@@ -2,44 +2,297 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>SP WorkTrack – Dashboard</title>
+  <title>SP WorkTrack – Machine Dashboard</title>
   <link rel="stylesheet" href="dashboard.css" />
 </head>
+
 <body>
-  <div class="dash">
+  <div class="dash-shell">
 
-    <div class="dash-topbar">
-      <div class="brand">
-        <div class="title">SP WorkTrack</div>
-        <div class="sub">Production Analytics System (V2) • Shopfloor Wall</div>
+    <!-- TOP BAR -->
+    <header class="dash-topbar">
+      <div class="brand-block">
+        <div class="brand-title">SP WorkTrack</div>
+        <div class="brand-subtitle">Phase 4 • Machine Dashboard</div>
       </div>
 
-      <div class="actions">
-        <div class="sync" id="syncLine">Last Sync: —</div>
-        <button class="btn" id="refreshBtn">Refresh</button>
-        <button class="btn" id="backBtn">Back</button>
+      <div class="filter-bar">
+        <select id="statusFilter" class="dash-select">
+          <option value="All">Status: All</option>
+          <option value="Active" selected>Status: Active</option>
+          <option value="Completed">Status: Completed</option>
+          <option value="Inactive">Status: Inactive</option>
+        </select>
+
+        <select id="typeFilter" class="dash-select">
+          <option value="All">Type: All</option>
+        </select>
+
+        <select id="machineFilter" class="dash-select">
+          <option value="All">Machine: All</option>
+        </select>
+
+        <button class="dash-btn primary" id="refreshBtn">Refresh</button>
+        <button class="dash-btn" id="backBtn">Back</button>
       </div>
-    </div>
+    </header>
 
-    <div class="kpi-row" id="kpiRow"></div>
-
-    <div class="grid">
-      <div class="card">
-        <div class="card-title">Remaining Time by Department (All Machines)</div>
-        <canvas id="pieDept"></canvas>
-        <div class="small" id="pieNote"></div>
+    <!-- OVERALL SUMMARY -->
+    <section class="kpi-grid" id="overallKpiGrid">
+      <div class="kpi-card accent-blue">
+        <div class="kpi-label">Active Machines</div>
+        <div class="kpi-value" id="kpiActiveMachines">0</div>
+        <div class="kpi-note">Currently active</div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Department Std vs Consumed vs Overrun</div>
-        <canvas id="barDept"></canvas>
+      <div class="kpi-card accent-green">
+        <div class="kpi-label">Completed</div>
+        <div class="kpi-value" id="kpiCompletedMachines">0</div>
+        <div class="kpi-note">Completed machines</div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-title">Machine Status (All Machines)</div>
-      <div class="machine-grid" id="machineGrid"></div>
-    </div>
+      <div class="kpi-card accent-navy">
+        <div class="kpi-label">Std Hours</div>
+        <div class="kpi-value" id="kpiStdHours">0</div>
+        <div class="kpi-note">Total planned hours</div>
+      </div>
+
+      <div class="kpi-card accent-red">
+        <div class="kpi-label">Actual Hours</div>
+        <div class="kpi-value" id="kpiActualHours">0</div>
+        <div class="kpi-note">Consumed hours</div>
+      </div>
+
+      <div class="kpi-card accent-orange">
+        <div class="kpi-label">Remaining</div>
+        <div class="kpi-value" id="kpiRemainingHours">0</div>
+        <div class="kpi-note">Pending hours</div>
+      </div>
+
+      <div class="kpi-card accent-purple">
+        <div class="kpi-label">Completion</div>
+        <div class="kpi-value" id="kpiCompletionPct">0%</div>
+        <div class="kpi-note">Overall progress</div>
+      </div>
+    </section>
+
+    <!-- ACTIVE MACHINE CARDS -->
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Active Machines Summary</h2>
+          <p>Machine-wise completion and remaining manhours</p>
+        </div>
+      </div>
+
+      <div class="machine-card-grid" id="machineCardGrid"></div>
+    </section>
+
+    <!-- SELECTED MACHINE DETAIL -->
+    <section class="machine-detail" id="machineDetailSection">
+
+      <div class="machine-header-card">
+        <div>
+          <h1 id="selectedMachineName">Select Machine</h1>
+          <p id="selectedMachineMeta">Machine type • Status • Start date</p>
+        </div>
+
+        <div class="machine-header-metrics">
+          <div class="mini-metric purple">
+            <span>Last 6 Work Days</span>
+            <strong id="lastSixPct">0%</strong>
+            <small id="lastSixHours">0 hrs</small>
+          </div>
+
+          <div class="mini-metric orange">
+            <span>Material Shortage</span>
+            <strong id="shortageCount">0</strong>
+            <small>open items</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="machine-kpi-grid">
+        <div class="kpi-card accent-navy">
+          <div class="kpi-label">Standard</div>
+          <div class="kpi-value" id="machineStdHours">0</div>
+          <div class="kpi-note">Hours</div>
+        </div>
+
+        <div class="kpi-card accent-red">
+          <div class="kpi-label">Actual</div>
+          <div class="kpi-value" id="machineActualHours">0</div>
+          <div class="kpi-note">Hours</div>
+        </div>
+
+        <div class="kpi-card accent-orange">
+          <div class="kpi-label">Remaining</div>
+          <div class="kpi-value" id="machineRemainingHours">0</div>
+          <div class="kpi-note">Hours</div>
+        </div>
+
+        <div class="kpi-card accent-purple">
+          <div class="kpi-label">Efficiency</div>
+          <div class="kpi-value" id="machineEfficiencyPct">0%</div>
+          <div class="kpi-note">Std vs Actual</div>
+        </div>
+
+        <div class="kpi-card accent-green">
+          <div class="kpi-label">Completion</div>
+          <div class="kpi-value" id="machineCompletionPct">0%</div>
+          <div class="kpi-note">Machine progress</div>
+        </div>
+
+        <div class="kpi-card accent-teal">
+          <div class="kpi-label">Overrun</div>
+          <div class="kpi-value" id="machineOverrunHours">0</div>
+          <div class="kpi-note">Hours</div>
+        </div>
+      </div>
+
+      <!-- MAIN GRID -->
+      <div class="detail-grid-main">
+
+        <div class="panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Department Std vs Actual vs Overrun</h2>
+              <p>Blue = Standard • Red = Actual • Orange = Overrun</p>
+            </div>
+          </div>
+          <canvas id="deptChart"></canvas>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Rework / Other Summary</h2>
+              <p>Loss visibility by machine</p>
+            </div>
+          </div>
+
+          <div class="loss-grid">
+            <div class="loss-box red">
+              <span>Rework Hours</span>
+              <strong id="reworkHours">0</strong>
+            </div>
+            <div class="loss-box red">
+              <span>Rework %</span>
+              <strong id="reworkPct">0%</strong>
+            </div>
+            <div class="loss-box orange">
+              <span>Other Hours</span>
+              <strong id="otherHours">0</strong>
+            </div>
+            <div class="loss-box orange">
+              <span>Other %</span>
+              <strong id="otherPct">0%</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Quality Point Checklist</h2>
+              <p>Source: QUALITY_LOG</p>
+            </div>
+          </div>
+
+          <div class="table-wrap small-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Point</th>
+                  <th>Status</th>
+                  <th>Result</th>
+                  <th>Done By</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="qualityTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- LOWER GRID -->
+      <div class="detail-grid-lower">
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Department Performance</h2>
+              <p>Department-wise machine progress</p>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Std</th>
+                  <th>Actual</th>
+                  <th>Remaining</th>
+                  <th>Overrun</th>
+                  <th>Completion</th>
+                </tr>
+              </thead>
+              <tbody id="departmentTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Remaining / Completed Work</h2>
+              <p>Source: PLANNED_WORK</p>
+            </div>
+
+            <div class="tab-buttons">
+              <button class="tab-btn active" id="remainingTabBtn">Remaining</button>
+              <button class="tab-btn" id="completedTabBtn">Completed</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dept</th>
+                  <th>Sub Work</th>
+                  <th>Std</th>
+                  <th>Actual</th>
+                  <th>Remaining</th>
+                  <th>Overrun</th>
+                  <th>Done Date</th>
+                </tr>
+              </thead>
+              <tbody id="workTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- SHORTAGE PLACEHOLDER -->
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Shortage Material / Constraints</h2>
+            <p>Reserved for future entry from main production screen</p>
+          </div>
+        </div>
+
+        <div class="empty-state" id="shortageEmptyState">
+          No shortage material provision added yet.
+        </div>
+      </section>
+
+    </section>
 
   </div>
 
