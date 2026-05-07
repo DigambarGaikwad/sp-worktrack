@@ -4,29 +4,14 @@
   <meta charset="UTF-8" />
   <title>SP WorkTrack</title>
   <link rel="stylesheet" href="renderer/style.css" />
+  <link rel="stylesheet" href="renderer/shared/appShell.css" />
 </head>
 
 <body>
   <div class="app">
 
     <!-- TOPBAR -->
-    <div class="topbar">
-      <div class="left">
-        <img src="assets/logo (2).png" class="logo" alt="SP Logo" />
-        <div class="brand">
-          <div class="title">WorkTrack</div>
-          <div class="subtitle">Production Management System</div>
-        </div>
-      </div>
-
-      <div class="right">
-        <span id="currentDate"></span>
-        <span class="about-btn" id="aboutBtn" title="About">ℹ</span>
-         <span class="about-btn" id="dashboardBtn" title="Dashboard">📊</span>
-        <span class="settings" title="Settings">⚙</span>
-       
-      </div>
-    </div>
+   <div id="spAppHeader"></div>
 
     <!-- MAIN CONTENT -->
     <div class="content">
@@ -399,6 +384,14 @@
 </div>
 
   <script src="renderer/config.js"></script>
+
+  <script src="renderer/shared/appHeader.js"></script>
+  <script>
+  window.SPWT.renderAppHeader({
+    title: "SP WorkTrack",
+    subtitle: "Production Management System"
+  });
+</script>
   <script src="renderer/app.js"></script>
 </body>
 </html>

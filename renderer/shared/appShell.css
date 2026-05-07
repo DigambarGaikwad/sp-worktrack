@@ -257,3 +257,144 @@
 .shared-nav-btn.settings {
   font-size: 25px;
 }
+
+/* ===================== ADMIN FULL PAGE ===================== */
+
+.admin-page-panel {
+  max-width: 1560px;
+  margin: 0 auto;
+}
+
+.admin-page-body {
+  padding: 18px;
+}
+
+.admin-page-body .admin-login {
+  max-width: 520px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.admin-page-body .admin-panel {
+  width: 100%;
+}
+
+.admin-page-body .tabs {
+  position: sticky;
+  top: 80px;
+  z-index: 20;
+  background: #ffffff;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.admin-page-body .tab-page {
+  padding-top: 16px;
+}
+
+.admin-page-body .row-between:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
+  border-top: 1px solid rgba(15,23,42,0.12);
+  padding: 12px 8px 8px;
+  margin-top: 12px;
+}
+
+.admin-page-body .admin-floating-actions {
+  position: sticky;
+  bottom: 62px;
+  z-index: 25;
+}
+/* ===================== ADMIN FULL PAGE POLISH ===================== */
+
+.admin-page-card {
+  max-width: 1560px;
+  margin: 0 auto;
+}
+
+.admin-page-card .card-head {
+  background: #ffffff;
+}
+
+.admin-page-card .card-title {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.admin-page-body {
+  padding: 20px;
+}
+
+.admin-page-body .admin-login {
+  max-width: 520px;
+  margin: 35px auto;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.10);
+}
+
+.admin-page-body .admin-login .field {
+  margin-bottom: 14px;
+}
+
+.admin-page-body .admin-login label {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-page-body .admin-login input {
+  width: 100%;
+  height: 44px;
+  font-size: 16px;
+}
+
+.admin-page-body .admin-login .row {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.admin-page-body .admin-panel {
+  width: 100%;
+}
+
+.admin-page-body .tabs {
+  position: sticky;
+  top: 80px;
+  z-index: 30;
+  background: #ffffff;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.admin-page-body .tab-page {
+  padding-top: 16px;
+}
+
+.admin-page-body hr {
+  margin: 18px 0;
+  border: none;
+  border-top: 1px solid rgba(15, 23, 42, 0.10);
+}
+
+.admin-page-body > .row-between:last-child,
+.admin-page-body .admin-panel > .row-between:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 35;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
+  border-top: 1px solid rgba(15,23,42,0.12);
+  padding: 12px 8px 8px;
+  margin-top: 12px;
+}
+
+.admin-page-body .admin-floating-actions {
+  position: sticky;
+  bottom: 62px;
+  z-index: 25;
+}

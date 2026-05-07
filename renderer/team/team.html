@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>SP WorkTrack – People Performance Dashboard</title>
+
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="../shared/appShell.css" />
+
+  <style>
+    :root {
+      --team-bg: #eef1f5;
+      --team-dark: #0f172a;
+      --team-text: #07122b;
+      --team-muted: #52627a;
+      --team-line: #d9e2ef;
+      --team-card: #ffffff;
+    }
+
+    body { background: var(--team-bg); }
+
+    .people-page { padding: 22px; }
+
+    .people-hero,
+    .section-card,
+    .absent-card {
+      background: var(--team-card);
+      border: 1px solid var(--team-line);
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      margin-bottom: 22px;
+    }
+
+    .people-hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .people-title {
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--team-text);
+      margin: 0;
+    }
+
+    .people-subtitle,
+    .section-subtitle {
+      margin-top: 8px;
+      color: var(--team-muted);
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .people-filters {
+      display: grid;
+      grid-template-columns: 180px 180px 180px 200px 140px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .people-select,
+    .people-btn {
+      height: 48px;
+      border-radius: 12px;
+      border: 1px solid #bfd0e7;
+      background: #ffffff;
+      padding: 0 14px;
+      font-weight: 800;
+      color: #063b6d;
+      font-size: 14px;
+    }
+
+    .people-btn {
+      cursor: pointer;
+      background: #eaf8ef;
+      color: #15803d;
+      border-color: #b7e4c5;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .kpi-card {
+      background: var(--team-card);
+      border: 1px solid var(--team-line);
+      border-radius: 18px;
+      padding: 18px;
+      min-height: 116px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 7px;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .kpi-label {
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--team-muted);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .kpi-value {
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--team-text);
+      line-height: 1;
+    }
+
+    .kpi-note {
+      margin-top: 12px;
+      color: var(--team-muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--team-text);
+    }
+
+    .recognition-grid {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .winner-card {
+      border-radius: 18px;
+      padding: 20px;
+      border: 1px solid var(--team-line);
+      background: #f8fafc;
+      min-height: 180px;
+    }
+
+    .winner-card.gold {
+      background: linear-gradient(135deg, #fff7d6, #ffffff);
+      border-color: #f7d879;
+    }
+
+    .winner-card.silver { background: linear-gradient(135deg, #f1f5f9, #ffffff); }
+    .winner-card.bronze { background: linear-gradient(135deg, #fff1df, #ffffff); }
+
+    .winner-icon { font-size: 34px; margin-bottom: 12px; }
+
+    .winner-label {
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--team-muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .winner-name {
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--team-text);
+      margin-bottom: 8px;
+    }
+
+    .winner-meta {
+      font-size: 13px;
+      color: var(--team-muted);
+      line-height: 1.6;
+      font-weight: 700;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 900;
+      background: #e0f2fe;
+      color: #075985;
+    }
+
+    .badge.month {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .absent-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    .absent-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .absent-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--team-text);
+    }
+
+    .absent-count {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .absent-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .absent-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: #fbfdff;
+      border: 1px solid #e5edf8;
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+
+    .absent-name {
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--team-text);
+    }
+
+    .absent-meta {
+      font-size: 12px;
+      color: var(--team-muted);
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .absent-days {
+      min-width: 72px;
+      text-align: center;
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fef2f2;
+      color: #b91c1c;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .absent-days.warning {
+      background: #fff7ed;
+      color: #c2410c;
+    }
+
+    .absent-note {
+      margin-top: 14px;
+      color: var(--team-muted);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.6;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.7fr 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .employee-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .emp-card {
+      border: 1px solid var(--team-line);
+      border-radius: 18px;
+      padding: 18px;
+      background: #fbfdff;
+    }
+
+    .emp-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .rank {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: var(--team-dark);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .emp-name {
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--team-text);
+    }
+
+    .emp-dept {
+      margin-top: 4px;
+      color: var(--team-muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .score-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+      font-weight: 900;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .emp-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .mini-metric {
+      background: #ffffff;
+      border: 1px solid #e5edf8;
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .mini-label {
+      font-size: 11px;
+      color: var(--team-muted);
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .mini-value {
+      font-size: 18px;
+      color: var(--team-text);
+      font-weight: 900;
+    }
+
+    .dept-grid {
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .dept-card {
+      border: 1px solid var(--team-line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fbfdff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dept-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 6px;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .dept-name {
+      font-weight: 900;
+      font-size: 17px;
+      color: var(--team-text);
+      margin-bottom: 8px;
+    }
+
+    .dept-meta {
+      color: var(--team-muted);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .progress-track {
+      height: 9px;
+      background: #e8eef6;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: var(--pct);
+      background: var(--accent);
+      border-radius: 99px;
+    }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .insight-card {
+      background: #fbfdff;
+      border: 1px solid var(--team-line);
+      border-radius: 16px;
+      padding: 18px;
+      min-height: 150px;
+    }
+
+    .insight-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .insight-title {
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--team-text);
+      margin-bottom: 8px;
+    }
+
+    .insight-text {
+      color: var(--team-muted);
+      font-size: 13px;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1100px) {
+      .people-hero,
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .people-filters,
+      .kpi-grid,
+      .recognition-grid,
+      .employee-grid,
+      .insight-grid,
+      .absent-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sp-app-shell">
+    <div class="sp-page">
+      <div id="spAppHeader"></div>
+
+      <main class="people-page">
+
+        <section class="people-hero">
+          <div>
+            <h1 class="people-title">People Performance Dashboard</h1>
+            <div class="people-subtitle">
+              Workforce productivity, attendance, overtime, rework, utilization and performance visibility
+            </div>
+          </div>
+
+          <div class="people-filters">
+            <select class="people-select">
+              <option>Period: Yesterday</option>
+              <option>This Month</option>
+              <option>Last 7 Days</option>
+            </select>
+
+            <select class="people-select">
+              <option>Shift: All</option>
+              <option>General</option>
+              <option>Normal</option>
+              <option>Overtime</option>
+            </select>
+
+            <select class="people-select">
+              <option>Department: All</option>
+              <option>Tubing</option>
+              <option>Electrical</option>
+              <option>Mechanical</option>
+            </select>
+
+            <select class="people-select">
+              <option>Employee: All</option>
+            </select>
+
+            <button class="people-btn">Refresh</button>
+          </div>
+        </section>
+
+        <section class="kpi-grid">
+          <div class="kpi-card" style="--accent:#2563eb;"><div class="kpi-label">Present</div><div class="kpi-value">22</div><div class="kpi-note">Employees available</div></div>
+          <div class="kpi-card" style="--accent:#ef4444;"><div class="kpi-label">Absent</div><div class="kpi-value">03</div><div class="kpi-note">Current period</div></div>
+          <div class="kpi-card" style="--accent:#0f766e;"><div class="kpi-label">Available Hours</div><div class="kpi-value">176</div><div class="kpi-note">Net shift capacity</div></div>
+          <div class="kpi-card" style="--accent:#7c3aed;"><div class="kpi-label">Utilized Hours</div><div class="kpi-value">151</div><div class="kpi-note">Actual booked time</div></div>
+          <div class="kpi-card" style="--accent:#f59e0b;"><div class="kpi-label">Std Output Hours</div><div class="kpi-value">138</div><div class="kpi-note">Productive output</div></div>
+          <div class="kpi-card" style="--accent:#16a34a;"><div class="kpi-label">Productivity</div><div class="kpi-value">78.4%</div><div class="kpi-note">Std / Available</div></div>
+          <div class="kpi-card" style="--accent:#0891b2;"><div class="kpi-label">Utilization</div><div class="kpi-value">85.8%</div><div class="kpi-note">Actual / Available</div></div>
+          <div class="kpi-card" style="--accent:#dc2626;"><div class="kpi-label">Rework Hours</div><div class="kpi-value">12.5</div><div class="kpi-note">Rework consumption</div></div>
+          <div class="kpi-card" style="--accent:#64748b;"><div class="kpi-label">Other Work</div><div class="kpi-value">8.0</div><div class="kpi-note">Support/non-production</div></div>
+          <div class="kpi-card" style="--accent:#b45309;"><div class="kpi-label">Loss Hours</div><div class="kpi-value">5.5</div><div class="kpi-note">Major loss impact</div></div>
+        </section>
+
+        <section class="section-card">
+          <h2 class="section-title">Recognition & Performance Highlights</h2>
+          <div class="section-subtitle">
+            Top performer of yesterday and top 3 performers of the month. Same employee can carry both badges.
+          </div>
+
+          <div class="recognition-grid">
+            <div class="winner-card gold">
+              <div class="winner-icon">🏆</div>
+              <div class="winner-label">Top Performer Yesterday</div>
+              <div class="winner-name">Amit Sharma</div>
+              <div class="winner-meta">Tubing • Productivity 124% • OT 1.5 hrs • Efficiency 118%</div>
+              <div class="badge-row"><span class="badge">Yesterday Topper</span><span class="badge month">Month Top 3</span></div>
+            </div>
+
+            <div class="winner-card gold">
+              <div class="winner-icon">🥇</div>
+              <div class="winner-label">Top Performer Month</div>
+              <div class="winner-name">Rahul Patil</div>
+              <div class="winner-meta">Electrical • MTD Productivity 116% • Absent 0 days</div>
+              <div class="badge-row"><span class="badge month">Month Rank 1</span></div>
+            </div>
+
+            <div class="winner-card silver">
+              <div class="winner-icon">🥈</div>
+              <div class="winner-label">2nd Performer Month</div>
+              <div class="winner-name">Suresh Yadav</div>
+              <div class="winner-meta">Mechanical • MTD Productivity 108% • OT 6.0 hrs</div>
+              <div class="badge-row"><span class="badge month">Month Rank 2</span></div>
+            </div>
+
+            <div class="winner-card bronze">
+              <div class="winner-icon">🥉</div>
+              <div class="winner-label">3rd Performer Month</div>
+              <div class="winner-name">Nilesh Pawar</div>
+              <div class="winner-meta">Testing • MTD Productivity 103% • Efficiency 101%</div>
+              <div class="badge-row"><span class="badge month">Month Rank 3</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="absent-grid">
+          <div class="absent-card">
+            <div class="absent-card-head">
+              <div>
+                <div class="absent-title">Yesterday Absent List</div>
+                <div class="section-subtitle" style="margin-bottom:0;">Employees absent in the previous working day</div>
+              </div>
+              <div class="absent-count">03 Absent</div>
+            </div>
+
+            <div class="absent-list">
+              <div class="absent-row"><div><div class="absent-name">Vijay More</div><div class="absent-meta">Welding / Fitting • General Shift</div></div><div class="absent-days">1 Day</div></div>
+              <div class="absent-row"><div><div class="absent-name">Ramesh Kadam</div><div class="absent-meta">Tubing • Normal Shift</div></div><div class="absent-days">1 Day</div></div>
+              <div class="absent-row"><div><div class="absent-name">Pravin Jadhav</div><div class="absent-meta">Mechanical • General Shift</div></div><div class="absent-days">1 Day</div></div>
+            </div>
+
+            <div class="absent-note">
+              This list helps supervisors understand immediate manpower impact before planning daily work allocation.
+            </div>
+          </div>
+
+          <div class="absent-card">
+            <div class="absent-card-head">
+              <div>
+                <div class="absent-title">Month Absent List</div>
+                <div class="section-subtitle" style="margin-bottom:0;">Month-to-date absence summary from day 1</div>
+              </div>
+              <div class="absent-count">MTD View</div>
+            </div>
+
+            <div class="absent-list">
+              <div class="absent-row"><div><div class="absent-name">Ramesh Kadam</div><div class="absent-meta">Tubing • Highest absence this month</div></div><div class="absent-days">3 Days</div></div>
+              <div class="absent-row"><div><div class="absent-name">Nilesh Pawar</div><div class="absent-meta">Testing / Quality • Regular monitoring required</div></div><div class="absent-days warning">2 Days</div></div>
+              <div class="absent-row"><div><div class="absent-name">Vijay More</div><div class="absent-meta">Welding / Fitting • Manpower impact visible</div></div><div class="absent-days warning">1 Day</div></div>
+              <div class="absent-row"><div><div class="absent-name">Pravin Jadhav</div><div class="absent-meta">Mechanical • Month-to-date absence</div></div><div class="absent-days warning">1 Day</div></div>
+            </div>
+
+            <div class="absent-note">
+              Month absent list supports manpower planning, reliability review, and department capacity risk visibility.
+            </div>
+          </div>
+        </section>
+
+        <div class="main-grid">
+          <section class="section-card">
+            <h2 class="section-title">Individual Performance Tracker</h2>
+            <div class="section-subtitle">Sorted by performance score. Shows yesterday and month-to-date performance.</div>
+
+            <div class="employee-grid">
+              <div class="emp-card">
+                <div class="emp-head"><div style="display:flex; gap:12px;"><div class="rank">1</div><div><div class="emp-name">Amit Sharma</div><div class="emp-dept">Tubing Department</div></div></div><div class="score-pill">Score 94</div></div>
+                <div class="emp-metrics">
+                  <div class="mini-metric"><div class="mini-label">Yesterday</div><div class="mini-value">124%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Month</div><div class="mini-value">112%</div></div>
+                  <div class="mini-metric"><div class="mini-label">OT Hrs</div><div class="mini-value">8.5</div></div>
+                  <div class="mini-metric"><div class="mini-label">Absent</div><div class="mini-value">0</div></div>
+                  <div class="mini-metric"><div class="mini-label">Normal Prod</div><div class="mini-value">109%</div></div>
+                  <div class="mini-metric"><div class="mini-label">OT Prod</div><div class="mini-value">132%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Efficiency</div><div class="mini-value">118%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Rework</div><div class="mini-value">1.2h</div></div>
+                  <div class="mini-metric"><div class="mini-label">Other</div><div class="mini-value">0.5h</div></div>
+                </div>
+              </div>
+
+              <div class="emp-card">
+                <div class="emp-head"><div style="display:flex; gap:12px;"><div class="rank">2</div><div><div class="emp-name">Rahul Patil</div><div class="emp-dept">Electrical Department</div></div></div><div class="score-pill">Score 91</div></div>
+                <div class="emp-metrics">
+                  <div class="mini-metric"><div class="mini-label">Yesterday</div><div class="mini-value">105%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Month</div><div class="mini-value">116%</div></div>
+                  <div class="mini-metric"><div class="mini-label">OT Hrs</div><div class="mini-value">12.0</div></div>
+                  <div class="mini-metric"><div class="mini-label">Absent</div><div class="mini-value">0</div></div>
+                  <div class="mini-metric"><div class="mini-label">Normal Prod</div><div class="mini-value">111%</div></div>
+                  <div class="mini-metric"><div class="mini-label">OT Prod</div><div class="mini-value">121%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Efficiency</div><div class="mini-value">110%</div></div>
+                  <div class="mini-metric"><div class="mini-label">Rework</div><div class="mini-value">0.8h</div></div>
+                  <div class="mini-metric"><div class="mini-label">Other</div><div class="mini-value">1.0h</div></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section-card">
+            <h2 class="section-title">Department Load & Efficiency</h2>
+            <div class="section-subtitle">Department-wise manpower load, productivity and bottleneck indication.</div>
+
+            <div class="dept-grid">
+              <div class="dept-card" style="--accent:#16a34a; --pct:82%;"><div class="dept-name">Tubing</div><div class="dept-meta">8 people • 82% productivity • High workload</div><div class="progress-track"><div class="progress-fill"></div></div></div>
+              <div class="dept-card" style="--accent:#2563eb; --pct:76%;"><div class="dept-name">Electrical</div><div class="dept-meta">5 people • 76% productivity • Stable</div><div class="progress-track"><div class="progress-fill"></div></div></div>
+              <div class="dept-card" style="--accent:#f59e0b; --pct:69%;"><div class="dept-name">Mechanical</div><div class="dept-meta">6 people • 69% productivity • Watch rework</div><div class="progress-track"><div class="progress-fill"></div></div></div>
+              <div class="dept-card" style="--accent:#ef4444; --pct:64%;"><div class="dept-name">Welding / Fitting</div><div class="dept-meta">3 people • 64% productivity • Support required</div><div class="progress-track"><div class="progress-fill"></div></div></div>
+              <div class="dept-card" style="--accent:#0891b2; --pct:88%;"><div class="dept-name">Testing / Quality</div><div class="dept-meta">2 people • 88% productivity • Good control</div><div class="progress-track"><div class="progress-fill"></div></div></div>
+            </div>
+          </section>
+        </div>
+
+        <section class="section-card">
+          <h2 class="section-title">Smart Operational Insights</h2>
+          <div class="section-subtitle">
+            These insights are sample placeholders. Later, they can be generated from real production and attendance data.
+          </div>
+
+          <div class="insight-grid">
+            <div class="insight-card"><div class="insight-icon">⚠️</div><div class="insight-title">Overtime Dependency</div><div class="insight-text">Tubing has high overtime contribution this month. Review load balancing and support manpower.</div></div>
+            <div class="insight-card"><div class="insight-icon">📉</div><div class="insight-title">Rework Watch</div><div class="insight-text">Mechanical rework hours are increasing. Root area analysis is recommended.</div></div>
+            <div class="insight-card"><div class="insight-icon">👥</div><div class="insight-title">Manpower Gap</div><div class="insight-text">Welding/Fitting shows capacity gap against current workload. Cross-support may be needed.</div></div>
+            <div class="insight-card"><div class="insight-icon">🏆</div><div class="insight-title">Recognition</div><div class="insight-text">Amit Sharma appears as yesterday top performer and also month top performer candidate.</div></div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="../shared/appHeader.js"></script>
+
+  <script>
+    window.SPWT.renderAppHeader({
+      title: "SP WorkTrack",
+      subtitle: "Production Management System"
+    });
+  </script>
+</body>
+</html>

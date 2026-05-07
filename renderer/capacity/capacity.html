@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>SP WorkTrack – Capacity Planning</title>
+
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="../shared/appShell.css" />
+
+  <style>
+    .coming-wrapper {
+      max-width: 1200px;
+      margin: 40px auto;
+    }
+
+    .coming-card {
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 40px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      text-align: center;
+    }
+
+    .coming-icon {
+      font-size: 72px;
+      margin-bottom: 18px;
+    }
+
+    .coming-title {
+      font-size: 34px;
+      font-weight: 900;
+      margin-bottom: 12px;
+      color: #111827;
+    }
+
+    .coming-subtitle {
+      font-size: 16px;
+      line-height: 1.8;
+      color: #4b5563;
+      max-width: 850px;
+      margin: 0 auto;
+    }
+
+    .coming-grid {
+      margin-top: 35px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .coming-feature {
+      background: #f8fafc;
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      text-align: left;
+    }
+
+    .coming-feature h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #111827;
+      font-size: 17px;
+    }
+
+    .coming-feature p {
+      margin: 0;
+      color: #4b5563;
+      line-height: 1.7;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sp-app-shell">
+    <div class="sp-page">
+
+      <div id="spAppHeader"></div>
+
+      <main class="sp-content">
+        <div class="coming-wrapper">
+          <div class="coming-card">
+
+            <div class="coming-icon">📈</div>
+
+            <div class="coming-title">
+              Capacity Planning
+            </div>
+
+            <p class="coming-subtitle">
+              This module is planned for future SP WorkTrack versions and will focus on
+              machine loading, manpower requirement, overtime planning, workload balancing,
+              and advance production decision support.
+            </p>
+
+            <div class="coming-grid">
+
+              <div class="coming-feature">
+                <h3>Machine Loading</h3>
+                <p>
+                  Planned vs available machine capacity visibility based on standard time,
+                  remaining work, and machine status.
+                </p>
+              </div>
+
+              <div class="coming-feature">
+                <h3>Manpower Planning</h3>
+                <p>
+                  Future visibility of manpower requirement by department, shift,
+                  workload, and production priority.
+                </p>
+              </div>
+
+              <div class="coming-feature">
+                <h3>Overtime Requirement</h3>
+                <p>
+                  Estimated overtime requirement based on remaining work,
+                  available capacity, and planned delivery targets.
+                </p>
+              </div>
+
+              <div class="coming-feature">
+                <h3>Planning Support</h3>
+                <p>
+                  Foundation for workload balancing, priority planning,
+                  bottleneck visibility, and future decision support.
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </main>
+
+    </div>
+  </div>
+
+  <script src="../shared/appHeader.js"></script>
+
+  <script>
+    window.SPWT.renderAppHeader({
+      title: "SP WorkTrack",
+      subtitle: "Production Management System"
+    });
+  </script>
+
+</body>
+</html>
