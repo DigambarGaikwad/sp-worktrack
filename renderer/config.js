@@ -1,7 +1,7 @@
 
 
 window.SPWT_CONFIG = {
-  SHEETS_WEBAPP_URL: "https://script.google.com/macros/s/AKfycbxF7Yy6m6OfYZGL0ktUfCX0yYdVgSMwAMeF4ZBu1w3PgMBcrBOjKI5Kn6echMji6nrd/exec",
+  SHEETS_WEBAPP_URL: "https://script.google.com/macros/s/AKfycbwzl2lDswuO5FPfUDmYxb3SzUXWkFur4a_pNc2dlwsoUoXUszfkwoLdt8-4uGDwUwCa/exec",
   SECRET: "DIGAMBAR" 
 };
 

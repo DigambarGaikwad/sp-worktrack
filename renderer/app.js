@@ -638,6 +638,21 @@ function getCheckedValues(card, selector) {
     .map(x => x.value)
     .filter(Boolean);
 }
+
+function getCheckedBookingPoints(card) {
+  return Array.from(card.querySelectorAll(".bpCheck"))
+    .filter(x => x.checked && !x.disabled)
+    .map(x => ({
+      name: x.value,
+      standardTime: Number(x.dataset.time || 0),
+      originalTime: Number(x.dataset.originalTime || 0),
+      consumedTime: Number(x.dataset.consumed || 0),
+      remainingTime: Number(x.dataset.remaining || 0),
+      status: x.dataset.status || "PENDING"
+    }))
+    .filter(x => x.name);
+}
+
 // ✅ Get completed booking points from backend
 async function getCompletedBookingPointsFromSheet(machine, machineCategory, department, subWork) {
   try {
@@ -1125,7 +1140,7 @@ async function renderBookingPoints(card, subObj) {
   box.style.display = "block";
   box.innerHTML = `
     <div style="font-weight:700; margin-bottom:8px;">Booking Points</div>
-    <div class="small-hint">Checking completed booking points...</div>
+    <div class="small-hint">Checking booking point remaining time...</div>
   `;
 
   const completed = await getCompletedBookingPointsFromSheet(
@@ -1272,7 +1287,7 @@ function buildPayload() {
     const rootArea = card.querySelector(".rootAreaSelect")?.value || "";
     const efficiencyReason = (card.querySelector(".efficiencyReasonInput")?.value || "").trim();
 
-    const workCheckpoints = getCheckedValues(card, ".bpCheck");
+    const workCheckpoints = getCheckedBookingPoints(card);
     const qualityValues = getQualityValues(card);
 
     const standard = parseInt(card.querySelector(".standardTime")?.value || "0", 10) || 0;
@@ -2410,7 +2425,67 @@ function adminAddType() {
 
   renderAdminWorkSub();
 }
+function getCleanAdminOverridesForSave() {
+  const clean = JSON.parse(JSON.stringify(adminOverrides || {}));
 
+  clean.admin = clean.admin || { pin: "1234" };
+
+  clean.machines = Array.isArray(clean.machines) ? clean.machines : [];
+  clean.employees = Array.isArray(clean.employees) ? clean.employees : [];
+  clean.shifts = Array.isArray(clean.shifts) ? clean.shifts : [];
+  clean.lossReasons = Array.isArray(clean.lossReasons) ? clean.lossReasons : [];
+  clean.rootAreas = Array.isArray(clean.rootAreas) ? clean.rootAreas : [];
+  clean.machineTypes = Array.isArray(clean.machineTypes) ? clean.machineTypes : [];
+  clean.mainWorks = Array.isArray(clean.mainWorks) ? clean.mainWorks : [];
+  clean.subWorks = clean.subWorks && typeof clean.subWorks === "object" ? clean.subWorks : {};
+  clean.workCatalogByType = clean.workCatalogByType && typeof clean.workCatalogByType === "object"
+    ? clean.workCatalogByType
+    : {};
+
+  if (Object.prototype.hasOwnProperty.call(clean.subWorks, "")) {
+    delete clean.subWorks[""];
+  }
+
+  Object.keys(clean.workCatalogByType || {}).forEach((tid) => {
+    const cat = clean.workCatalogByType[tid] || {};
+    cat.mainWorks = Array.isArray(cat.mainWorks) ? cat.mainWorks : [];
+    cat.subWorks = cat.subWorks && typeof cat.subWorks === "object" ? cat.subWorks : {};
+
+    if (Object.prototype.hasOwnProperty.call(cat.subWorks, "")) {
+      delete cat.subWorks[""];
+    }
+
+    Object.keys(cat.subWorks || {}).forEach((dept) => {
+      cat.subWorks[dept] = Array.isArray(cat.subWorks[dept]) ? cat.subWorks[dept] : [];
+
+      cat.subWorks[dept] = cat.subWorks[dept].map((sw) => {
+        const item = {
+          name: String(sw?.name || "").trim(),
+          standardTime: Number(sw?.standardTime || 0),
+          checkpoints: Array.isArray(sw?.checkpoints) ? sw.checkpoints : [],
+          qualityCheckpoints: Array.isArray(sw?.qualityCheckpoints) ? sw.qualityCheckpoints : []
+        };
+
+        item.checkpoints = item.checkpoints.map((bp) => ({
+          name: String(bp?.name || "").trim(),
+          standardTime: Number(bp?.standardTime || 0)
+        })).filter((bp) => bp.name);
+
+        item.qualityCheckpoints = item.qualityCheckpoints.map((qp) => ({
+          name: String(qp?.name || "").trim(),
+          inputType: qp?.inputType === "reading" ? "reading" : "status",
+          mandatory: qp?.mandatory === true
+        })).filter((qp) => qp.name);
+
+        return item;
+      }).filter((sw) => sw.name);
+    });
+
+    clean.workCatalogByType[tid] = cat;
+  });
+
+  return clean;
+}
 // ----- SAVE ADMIN CHANGES (LOCKED) -----
 async function adminSaveChanges() {
   if (!mustAdmin()) return;
@@ -2430,7 +2505,8 @@ async function adminSaveChanges() {
       if (cat?.subWorks && Object.prototype.hasOwnProperty.call(cat.subWorks, "")) delete cat.subWorks[""];
     });
 
-    const res = await window.api.saveAdminOverrides(adminOverrides);
+    const cleanAdminOverrides = getCleanAdminOverridesForSave();
+const res = await window.api.saveAdminOverrides(cleanAdminOverrides);
     if (!res?.ok) {
       alert("❌ Save failed: " + (res?.error || "Unknown"));
       return;
@@ -2441,10 +2517,10 @@ const secret = window.SPWT_CONFIG?.SECRET;
 
 if (webAppUrl && secret && window.api.syncAdminOverridesToSheets) {
   const syncRes = await window.api.syncAdminOverridesToSheets({
-    webAppUrl,
-    secret,
-    adminOverrides
-  });
+  webAppUrl,
+  secret,
+  adminOverrides: cleanAdminOverrides
+});
 
   if (!syncRes?.ok) {
     alert("⚠ Local saved, but Google sync failed: " + (syncRes?.error || "Unknown"));

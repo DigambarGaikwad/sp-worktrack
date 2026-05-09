@@ -567,50 +567,18 @@ function validateEfficiencyReason_(works) {
 }
 
 function validateBookingPointDuplicates_(ss, body, works) {
-  if (!Array.isArray(works) || !works.length) return { ok: true };
+  /*
+    Booking lock validation is intentionally relaxed now.
 
-  const existing = getBookingDoneKeySet_(ss);
-  const inThisSubmit = {};
+    Reason:
+    Booking points are no longer locked after first selection.
+    They should remain available until consumed time reaches booking standard time.
 
-  for (let i = 0; i < works.length; i++) {
-    const w = works[i] || {};
-    if (key_(w.type || "Normal") !== "normal") continue;
-
-    const points = normalizeBookingPointList_(w.workCheckpoints || w.checkpoints || []);
-    if (!points.length) continue;
-
-    const machine = clean_(w.machine);
-    const category = clean_(w.machineCategory);
-    const dept = clean_(w.department);
-    const sub = clean_(w.subWork);
-
-    for (let p = 0; p < points.length; p++) {
-      const point = clean_(points[p].name || points[p]);
-      if (!point) continue;
-
-      const k = bookingKey_(machine, category, dept, sub, point);
-
-      if (existing[k]) {
-        return {
-          ok: false,
-          error: "Booking blocked: '" + point + "' is already completed for " + machine + " → " + dept + " → " + sub + "."
-        };
-      }
-
-      if (inThisSubmit[k]) {
-        return {
-          ok: false,
-          error: "Duplicate booking in same submit: '" + point + "' repeated for " + machine + " → " + dept + " → " + sub + "."
-        };
-      }
-
-      inThisSubmit[k] = true;
-    }
-  }
-
+    Final lock is handled through BOOKING_STATUS:
+    PENDING / PARTIAL / DONE.
+  */
   return { ok: true };
 }
-
 function validateQualityValues_(works) {
   if (!Array.isArray(works) || !works.length) return { ok: true };
 
@@ -631,7 +599,6 @@ function validateQualityValues_(works) {
 }
 
 // ==================== BOOKING LOCK ====================
-
 function appendBookingLog_(ss, body, works) {
   const sh = ensureSheetHeader_(ss, "BOOKING_LOG", bookingLogHeaders_());
   ensureBookingLogHeaderUpgraded_(sh);
@@ -645,20 +612,23 @@ function appendBookingLog_(ss, body, works) {
     if (!points.length) return;
 
     const actualTime = Number(w.actualTime || 0) || 0;
-
-    /*
-      If multiple booking points are selected in one work card,
-      distribute actual time equally for now.
-
-      Best shopfloor practice:
-      select one booking point per work card when time split is important.
-    */
     const actualPerPoint = points.length > 0 ? actualTime / points.length : 0;
 
     points.forEach(function(cp) {
-      const point = clean_(cp.name || cp);
+      const point = clean_(cp.name || cp.point || cp.value || cp);
       if (!point) return;
 
+      let stdTime = Number(cp.standardTime || cp.remainingTime || cp.time || 0) || 0;
+
+if (stdTime <= 0) {
+  stdTime = getBookingPointStdFromAdmin_(
+    ss,
+    clean_(w.machineCategory),
+    clean_(w.department),
+    clean_(w.subWork),
+    point
+  );
+}
       rows.push([
         new Date(),
         normalizeWorkDate_(body.workDate),
@@ -667,7 +637,7 @@ function appendBookingLog_(ss, body, works) {
         clean_(w.department),
         clean_(w.subWork),
         point,
-        Number(cp.standardTime || 0) || 0,
+        stdTime,
         actualPerPoint,
         clean_(body.teamMemberId),
         clean_(body.teamMemberName),
@@ -684,27 +654,70 @@ function appendBookingLog_(ss, body, works) {
 
   rebuildBookingStatus_(ss);
 }
+function getBookingPointStdFromAdmin_(ss, machineCategory, department, subWork, pointName) {
+  const admin = getAdminOverrides_(ss);
+  const typeList = Array.isArray(admin.machineTypes) ? admin.machineTypes : [];
+  const catalogs = admin.workCatalogByType || {};
+
+  let typeId = "";
+
+  typeList.forEach(function(t) {
+    if (key_(t.name) === key_(machineCategory) || key_(t.id) === key_(machineCategory)) {
+      typeId = String(t.id || "");
+    }
+  });
+
+  const cat = catalogs[typeId];
+  if (!cat || !cat.subWorks) return 0;
+
+  const deptKey = Object.keys(cat.subWorks).find(function(d) {
+    return key_(d) === key_(department);
+  });
+
+  if (!deptKey) return 0;
+
+  const items = Array.isArray(cat.subWorks[deptKey]) ? cat.subWorks[deptKey] : [];
+
+  for (let i = 0; i < items.length; i++) {
+    const sw = items[i] || {};
+    if (key_(sw.name) !== key_(subWork)) continue;
+
+    const cps = Array.isArray(sw.checkpoints) ? sw.checkpoints : [];
+
+    for (let j = 0; j < cps.length; j++) {
+      const cp = cps[j] || {};
+      if (key_(cp.name) === key_(pointName)) {
+        return Number(cp.standardTime || 0) || 0;
+      }
+    }
+  }
+
+  return 0;
+}
+
 
 function ensureBookingLogHeaderUpgraded_(sh) {
   if (!sh) return;
 
   const required = bookingLogHeaders_();
 
-  const lastRow = sh.getLastRow();
-  const oldValues = lastRow > 1
-    ? sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues()
-    : [];
+  if (sh.getLastRow() === 0 || !String(sh.getRange(1, 1).getValue() || "").trim()) {
+    sh.getRange(1, 1, 1, required.length).setValues([required]);
+    sh.setFrozenRows(1);
+    return;
+  }
 
-  sh.clearContents();
-  sh.getRange(1, 1, 1, required.length).setValues([required]);
-  sh.setFrozenRows(1);
+  let current = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function(h) {
+      return String(h || "").trim();
+    });
 
-  if (!oldValues.length) return;
-
-  const oldHeaders = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-
-  // Do not rewrite old rows blindly because old header order was different.
-  // Old rows can stay in backup manually if required.
+  required.forEach(function(h) {
+    if (current.indexOf(h) < 0) {
+      sh.getRange(1, sh.getLastColumn() + 1).setValue(h);
+      current.push(h);
+    }
+  });
 }
 function rebuildBookingStatus_(ss) {
   const sh = ensureSheetHeader_(ss, "BOOKING_STATUS", bookingStatusHeaders_());
@@ -2153,7 +2166,7 @@ function spwtDateString_(value) {
 }
 
 function spwtTimestamp_() {
-  return Utilities.formatDate(spwtTimestamp_(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
 }
 
 // Keep old function names so existing logic does not break.
@@ -2946,30 +2959,6 @@ function filterMatch_(value, filterValue) {
   const f = clean_(filterValue);
   if (!f || key_(f) === "all") return true;
   return key_(value) === key_(f);
-}
-
-function parseWorkDateObj_(value) {
-  if (value instanceof Date && !isNaN(value.getTime())) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-  }
-
-  const s = String(value || "").trim();
-  if (!s) return null;
-
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
-
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) {
-    const dd = Number(m[1]);
-    const mm = Number(m[2]) - 1;
-    const yy = Number(m[3]);
-    return new Date(yy, mm, dd);
-  }
-
-  return null;
 }
 
 function isDateBetween_(d, start, end) {
