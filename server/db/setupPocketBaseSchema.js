@@ -1,6 +1,7 @@
 // server/db/setupPocketBaseSchema.js
 // SP WorkTrack DB Edition - PocketBase schema setup
-// Purpose: create required collections automatically so we do not depend on manual setup.
+// Creates required master-data collections automatically.
+// NOTE: Indexes are intentionally not created here yet to avoid PocketBase SQL index format issues.
 
 require("dotenv").config();
 
@@ -8,15 +9,38 @@ const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 const collectionsToCreate = [
   {
+    name: "employees",
+    type: "base",
+    fields: [
+      { name: "emp_code", type: "text", required: true },
+      { name: "full_name", type: "text", required: true },
+      { name: "department", type: "text", required: false },
+      { name: "designation", type: "text", required: false },
+      { name: "active", type: "bool", required: false }
+    ]
+  },
+
+  {
+    name: "shifts",
+    type: "base",
+    fields: [
+      { name: "shift_code", type: "text", required: true },
+      { name: "shift_name", type: "text", required: true },
+      { name: "start_time", type: "text", required: false },
+      { name: "end_time", type: "text", required: false },
+      { name: "break_minutes", type: "number", required: false },
+      { name: "flexible", type: "bool", required: false },
+      { name: "active", type: "bool", required: false }
+    ]
+  },
+
+  {
     name: "machine_types",
     type: "base",
     fields: [
       { name: "type_code", type: "text", required: true },
       { name: "type_name", type: "text", required: true },
-      { name: "active", type: "bool", required: true }
-    ],
-    indexes: [
-      "CREATE UNIQUE INDEX idx_machine_types_type_code ON machine_types (type_code)"
+      { name: "active", type: "bool", required: false }
     ]
   },
 
@@ -27,11 +51,7 @@ const collectionsToCreate = [
       { name: "machine_no", type: "text", required: true },
       { name: "machine_type_code", type: "text", required: true },
       { name: "status", type: "text", required: true },
-      { name: "active", type: "bool", required: true }
-    ],
-    indexes: [
-      "CREATE UNIQUE INDEX idx_machines_machine_no ON machines (machine_no)",
-      "CREATE INDEX idx_machines_type_status ON machines (machine_type_code, status)"
+      { name: "active", type: "bool", required: false }
     ]
   },
 
@@ -41,10 +61,7 @@ const collectionsToCreate = [
     fields: [
       { name: "department_code", type: "text", required: true },
       { name: "department_name", type: "text", required: true },
-      { name: "active", type: "bool", required: true }
-    ],
-    indexes: [
-      "CREATE UNIQUE INDEX idx_departments_department_code ON departments (department_code)"
+      { name: "active", type: "bool", required: false }
     ]
   },
 
@@ -56,12 +73,8 @@ const collectionsToCreate = [
       { name: "department_code", type: "text", required: true },
       { name: "subwork_code", type: "text", required: true },
       { name: "subwork_name", type: "text", required: true },
-      { name: "standard_time", type: "number", required: true },
-      { name: "active", type: "bool", required: true }
-    ],
-    indexes: [
-      "CREATE UNIQUE INDEX idx_subworks_unique ON subworks (machine_type_code, department_code, subwork_code)",
-      "CREATE INDEX idx_subworks_type_dept ON subworks (machine_type_code, department_code)"
+      { name: "standard_time", type: "number", required: false },
+      { name: "active", type: "bool", required: false }
     ]
   },
 
@@ -74,13 +87,45 @@ const collectionsToCreate = [
       { name: "subwork_code", type: "text", required: true },
       { name: "point_code", type: "text", required: true },
       { name: "point_name", type: "text", required: true },
-      { name: "standard_time", type: "number", required: true },
-      { name: "sequence_no", type: "number", required: true },
-      { name: "active", type: "bool", required: true }
-    ],
-    indexes: [
-      "CREATE UNIQUE INDEX idx_booking_points_unique ON booking_points (machine_type_code, department_code, subwork_code, point_code)",
-      "CREATE INDEX idx_booking_points_subwork ON booking_points (machine_type_code, department_code, subwork_code)"
+      { name: "standard_time", type: "number", required: false },
+      { name: "sequence_no", type: "number", required: false },
+      { name: "active", type: "bool", required: false }
+    ]
+  },
+
+  {
+    name: "quality_points",
+    type: "base",
+    fields: [
+      { name: "machine_type_code", type: "text", required: true },
+      { name: "department_code", type: "text", required: true },
+      { name: "subwork_code", type: "text", required: true },
+      { name: "point_code", type: "text", required: true },
+      { name: "point_name", type: "text", required: true },
+      { name: "input_type", type: "text", required: true },
+      { name: "mandatory", type: "bool", required: false },
+      { name: "sequence_no", type: "number", required: false },
+      { name: "active", type: "bool", required: false }
+    ]
+  },
+
+  {
+    name: "loss_reasons",
+    type: "base",
+    fields: [
+      { name: "reason_code", type: "text", required: true },
+      { name: "reason_name", type: "text", required: true },
+      { name: "active", type: "bool", required: false }
+    ]
+  },
+
+  {
+    name: "root_areas",
+    type: "base",
+    fields: [
+      { name: "area_code", type: "text", required: true },
+      { name: "area_name", type: "text", required: true },
+      { name: "active", type: "bool", required: false }
     ]
   }
 ];

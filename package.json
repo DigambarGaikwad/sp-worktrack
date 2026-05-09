@@ -5,10 +5,13 @@
   "main": "main.js",
   "author": "SP WorkTrack",
   "license": "ISC",
+
+
   "scripts": {
   "start": "electron .",
   "server": "node server/app.js",
   "db:setup": "node server/db/setupPocketBaseSchema.js",
+  "db:seed": "node server/db/seedFromAdminOverrides.js",
   "dist": "electron-builder"
 },
   "devDependencies": {
