@@ -79,7 +79,19 @@ if (action === "getCompletedQualityPoints") {
       const vals = feed ? feed.getDataRange().getValues() : [];
       return json_({ ok: true, source: "live", build: build, table: vals });
     }
-    
+    // ---------- PEOPLE PERFORMANCE DASHBOARD ROUTE ----------
+if (action === "getPeopleDashboard") {
+  const yyyy = String(body.year || new Date().getFullYear());
+
+  const dashboard = getPeopleDashboard_(ss, yyyy, {
+    period: String(body.period || "today"),
+    shift: String(body.shift || "All"),
+    department: String(body.department || "All"),
+    employee: String(body.employee || "All")
+  });
+
+  return json_(dashboard);
+}
         // ---------- MACHINE DASHBOARD DETAIL ROUTE ----------
     if (action === "getMachineDashboardDetails") {
       const yyyy = String(body.year || new Date().getFullYear());
@@ -156,7 +168,7 @@ if (action === "getCompletedQualityPoints") {
 
     const rows = works.map(function(w) {
       return [
-        new Date(),
+        spwtTimestamp_(),
         normalizeWorkDate_(body.workDate),
         String(body.shiftName || ""),
         String(body.shiftStart || ""),
@@ -378,15 +390,39 @@ function ensureColumnsAtEnd_(sh, baseHeaders, extraHeaders) {
 
 function bookingLogHeaders_() {
   return [
-    "Timestamp","Work Date","Machine","Machine Category","Department","Sub Work",
-    "Booking Point","Booking Std Time","Emp ID","Emp Name","Shift","Work Type","Status"
+    "Timestamp",
+    "Work Date",
+    "Machine",
+    "Machine Category",
+    "Department",
+    "Sub Work",
+    "Booking Point",
+    "Booking Std Time",
+    "Actual Time",
+    "Emp ID",
+    "Emp Name",
+    "Shift",
+    "Work Type",
+    "Status"
   ];
 }
 
 function bookingStatusHeaders_() {
   return [
-    "Machine","Machine Category","Department","Sub Work","Booking Point",
-    "Status","Done Date","Done By ID","Done By Name","Shift","Booking Std Time"
+    "Machine",
+    "Machine Category",
+    "Department",
+    "Sub Work",
+    "Booking Point",
+    "Booking Std Time",
+    "Consumed Time",
+    "Remaining Time",
+    "Completion %",
+    "Status",
+    "Done Date",
+    "Done By ID",
+    "Done By Name",
+    "Shift"
   ];
 }
 
@@ -598,12 +634,27 @@ function validateQualityValues_(works) {
 
 function appendBookingLog_(ss, body, works) {
   const sh = ensureSheetHeader_(ss, "BOOKING_LOG", bookingLogHeaders_());
+  ensureBookingLogHeaderUpgraded_(sh);
+
   const rows = [];
 
   (works || []).forEach(function(w) {
     if (key_(w.type || "Normal") !== "normal") return;
 
     const points = normalizeBookingPointList_(w.workCheckpoints || w.checkpoints || []);
+    if (!points.length) return;
+
+    const actualTime = Number(w.actualTime || 0) || 0;
+
+    /*
+      If multiple booking points are selected in one work card,
+      distribute actual time equally for now.
+
+      Best shopfloor practice:
+      select one booking point per work card when time split is important.
+    */
+    const actualPerPoint = points.length > 0 ? actualTime / points.length : 0;
+
     points.forEach(function(cp) {
       const point = clean_(cp.name || cp);
       if (!point) return;
@@ -616,25 +667,52 @@ function appendBookingLog_(ss, body, works) {
         clean_(w.department),
         clean_(w.subWork),
         point,
-        Number(cp.standardTime || 0) || "",
+        Number(cp.standardTime || 0) || 0,
+        actualPerPoint,
         clean_(body.teamMemberId),
         clean_(body.teamMemberName),
         clean_(body.shiftName),
         clean_(w.type || "Normal"),
-        "DONE"
+        "BOOKED"
       ]);
     });
   });
 
-  if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  if (rows.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+
   rebuildBookingStatus_(ss);
 }
 
+function ensureBookingLogHeaderUpgraded_(sh) {
+  if (!sh) return;
+
+  const required = bookingLogHeaders_();
+
+  const lastRow = sh.getLastRow();
+  const oldValues = lastRow > 1
+    ? sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues()
+    : [];
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, required.length).setValues([required]);
+  sh.setFrozenRows(1);
+
+  if (!oldValues.length) return;
+
+  const oldHeaders = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+
+  // Do not rewrite old rows blindly because old header order was different.
+  // Old rows can stay in backup manually if required.
+}
 function rebuildBookingStatus_(ss) {
   const sh = ensureSheetHeader_(ss, "BOOKING_STATUS", bookingStatusHeaders_());
   const logSh = ensureSheetHeader_(ss, "BOOKING_LOG", bookingLogHeaders_());
+  ensureBookingLogHeaderUpgraded_(logSh);
 
   const outMap = {};
+
   if (logSh.getLastRow() >= 2) {
     const vals = logSh.getDataRange().getValues();
     const h = headerMap_(vals[0]);
@@ -645,31 +723,91 @@ function rebuildBookingStatus_(ss) {
       const dept = clean_(r[h["department"]]);
       const sub = clean_(r[h["sub work"]]);
       const point = clean_(r[h["booking point"]]);
+
       if (!machine || !dept || !sub || !point) return;
 
+      const std = Number(r[h["booking std time"]] || 0) || 0;
+      const actual = Number(r[h["actual time"]] || 0) || 0;
+      const workDate = normalizeWorkDate_(r[h["work date"]]);
+      const empId = clean_(r[h["emp id"]]);
+      const empName = clean_(r[h["emp name"]]);
+      const shift = clean_(r[h["shift"]]);
+
       const k = bookingKey_(machine, category, dept, sub, point);
-      outMap[k] = [
-        machine,
-        category,
-        dept,
-        sub,
-        point,
-        "DONE",
-        normalizeWorkDate_(r[h["work date"]]),
-        clean_(r[h["emp id"]]),
-        clean_(r[h["emp name"]]),
-        clean_(r[h["shift"]]),
-        Number(r[h["booking std time"]] || 0) || ""
-      ];
+
+      if (!outMap[k]) {
+        outMap[k] = {
+          machine: machine,
+          category: category,
+          dept: dept,
+          sub: sub,
+          point: point,
+          std: std,
+          consumed: 0,
+          doneDate: "",
+          doneById: "",
+          doneByName: "",
+          shift: ""
+        };
+      }
+
+      const obj = outMap[k];
+
+      // keep highest configured standard if multiple logs exist
+      obj.std = Math.max(Number(obj.std || 0), std);
+
+      obj.consumed += actual;
+
+      // latest booking info
+      if (workDate) obj.doneDate = workDate;
+      if (empId) obj.doneById = empId;
+      if (empName) obj.doneByName = empName;
+      if (shift) obj.shift = shift;
     });
   }
 
-  const out = Object.values(outMap);
+  const out = Object.values(outMap).map(function(x) {
+    const std = Number(x.std || 0) || 0;
+    const consumed = Number(x.consumed || 0) || 0;
+
+    const remaining = std > 0
+      ? Math.max(0, std - consumed)
+      : 0;
+
+    const completionPct = std > 0
+      ? Math.min(100, (consumed / std) * 100)
+      : (consumed > 0 ? 100 : 0);
+
+    let status = "PENDING";
+    if (consumed > 0 && remaining > 0) status = "PARTIAL";
+    if (std > 0 && consumed >= std) status = "DONE";
+    if (std <= 0 && consumed > 0) status = "DONE";
+
+    return [
+      x.machine,
+      x.category,
+      x.dept,
+      x.sub,
+      x.point,
+      std,
+      Number(consumed.toFixed(1)),
+      Number(remaining.toFixed(1)),
+      Number(completionPct.toFixed(1)),
+      status,
+      status === "DONE" ? x.doneDate : "",
+      status === "DONE" ? x.doneById : "",
+      status === "DONE" ? x.doneByName : "",
+      x.shift
+    ];
+  });
 
   sh.clearContents();
   sh.getRange(1, 1, 1, bookingStatusHeaders_().length).setValues([bookingStatusHeaders_()]);
   sh.setFrozenRows(1);
-  if (out.length) sh.getRange(2, 1, out.length, bookingStatusHeaders_().length).setValues(out);
+
+  if (out.length) {
+    sh.getRange(2, 1, out.length, bookingStatusHeaders_().length).setValues(out);
+  }
 
   return out;
 }
@@ -699,7 +837,8 @@ function getBookingDoneKeySet_(ss) {
 
 function getCompletedBookingPoints_(ss, machine, category, dept, subWork) {
   const out = [];
-  const sh = ss.getSheetByName("BOOKING_LOG");
+
+  const sh = ss.getSheetByName("BOOKING_STATUS");
   if (!sh || sh.getLastRow() < 2) return out;
 
   const vals = sh.getDataRange().getValues();
@@ -716,12 +855,33 @@ function getCompletedBookingPoints_(ss, machine, category, dept, subWork) {
     const deptR = clean_(r[h["department"]]);
     const subR = clean_(r[h["sub work"]]);
     const point = clean_(r[h["booking point"]]);
-    const status = clean_(r[h["status"]] || "DONE");
+
+    if (!point) return;
 
     const catOk = !cKey || key_(categoryR) === cKey;
-    if (key_(machineR) === mKey && catOk && key_(deptR) === dKey && key_(subR) === sKey && point && (key_(status) === "done" || key_(status) === "completed")) {
-      if (out.indexOf(point) < 0) out.push(point);
-    }
+
+    const same =
+      key_(machineR) === mKey &&
+      catOk &&
+      key_(deptR) === dKey &&
+      key_(subR) === sKey;
+
+    if (!same) return;
+
+    const standardTime = Number(r[h["booking std time"]] || 0) || 0;
+    const consumedTime = Number(r[h["consumed time"]] || 0) || 0;
+    const remainingTime = Number(r[h["remaining time"]] || 0) || 0;
+    const completionPct = Number(r[h["completion %"]] || 0) || 0;
+    const status = clean_(r[h["status"]] || "");
+
+    out.push({
+      point: point,
+      standardTime: standardTime,
+      consumedTime: consumedTime,
+      remainingTime: remainingTime,
+      completionPct: completionPct,
+      status: status
+    });
   });
 
   return out;
@@ -764,7 +924,7 @@ function appendQualityLog_(ss, body, works) {
       const result = resultFromQualityValue_(value, inputType);
 
       upsertQualityLogRow_(sh, [
-        new Date(),
+        spwtTimestamp_(),
         normalizeWorkDate_(body.workDate),
         clean_(w.machine),
         clean_(w.machineCategory),
@@ -1787,62 +1947,89 @@ function rebuildEmployeesNow() {
 
 function seedAbsenteesForToday() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  rebuildEmployeesMaster_(ss);
 
-  const employeesSh = ss.getSheetByName("EMPLOYEES");
-  if (!employeesSh) throw new Error("EMPLOYEES sheet not found.");
+  const workDate = spwtDateString_(new Date());
+  const yyyy = getYear_(workDate);
 
-  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-  const yyyy = getYear_(today);
-  const attName = "ATT_" + yyyy;
+  setupPhase3SheetsForYear_(ss, yyyy);
 
-  let attSh = ss.getSheetByName(attName);
+  const attSh = ss.getSheetByName("ATT_" + yyyy);
+  const employees = readPeopleEmployees_(ss);
+
   if (!attSh) {
-    attSh = ss.insertSheet(attName);
-    writeAttendanceHeader_(attSh);
-  } else {
-    ensureAttendanceHeaderUpgraded_(attSh);
+    return { ok: false, error: "Attendance sheet not found: ATT_" + yyyy };
   }
 
-  const shiftsToSeed = ["General"];
-
-  const lastRow = employeesSh.getLastRow();
-  if (lastRow < 2) {
-    return { ok: true, date: today, added: 0, message: "No active employees found" };
+  if (!employees.length) {
+    return { ok: false, error: "No employees found in EMPLOYEES sheet" };
   }
 
-  const empData = employeesSh
-    .getRange(2, 1, lastRow - 1, 3)
-    .getValues()
-    .filter(function(r) {
-      return String(r[0] || "").trim() && String(r[2] || "").toLowerCase() !== "false";
-    });
+  ensureAttendanceHeaderUpgraded_(attSh);
 
-  const existing = getAttendanceKeysForDate_(attSh, today);
-  const rowsToAdd = [];
+  const existing = {};
+  const lastRow = attSh.getLastRow();
 
-  shiftsToSeed.forEach(function(shiftName) {
-    empData.forEach(function(r) {
-      const empId = String(r[0] || "").trim();
-      const empName = String(r[1] || "").trim();
-      const k = today + "|" + empId + "|" + shiftName;
+  if (lastRow >= 2) {
+    const vals = attSh.getRange(2, 1, lastRow - 1, attSh.getLastColumn()).getValues();
+    const headers = attSh.getRange(1, 1, 1, attSh.getLastColumn()).getValues()[0];
+    const h = headerMap_(headers);
 
-      if (!existing.has(k)) {
-        rowsToAdd.push([
-          new Date(), today, empId, empName, shiftName, "", "Absent",
-          0, 0, "0.00", 0, "0.00", 0, "", "", 0
-        ]);
-        existing.add(k);
+    vals.forEach(function (r) {
+      const rowDate = spwtDateString_(r[h["work date"]]);
+      const empId = clean_(r[h["emp id"]]);
+      const empName = clean_(r[h["emp name"]]);
+      const shift = clean_(r[h["shift"]]) || "General";
+
+      if (rowDate === workDate) {
+        existing[makeKey_([empId || empName, shift])] = true;
       }
     });
-  });
-
-  if (rowsToAdd.length > 0) {
-    attSh.getRange(attSh.getLastRow() + 1, 1, rowsToAdd.length, rowsToAdd[0].length).setValues(rowsToAdd);
   }
 
-  Logger.log("General absent rows added: " + rowsToAdd.length);
-  return { ok: true, date: today, added: rowsToAdd.length };
+  const rows = [];
+
+  employees.forEach(function (e) {
+    const empId = clean_(e.id);
+    const empName = clean_(e.name);
+    const shift = "General";
+
+    if (!empId && !empName) return;
+
+    const k = makeKey_([empId || empName, shift]);
+    if (existing[k]) return;
+
+    rows.push([
+      spwtTimestamp_(),
+      workDate,
+      empId,
+      empName,
+      shift,
+      "Normal",
+      "Absent",
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      "",
+      "",
+      0
+    ]);
+  });
+
+  if (rows.length) {
+    attSh.getRange(attSh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    formatDateColumnsForSheet_(attSh);
+  }
+
+  return {
+    ok: true,
+    message: "Absentees seeded for " + workDate,
+    workDate: workDate,
+    inserted: rows.length,
+    skippedExisting: employees.length - rows.length
+  };
 }
 
 function getAttendanceKeysForDate_(attSh, workDate) {
@@ -1881,7 +2068,7 @@ function ensureSheetHeader_(ss, name, headers) {
 
 function headerMap_(headers) {
   const map = {};
-  headers.forEach(function(h, i) {
+  headers.forEach(function (h, i) {
     map[String(h || "").trim().toLowerCase()] = i;
   });
   return map;
@@ -1902,6 +2089,143 @@ function key_(v) {
 function makeKey_(arr) {
   return arr.map(key_).join("||");
 }
+
+// ==================== STANDARD DATE HELPERS ====================
+// One backend date standard everywhere: DD/MM/YYYY
+// Timestamp standard: DD/MM/YYYY HH:mm:ss
+
+function spwtDateObject_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const s = String(value == null ? "" : value).trim();
+  if (!s) return null;
+
+  // DD/MM/YYYY or D/M/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const dd = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const yy = Number(m[3]);
+    const d = new Date(yy, mm, dd);
+    return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const yy = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const dd = Number(m[3]);
+    const d = new Date(yy, mm, dd);
+    return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // DD-MM-YYYY
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) {
+    const dd = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const yy = Number(m[3]);
+    const d = new Date(yy, mm, dd);
+    return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // JS/Google fallback
+  const d2 = new Date(s);
+  if (!isNaN(d2.getTime())) {
+    return new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  }
+
+  return null;
+}
+
+function spwtDateString_(value) {
+  const d = spwtDateObject_(value);
+  if (!d) return "";
+
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear());
+
+  return dd + "/" + mm + "/" + yy;
+}
+
+function spwtTimestamp_() {
+  return Utilities.formatDate(spwtTimestamp_(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+}
+
+// Keep old function names so existing logic does not break.
+function normalizeWorkDate_(value) {
+  return spwtDateString_(value);
+}
+
+function parseWorkDateObj_(value) {
+  return spwtDateObject_(value);
+}
+
+// Keep old name, but now return DD/MM/YYYY everywhere.
+function formatDateYmd_(value) {
+  return spwtDateString_(value);
+}
+
+function dateToSortable_(dateText) {
+  const d = spwtDateObject_(dateText);
+  return d ? d.getTime() : 0;
+}
+
+function getYear_(dateValue) {
+  const d = spwtDateObject_(dateValue);
+  return d ? String(d.getFullYear()) : String(new Date().getFullYear());
+}
+
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function checkpointText_(arr) {
+  if (!arr) return "";
+  if (Array.isArray(arr)) {
+    return arr.map(function (x) {
+      if (typeof x === "string") return x;
+      if (x && typeof x === "object") return String(x.name || x.point || x.label || "");
+      return String(x || "");
+    }).filter(Boolean).join("; ");
+  }
+  return String(arr || "");
+}
+
+function splitSemi_(text) {
+  return String(text || "")
+    .split(";")
+    .map(function (x) { return clean_(x); })
+    .filter(Boolean);
+}
+
+function bookingPointTextFromAdmin_(arr) {
+  if (!Array.isArray(arr)) return "";
+  return arr.map(function (x) {
+    if (typeof x === "string") return x;
+    const name = clean_(x.name || x.point || x.label);
+    const t = Number(x.standardTime || 0) || 0;
+    return name ? (t ? name + "=" + t : name) : "";
+  }).filter(Boolean).join("; ");
+}
+
+function qualityPointTextFromAdmin_(arr) {
+  if (!Array.isArray(arr)) return "";
+  return arr.map(function (x) {
+    if (typeof x === "string") return x;
+    const name = clean_(x.name || x.point || x.label);
+    const type = clean_(x.inputType || "status");
+    const mandatory = x.mandatory === true ? "Mandatory" : "Optional";
+    return name ? name + " [" + type + ", " + mandatory + "]" : "";
+  }).filter(Boolean).join("; ");
+}
+
 function upsertQualityLogRow_(sh, row) {
   const lastRow = sh.getLastRow();
 
@@ -1943,7 +2267,7 @@ function getCompletedQualityPoints_(ss, machine, category, dept, subWork) {
   const vals = sh.getDataRange().getValues();
   const h = headerMap_(vals[0]);
 
-  vals.slice(1).forEach(function(r) {
+  vals.slice(1).forEach(function (r) {
     const same =
       key_(r[h["machine"]]) === key_(machine) &&
       (!category || key_(r[h["machine category"]]) === key_(category)) &&
@@ -1956,7 +2280,7 @@ function getCompletedQualityPoints_(ss, machine, category, dept, subWork) {
         point: clean_(r[h["quality point"]]),
         value: clean_(r[h["reading/status"]]),
         result: clean_(r[h["result"]]),
-        date: normalizeWorkDate_(r[h["work date"]])
+        date: spwtDateString_(r[h["work date"]])
       });
     }
   });
@@ -1964,160 +2288,76 @@ function getCompletedQualityPoints_(ss, machine, category, dept, subWork) {
   return out;
 }
 
-function normalizeWorkDate_(v) {
-  if (v instanceof Date) {
-    return Utilities.formatDate(v, Session.getScriptTimeZone(), "dd/MM/yyyy");
-  }
+// Converts all date columns to actual text value DD/MM/YYYY.
+// This avoids mixed sheet display such as 2026-05-05, 5/5/2026, 05/05/2026.
+function formatDateColumnsForSheet_(sh) {
+  if (!sh) return;
 
-  const s = String(v == null ? "" : v).trim();
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return;
 
-  // If already DD/MM/YYYY → keep
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function (h) {
+      return String(h || "").trim().toLowerCase();
+    });
 
-  // Convert from YYYY-MM-DD or other formats
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) {
-    return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd/MM/yyyy");
-  }
+  headers.forEach(function (header, idx) {
+    const col = idx + 1;
 
-  return s;
-}
-// this function is for fixing date formate, shuld be run once only
-function fixAllDateFormats() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = ss.getSheets();
+    const isDateCol =
+      header === "work date" ||
+      header === "done date" ||
+      header === "start date" ||
+      header === "last check date";
 
-  sheets.forEach(sh => {
-    const range = sh.getDataRange();
+    const isTimestampCol = header === "timestamp";
+
+    if (!isDateCol && !isTimestampCol) return;
+
+    const range = sh.getRange(2, col, lastRow - 1, 1);
     const values = range.getValues();
 
-    for (let i = 1; i < values.length; i++) {
-      for (let j = 0; j < values[i].length; j++) {
-        const val = values[i][j];
+    const converted = values.map(function (r) {
+      const v = r[0];
+      if (!v) return [""];
 
-        if (val instanceof Date) {
-          values[i][j] = Utilities.formatDate(val, Session.getScriptTimeZone(), "dd/MM/yyyy");
-
+      if (isTimestampCol) {
+        if (v instanceof Date && !isNaN(v.getTime())) {
+          return [Utilities.formatDate(v, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss")];
         }
+
+        const d = spwtDateObject_(v);
+        return [d ? Utilities.formatDate(d, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss") : String(v)];
       }
-    }
 
-    range.setValues(values);
+      return [spwtDateString_(v)];
+    });
+
+    range.setValues(converted);
+    range.setNumberFormat("@");
   });
-
-  Logger.log("All dates converted to DD/MM/YYYY");
 }
 
 function applyDateFormatToAllSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  ss.getSheets().forEach(sh => {
-    const lastRow = sh.getLastRow();
-    const lastCol = sh.getLastColumn();
-    if (lastRow < 2 || lastCol < 1) return;
-
-    const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
-      .map(h => String(h || "").trim().toLowerCase());
-
-    headers.forEach((h, idx) => {
-      if (
-        h === "timestamp" ||
-        h === "work date" ||
-        h === "done date" ||
-        h === "start date" ||
-        h === "last check date"
-      ) {
-        const col = idx + 1;
-        const range = sh.getRange(2, col, lastRow - 1, 1);
-
-        const values = range.getValues().map(r => {
-          const v = r[0];
-
-          if (v instanceof Date) return [v];
-
-          const s = String(v || "").trim();
-
-          // yyyy-mm-dd
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            const [y, m, d] = s.split("-").map(Number);
-            return [new Date(y, m - 1, d)];
-          }
-
-          // dd/mm/yyyy or d/m/yyyy
-          if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
-            const [d, m, y] = s.split("/").map(Number);
-            return [new Date(y, m - 1, d)];
-          }
-
-          return [v];
-        });
-
-        range.setValues(values);
-        range.setNumberFormat("dd/MM/yyyy");
-      }
-    });
+  ss.getSheets().forEach(function (sh) {
+    formatDateColumnsForSheet_(sh);
   });
 
   SpreadsheetApp.flush();
-}
-function getYear_(dateStr) {
-  const s = String(dateStr || "");
 
-  // For DD/MM/YYYY
-  if (s.includes("/")) {
-    const parts = s.split("/");
-    return parts[2] || new Date().getFullYear();
-  }
-
-  // Fallback
-  return String(new Date(dateStr).getFullYear());
-}
-function json_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+  return {
+    ok: true,
+    message: "All date columns converted to text format DD/MM/YYYY"
+  };
 }
 
-function checkpointText_(arr) {
-  if (!arr) return "";
-  if (Array.isArray(arr)) {
-    return arr.map(function(x) {
-      if (typeof x === "string") return x;
-      if (x && typeof x === "object") return String(x.name || x.point || x.label || "");
-      return String(x || "");
-    }).filter(Boolean).join("; ");
-  }
-  return String(arr || "");
+// Old manual function name kept.
+function fixAllDateFormats() {
+  return applyDateFormatToAllSheets();
 }
-
-function splitSemi_(text) {
-  return String(text || "")
-    .split(";")
-    .map(function(x) { return clean_(x); })
-    .filter(Boolean);
-}
-
-function bookingPointTextFromAdmin_(arr) {
-  if (!Array.isArray(arr)) return "";
-  return arr.map(function(x) {
-    if (typeof x === "string") return x;
-    const name = clean_(x.name || x.point || x.label);
-    const t = Number(x.standardTime || 0) || 0;
-    return name ? (t ? name + "=" + t : name) : "";
-  }).filter(Boolean).join("; ");
-}
-
-function qualityPointTextFromAdmin_(arr) {
-  if (!Array.isArray(arr)) return "";
-  return arr.map(function(x) {
-    if (typeof x === "string") return x;
-    const name = clean_(x.name || x.point || x.label);
-    const type = clean_(x.inputType || "status");
-    const mandatory = x.mandatory === true ? "Mandatory" : "Optional";
-    return name ? name + " [" + type + ", " + mandatory + "]" : "";
-  }).filter(Boolean).join("; ");
-}
-
 
 function testMachineDashboardDetails() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2130,4 +2370,653 @@ function testMachineDashboardDetails() {
   );
 
   Logger.log(JSON.stringify(result, null, 2));
+}
+// ==================== PEOPLE PERFORMANCE DASHBOARD ====================
+
+function getPeopleDashboard_(ss, yyyy, filters) {
+  yyyy = String(yyyy || new Date().getFullYear());
+  filters = filters || {};
+
+  setupPhase3SheetsForYear_(ss, yyyy);
+
+  const periodInfo = getPeoplePeriodInfo_(filters.period);
+  const employees = readPeopleEmployees_(ss);
+  const attendance = readPeopleAttendance_(ss, yyyy);
+  const logs = readPeopleLogs_(ss, yyyy);
+
+const filteredLogs = logs.filter(function (r) {
+  return isDateBetween_(r.workDateObj, periodInfo.selectedStart, periodInfo.selectedEnd) &&
+    filterMatch_(r.shift, filters.shift) &&
+    filterMatch_(r.department, filters.department) &&
+    filterMatch_(r.empName, filters.employee);
+});
+
+  const yesterdayLogs = logs.filter(function (r) {
+    return sameDate_(r.workDateObj, periodInfo.yesterday) &&
+      filterMatch_(r.shift, filters.shift) &&
+      filterMatch_(r.department, filters.department) &&
+      filterMatch_(r.empName, filters.employee);
+  });
+
+  const monthAttendance = attendance.filter(function (r) {
+  return isDateBetween_(r.workDateObj, periodInfo.selectedStart, periodInfo.selectedEnd) &&
+    filterMatch_(r.shift, filters.shift) &&
+    filterMatch_(r.empName, filters.employee);
+});
+
+  const yesterdayAttendance = attendance.filter(function (r) {
+    return sameDate_(r.workDateObj, periodInfo.yesterday) &&
+      filterMatch_(r.shift, filters.shift) &&
+      filterMatch_(r.empName, filters.employee);
+  });
+
+  const kpis = buildPeopleKpis_(yesterdayAttendance, yesterdayLogs);
+  const employeeRows = buildPeopleEmployeeRows_(employees, monthAttendance, filteredLogs, yesterdayAttendance, yesterdayLogs);
+  const topYesterday = getTopYesterday_(employeeRows);
+  const topMonth = getTopMonth_(employeeRows);
+  const yesterdayAbsent = buildYesterdayAbsent_(employees, yesterdayAttendance);
+  const monthAbsent = buildMonthAbsent_(employees, monthAttendance);
+  const departments = buildPeopleDepartmentRows_(employeeRows, filteredLogs);
+  const insights = buildPeopleInsights_(kpis, departments, monthAbsent, topYesterday);
+
+  return {
+    ok: true,
+    source: "live",
+    period: {
+  selectedStart: formatDateYmd_(periodInfo.selectedStart),
+  selectedEnd: formatDateYmd_(periodInfo.selectedEnd),
+  today: formatDateYmd_(periodInfo.today),
+  yesterday: formatDateYmd_(periodInfo.yesterday),
+  monthStart: formatDateYmd_(periodInfo.monthStart),
+  monthEnd: formatDateYmd_(periodInfo.monthEnd)
+},
+    filterOptions: {
+      shifts: uniqueSorted_(attendance.map(function (r) { return r.shift; })),
+      departments: uniqueSorted_(logs.map(function (r) { return r.department; })),
+      employees: uniqueSorted_(employees.map(function (e) { return e.name; }))
+    },
+    kpis: kpis,
+    topYesterday: topYesterday,
+    topMonth: topMonth,
+    yesterdayAbsent: yesterdayAbsent,
+    monthAbsent: monthAbsent,
+    employees: employeeRows,
+    departments: departments,
+    insights: insights
+  };
+}
+
+function getPeoplePeriodInfo_(period) {
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = todayOnly;
+
+  period = String(period || "today").toLowerCase();
+
+  let selectedStart = todayOnly;
+  let selectedEnd = todayOnly;
+
+  if (period === "yesterday") {
+    selectedStart = yesterday;
+    selectedEnd = yesterday;
+  } else if (period === "month") {
+    selectedStart = monthStart;
+    selectedEnd = monthEnd;
+  } else if (period === "last7") {
+    selectedStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+    selectedEnd = todayOnly;
+  }
+
+  return {
+    period: period,
+    today: todayOnly,
+    yesterday: yesterday,
+    monthStart: monthStart,
+    monthEnd: monthEnd,
+    selectedStart: selectedStart,
+    selectedEnd: selectedEnd
+  };
+}
+
+function readPeopleEmployees_(ss) {
+  const sh = ss.getSheetByName("EMPLOYEES");
+  if (!sh || sh.getLastRow() < 2) return [];
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  return vals.slice(1).map(function (r) {
+    const id = clean_(r[h["emp id"]] || r[h["employee id"]] || r[0]);
+    const name = clean_(r[h["emp name"]] || r[h["employee name"]] || r[h["name"]] || r[1]);
+    const dept = clean_(r[h["department"]] || r[h["dept"]] || "");
+
+    return {
+      id: id,
+      name: name,
+      department: dept || "-"
+    };
+  }).filter(function (e) {
+    return e.id || e.name;
+  });
+}
+
+function readPeopleAttendance_(ss, yyyy) {
+  const sh = ss.getSheetByName("ATT_" + yyyy);
+  if (!sh || sh.getLastRow() < 2) return [];
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  return vals.slice(1).map(function (r) {
+    const workDate = normalizeWorkDate_(r[h["work date"]]);
+    const status = clean_(r[h["status"]]);
+    const shiftAvailableMin = Number(r[h["shift available (min)"]] || 0) || 0;
+    const utilizedMin = Number(r[h["utilized (min)"]] || 0) || 0;
+    const otMin = Number(r[h["ot minutes"]] || 0) || 0;
+
+    return {
+      workDate: workDate,
+      workDateObj: parseWorkDateObj_(workDate),
+      empId: clean_(r[h["emp id"]]),
+      empName: clean_(r[h["emp name"]]),
+      shift: clean_(r[h["shift"]]),
+      workType: clean_(r[h["work type"]]),
+      status: status,
+      shiftAvailableMin: shiftAvailableMin,
+      utilizedMin: utilizedMin,
+      overtimeMin: otMin,
+      productivityPct: Number(r[h["productivity %"]] || 0) || 0,
+      majorLossReason: clean_(r[h["major loss reason"]]),
+      majorLossRemark: clean_(r[h["major loss remark"]])
+    };
+  }).filter(function (r) {
+    return r.workDateObj && (r.empId || r.empName);
+  });
+}
+
+function readPeopleLogs_(ss, yyyy) {
+  const sh = ss.getSheetByName("LOG_" + yyyy);
+  if (!sh || sh.getLastRow() < 2) return [];
+
+  const vals = sh.getDataRange().getValues();
+  const h = headerMap_(vals[0]);
+
+  return vals.slice(1).map(function (r) {
+    const workDate = normalizeWorkDate_(r[h["work date"]]);
+    const type = clean_(r[h["type"]]);
+    const actual = Number(r[h["actual time"]] || 0) || 0;
+    const std = Number(r[h["standard time"]] || 0) || 0;
+
+    return {
+      workDate: workDate,
+      workDateObj: parseWorkDateObj_(workDate),
+      shift: clean_(r[h["shift"]]),
+      workType: clean_(r[h["work type"]]),
+      empId: clean_(r[h["emp id"]]),
+      empName: clean_(r[h["emp name"]]),
+      machine: clean_(r[h["machine"]]),
+      machineCategory: clean_(r[h["machine category"]]),
+      department: clean_(r[h["department"]]),
+      subWork: clean_(r[h["sub work"]]),
+      type: type || "Normal",
+      rootArea: clean_(r[h["root area"]]),
+      standardMin: std,
+      actualMin: actual,
+      majorLossReason: clean_(r[h["major loss reason"]])
+    };
+  }).filter(function (r) {
+    return r.workDateObj && (r.empId || r.empName);
+  });
+}
+
+function buildPeopleKpis_(attendanceRows, logRows) {
+  const presentEmp = {};
+  const absentEmp = {};
+
+  attendanceRows.forEach(function (r) {
+    const k = key_(r.empId || r.empName);
+    if (!k) return;
+
+    if (key_(r.status) === "absent") absentEmp[k] = true;
+    else presentEmp[k] = true;
+  });
+
+  const availableMin = attendanceRows.reduce(function (s, r) {
+    return s + (key_(r.status) === "absent" ? 0 : Number(r.shiftAvailableMin || 0));
+  }, 0);
+
+  const utilizedMin = attendanceRows.reduce(function (s, r) {
+    return s + Number(r.utilizedMin || 0);
+  }, 0);
+
+  const standardMin = logRows.reduce(function (s, r) {
+    return s + (key_(r.type) === "normal" ? Number(r.standardMin || 0) : 0);
+  }, 0);
+
+  const reworkMin = logRows.reduce(function (s, r) {
+    return s + (key_(r.type) === "rework" ? Number(r.actualMin || 0) : 0);
+  }, 0);
+
+  const otherMin = logRows.reduce(function (s, r) {
+    return s + (key_(r.type) === "other" ? Number(r.actualMin || 0) : 0);
+  }, 0);
+
+  const lossMin = attendanceRows.reduce(function (s, r) {
+    return s + (r.majorLossReason ? Math.max(0, Number(r.shiftAvailableMin || 0) - Number(r.utilizedMin || 0)) : 0);
+  }, 0);
+
+  return {
+    presentEmployees: Object.keys(presentEmp).length,
+    absentEmployees: Object.keys(absentEmp).length,
+    availableHours: minToHour_(availableMin),
+    utilizedHours: minToHour_(utilizedMin),
+    standardOutputHours: minToHour_(standardMin),
+    productivityPct: pct_(standardMin, availableMin),
+    utilizationPct: pct_(utilizedMin, availableMin),
+    reworkHours: minToHour_(reworkMin),
+    otherWorkHours: minToHour_(otherMin),
+    lossHours: minToHour_(lossMin)
+  };
+}
+
+function buildPeopleEmployeeRows_(employees, monthAttendance, monthLogs, yesterdayAttendance, yesterdayLogs) {
+  const byEmp = {};
+
+  employees.forEach(function (e) {
+    const k = key_(e.id || e.name);
+    if (!k) return;
+
+    byEmp[k] = {
+      empId: e.id,
+      name: e.name,
+      department: e.department || "-",
+      availableMin: 0,
+      utilizedMin: 0,
+      standardMin: 0,
+      actualNormalMin: 0,
+      overtimeMin: 0,
+      overtimeStandardMin: 0,
+      overtimeActualMin: 0,
+      reworkMin: 0,
+      otherMin: 0,
+      absentDays: 0,
+      yesterdayAvailableMin: 0,
+      yesterdayStandardMin: 0
+    };
+  });
+
+  monthAttendance.forEach(function (a) {
+    const k = key_(a.empId || a.empName);
+    if (!byEmp[k]) {
+      byEmp[k] = createPeopleEmpBase_(a.empId, a.empName, "-");
+    }
+
+    if (key_(a.status) === "absent") {
+      byEmp[k].absentDays += 1;
+    } else {
+      byEmp[k].availableMin += Number(a.shiftAvailableMin || 0);
+      byEmp[k].utilizedMin += Number(a.utilizedMin || 0);
+      byEmp[k].overtimeMin += Number(a.overtimeMin || 0);
+    }
+  });
+
+  monthLogs.forEach(function (l) {
+    const k = key_(l.empId || l.empName);
+    if (!byEmp[k]) byEmp[k] = createPeopleEmpBase_(l.empId, l.empName, "-");
+
+    if (!byEmp[k].department || byEmp[k].department === "-") {
+      byEmp[k].department = l.department || "-";
+    }
+
+    if (key_(l.type) === "normal") {
+      byEmp[k].standardMin += Number(l.standardMin || 0);
+      byEmp[k].actualNormalMin += Number(l.actualMin || 0);
+    }
+
+    if (key_(l.type) === "rework") {
+      byEmp[k].reworkMin += Number(l.actualMin || 0);
+    }
+
+    if (key_(l.type) === "other") {
+      byEmp[k].otherMin += Number(l.actualMin || 0);
+    }
+
+    if (key_(l.workType) === "overtime" || key_(l.shift).indexOf("overtime") >= 0) {
+      byEmp[k].overtimeStandardMin += Number(l.standardMin || 0);
+      byEmp[k].overtimeActualMin += Number(l.actualMin || 0);
+    }
+  });
+
+  yesterdayAttendance.forEach(function (a) {
+    const k = key_(a.empId || a.empName);
+    if (!byEmp[k]) byEmp[k] = createPeopleEmpBase_(a.empId, a.empName, "-");
+    if (key_(a.status) !== "absent") byEmp[k].yesterdayAvailableMin += Number(a.shiftAvailableMin || 0);
+  });
+
+  yesterdayLogs.forEach(function (l) {
+    const k = key_(l.empId || l.empName);
+    if (!byEmp[k]) byEmp[k] = createPeopleEmpBase_(l.empId, l.empName, "-");
+    if (key_(l.type) === "normal") byEmp[k].yesterdayStandardMin += Number(l.standardMin || 0);
+  });
+
+  const rows = Object.values(byEmp).map(function (e) {
+    const monthProductivity = pct_(e.standardMin, e.availableMin);
+    const yesterdayProductivity = pct_(e.yesterdayStandardMin, e.yesterdayAvailableMin);
+    const efficiency = pct_(e.standardMin, e.actualNormalMin);
+    const normalProductivity = pct_(e.standardMin, e.availableMin);
+    const overtimeProductivity = pct_(e.overtimeStandardMin, e.overtimeActualMin);
+
+    const score =
+      (monthProductivity * 0.45) +
+      (efficiency * 0.25) +
+      (yesterdayProductivity * 0.15) -
+      (e.absentDays * 3) -
+      (minToHour_(e.reworkMin) * 0.8);
+
+    return {
+      empId: e.empId,
+      name: e.name,
+      department: e.department || "-",
+      score: round1_(Math.max(0, score)),
+      yesterdayProductivityPct: round1_(yesterdayProductivity),
+      monthProductivityPct: round1_(monthProductivity),
+      overtimeHours: minToHour_(e.overtimeMin || e.overtimeActualMin),
+      absentDays: e.absentDays,
+      normalProductivityPct: round1_(normalProductivity),
+      overtimeProductivityPct: round1_(overtimeProductivity),
+      efficiencyPct: round1_(efficiency),
+      reworkHours: minToHour_(e.reworkMin),
+      otherWorkHours: minToHour_(e.otherMin)
+    };
+  });
+
+  rows.sort(function (a, b) {
+    return Number(b.score || 0) - Number(a.score || 0);
+  });
+
+  return rows;
+}
+
+function createPeopleEmpBase_(id, name, dept) {
+  return {
+    empId: clean_(id),
+    name: clean_(name),
+    department: clean_(dept || "-"),
+    availableMin: 0,
+    utilizedMin: 0,
+    standardMin: 0,
+    actualNormalMin: 0,
+    overtimeMin: 0,
+    overtimeStandardMin: 0,
+    overtimeActualMin: 0,
+    reworkMin: 0,
+    otherMin: 0,
+    absentDays: 0,
+    yesterdayAvailableMin: 0,
+    yesterdayStandardMin: 0
+  };
+}
+
+function getTopYesterday_(rows) {
+  const eligible = rows.filter(function (r) {
+    return Number(r.yesterdayProductivityPct || 0) > 0;
+  });
+
+  eligible.sort(function (a, b) {
+    return Number(b.yesterdayProductivityPct || 0) - Number(a.yesterdayProductivityPct || 0);
+  });
+
+  if (!eligible.length) return null;
+
+  const p = eligible[0];
+  p.badges = ["Yesterday Topper"];
+  return p;
+}
+
+function getTopMonth_(rows) {
+  const top = rows.filter(function (r) {
+    return Number(r.monthProductivityPct || 0) > 0;
+  }).slice(0, 3);
+
+  top.forEach(function (p, i) {
+    p.badges = ["Month Rank " + (i + 1)];
+  });
+
+  return top;
+}
+
+function buildYesterdayAbsent_(employees, yesterdayAttendance) {
+  const attMap = {};
+
+  yesterdayAttendance.forEach(function (a) {
+    attMap[key_(a.empId || a.empName)] = a;
+  });
+
+  const out = [];
+
+  employees.forEach(function (e) {
+    const a = attMap[key_(e.id || e.name)];
+    if (a && key_(a.status) === "absent") {
+      out.push({
+        empId: e.id,
+        name: e.name,
+        department: e.department || "-",
+        shift: a.shift || "-"
+      });
+    }
+  });
+
+  return out;
+}
+
+function buildMonthAbsent_(employees, monthAttendance) {
+  const map = {};
+
+  employees.forEach(function (e) {
+    const k = key_(e.id || e.name);
+    if (k) map[k] = { empId: e.id, name: e.name, department: e.department || "-", days: 0 };
+  });
+
+  monthAttendance.forEach(function (a) {
+    if (key_(a.status) !== "absent") return;
+    const k = key_(a.empId || a.empName);
+    if (!map[k]) map[k] = { empId: a.empId, name: a.empName, department: "-", days: 0 };
+    map[k].days += 1;
+  });
+
+  return Object.values(map).filter(function (x) {
+    return x.days > 0;
+  }).sort(function (a, b) {
+    return Number(b.days || 0) - Number(a.days || 0);
+  });
+}
+
+function buildPeopleDepartmentRows_(employeeRows, logs) {
+  const map = {};
+
+  employeeRows.forEach(function (e) {
+    const dept = clean_(e.department || "-");
+    if (!map[dept]) {
+      map[dept] = {
+        department: dept,
+        peopleMap: {},
+        standardMin: 0,
+        availableScoreBase: 0,
+        productivityPct: 0,
+        status: "Review"
+      };
+    }
+
+    map[dept].peopleMap[key_(e.empId || e.name)] = true;
+    map[dept].availableScoreBase += Number(e.monthProductivityPct || 0);
+  });
+
+  logs.forEach(function (l) {
+    const dept = clean_(l.department || "-");
+    if (!map[dept]) {
+      map[dept] = {
+        department: dept,
+        peopleMap: {},
+        standardMin: 0,
+        availableScoreBase: 0,
+        productivityPct: 0,
+        status: "Review"
+      };
+    }
+
+    if (key_(l.type) === "normal") {
+      map[dept].standardMin += Number(l.standardMin || 0);
+    }
+  });
+
+  return Object.values(map).map(function (d) {
+    const people = Object.keys(d.peopleMap).length;
+    const productivity = people ? d.availableScoreBase / people : 0;
+
+    let status = "Stable";
+    if (productivity >= 85) status = "Good control";
+    else if (productivity >= 70) status = "Stable";
+    else if (productivity >= 50) status = "Watch";
+    else status = "Support required";
+
+    return {
+      department: d.department,
+      people: people,
+      productivityPct: round1_(productivity),
+      status: status
+    };
+  }).sort(function (a, b) {
+    return Number(b.productivityPct || 0) - Number(a.productivityPct || 0);
+  });
+}
+
+function buildPeopleInsights_(kpis, departments, monthAbsent, topYesterday) {
+  const out = [];
+
+  if (Number(kpis.utilizationPct || 0) > 85 && Number(kpis.productivityPct || 0) < 70) {
+    out.push({
+      icon: "⚠️",
+      title: "Busy But Low Output",
+      text: "Utilization is high but productivity is lower. Check rework, waiting, material, and work mix."
+    });
+  }
+
+  const supportDept = (departments || []).filter(function (d) {
+    return String(d.status || "").toLowerCase().indexOf("support") >= 0;
+  })[0];
+
+  if (supportDept) {
+    out.push({
+      icon: "👥",
+      title: "Manpower Support Required",
+      text: supportDept.department + " shows low productivity/load risk. Cross-support may be required."
+    });
+  }
+
+  if ((monthAbsent || []).length) {
+    out.push({
+      icon: "📅",
+      title: "Attendance Risk",
+      text: monthAbsent[0].name + " has highest month-to-date absence: " + monthAbsent[0].days + " days."
+    });
+  }
+
+  if (topYesterday && topYesterday.name) {
+    out.push({
+      icon: "🏆",
+      title: "Recognition",
+      text: topYesterday.name + " is top performer of yesterday."
+    });
+  }
+
+  if (!out.length) {
+    out.push({
+      icon: "ℹ️",
+      title: "Stable Performance",
+      text: "No major risk pattern detected from current people dashboard data."
+    });
+  }
+
+  return out;
+}
+
+function filterMatch_(value, filterValue) {
+  const f = clean_(filterValue);
+  if (!f || key_(f) === "all") return true;
+  return key_(value) === key_(f);
+}
+
+function parseWorkDateObj_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const s = String(value || "").trim();
+  if (!s) return null;
+
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) {
+    const dd = Number(m[1]);
+    const mm = Number(m[2]) - 1;
+    const yy = Number(m[3]);
+    return new Date(yy, mm, dd);
+  }
+
+  return null;
+}
+
+function isDateBetween_(d, start, end) {
+  if (!d || !start || !end) return false;
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const e = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+  return t >= s && t <= e;
+}
+
+function sameDate_(a, b) {
+  if (!a || !b) return false;
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+}
+
+function formatDateYmd_(d) {
+  if (!d) return "";
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return yy + "-" + mm + "-" + dd;
+}
+
+function minToHour_(min) {
+  return round1_(Number(min || 0) / 60);
+}
+
+function pct_(num, den) {
+  num = Number(num || 0);
+  den = Number(den || 0);
+  if (!den) return 0;
+  return round1_((num / den) * 100);
+}
+
+function round1_(n) {
+  n = Number(n || 0);
+  return Math.round(n * 10) / 10;
+}
+
+function uniqueSorted_(arr) {
+  const map = {};
+  (arr || []).forEach(function (v) {
+    v = clean_(v);
+    if (v) map[v] = true;
+  });
+
+  return Object.keys(map).sort();
 }

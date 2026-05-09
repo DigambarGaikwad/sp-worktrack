@@ -237,17 +237,45 @@ async function renderSelectedMachine() {
   setText("machineStdHours", minToHours(selectedMachine.stdMin));
   setText("machineActualHours", minToHours(selectedMachine.actualMin));
   setText("machineRemainingHours", minToHours(selectedMachine.remainingMin));
-  setText("machineEfficiencyPct", selectedMachine.stdMin > 0 ? ((selectedMachine.stdMin / Math.max(1, selectedMachine.actualMin)) * 100).toFixed(1) + "%" : "0%");
+
+  /*
+    Correct machine efficiency logic:
+    Efficiency should be based only on completed standard work, not full machine standard.
+
+    completedStdMin = total standard - remaining standard
+    efficiencyPct   = completed standard / actual consumed × 100
+
+    Example:
+    Total Std = 876 min
+    Remaining = 852 min
+    Completed Std = 24 min
+    Actual = 25 min
+    Efficiency = 24 / 25 × 100 = 96%
+  */
+  const completedStdMin = Math.max(
+    0,
+    num(selectedMachine.stdMin) - num(selectedMachine.remainingMin)
+  );
+
+  const actualMin = Math.max(0, num(selectedMachine.actualMin));
+
+  const efficiencyPct = actualMin > 0
+    ? (completedStdMin / actualMin) * 100
+    : 0;
+
+  setText("machineEfficiencyPct", efficiencyPct.toFixed(1) + "%");
+
   setText("machineCompletionPct", safePct(selectedMachine.progressPct).toFixed(1) + "%");
   setText("machineOverrunHours", minToHours(selectedMachine.overrunMin));
 
   const reworkHours = minToHours(selectedMachine.reworkMin);
   const otherHours = minToHours(selectedMachine.otherMin);
-  const actual = Math.max(1, selectedMachine.actualMin);
+  const actualForLossPct = Math.max(1, selectedMachine.actualMin);
+
   setText("reworkHours", reworkHours);
   setText("otherHours", otherHours);
-  setText("reworkPct", ((selectedMachine.reworkMin / actual) * 100).toFixed(1) + "%");
-  setText("otherPct", ((selectedMachine.otherMin / actual) * 100).toFixed(1) + "%");
+  setText("reworkPct", ((selectedMachine.reworkMin / actualForLossPct) * 100).toFixed(1) + "%");
+  setText("otherPct", ((selectedMachine.otherMin / actualForLossPct) * 100).toFixed(1) + "%");
 
   renderDeptChartAndTable(selectedMachine);
 
@@ -361,7 +389,7 @@ function renderQualityTable() {
 
     const result = clean(q.readingStatus) || clean(q.result) || "-";
     const doneBy = clean(q.doneByName) || "-";
-    const doneDate = clean(q.doneDate) || "-";
+    const doneDate = formatDisplayDate(q.doneDate);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -403,7 +431,7 @@ function renderWorkTable() {
       <td>${minToHours(num(w.actualTime))}</td>
       <td>${minToHours(num(w.remainingTime))}</td>
       <td>${minToHours(num(w.overrunTime))}</td>
-      <td>${escapeHtml(w.doneDate || "-")}</td>
+      <td>${escapeHtml(formatDisplayDate(w.doneDate))}</td>
     `;
     body.appendChild(tr);
   });
@@ -493,6 +521,38 @@ function statusClass(status) {
   return "pending";
 }
 
+function formatDisplayDate(value) {
+  if (!value) return "-";
+
+  const s = String(value).trim();
+  if (!s || s.toLowerCase() === "pending") return "Pending";
+
+  // Already DD/MM/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const dd = String(Number(m[1])).padStart(2, "0");
+    const mm = String(Number(m[2])).padStart(2, "0");
+    return `${dd}/${mm}/${m[3]}`;
+  }
+
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const dd = String(Number(m[3])).padStart(2, "0");
+    const mm = String(Number(m[2])).padStart(2, "0");
+    return `${dd}/${mm}/${m[1]}`;
+  }
+
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = d.getFullYear();
+    return `${dd}/${mm}/${yy}`;
+  }
+
+  return s;
+}
 function escapeHtml(value) {
   return String(value == null ? "" : value)
     .replaceAll("&", "&amp;")

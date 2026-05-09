@@ -26,6 +26,10 @@
     {
       "id": "NewType-1777831475150",
       "name": "New Category"
+    },
+    {
+      "id": "NewType-1777984290294",
+      "name": "12345"
     }
   ],
   "machines": [
@@ -38,7 +42,7 @@
     {
       "id": 3,
       "name": "BPCL 26016",
-      "active": true,
+      "active": false,
       "type": "Booster-AirCool"
     },
     {
@@ -139,8 +143,14 @@
     },
     {
       "id": 20,
-      "name": "",
-      "type": "Online",
+      "name": "IGL 26027",
+      "type": "Booster-WaterCooled",
+      "active": true
+    },
+    {
+      "id": 21,
+      "name": "xyz",
+      "type": "NewType-1777984290294",
       "active": true
     }
   ],
@@ -982,6 +992,102 @@
           }
         ],
         "New Department": []
+      }
+    },
+    "NewType-1777984290294": {
+      "mainWorks": [
+        "Tubing",
+        "Electrical",
+        "Mechanical",
+        "Welding fitting and Painting"
+      ],
+      "subWorks": {
+        "Tubing": [
+          {
+            "name": "Priority Panel",
+            "standardTime": 30,
+            "checkpoints": [
+              {
+                "name": "xyz",
+                "standardTime": 0
+              }
+            ],
+            "qualityCheckpoints": [
+              {
+                "name": "xyz",
+                "inputType": "status",
+                "mandatory": false
+              },
+              {
+                "name": "zzz",
+                "inputType": "status",
+                "mandatory": false
+              }
+            ]
+          },
+          {
+            "name": "Hydrotesting",
+            "standardTime": 50,
+            "checkpoints": [],
+            "qualityCheckpoints": []
+          },
+          {
+            "name": "Intensifier Tubing",
+            "standardTime": 60,
+            "checkpoints": [],
+            "qualityCheckpoints": []
+          }
+        ],
+        "Electrical": [
+          {
+            "name": "Field Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Panel Wiring",
+            "standardTime": 100
+          },
+          {
+            "name": "Technical support to Programming",
+            "standardTime": 60
+          }
+        ],
+        "Mechanical": [
+          {
+            "name": "Water Tank Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Intensifier Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Heat Exchanger Assembly",
+            "standardTime": 60
+          },
+          {
+            "name": "Machine Shifting",
+            "standardTime": 30
+          },
+          {
+            "name": "Machine packing and loading for Shipments",
+            "standardTime": 45
+          }
+        ],
+        "Welding fitting and Painting": [
+          {
+            "name": "Welding",
+            "standardTime": 60
+          },
+          {
+            "name": "Fitting",
+            "standardTime": 60
+          },
+          {
+            "name": "Painting",
+            "standardTime": 60
+          }
+        ]
       }
     }
   },

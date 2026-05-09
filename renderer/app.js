@@ -443,13 +443,23 @@ async function renderCheckpointFields(card) {
   const workNature = card.querySelector(".typeSelect")?.value || "Normal";
   const qualityPoints = normalizeQualityPoints(item?.qualityCheckpoints || []);
 
-  // Upper booking checkpoint box disabled because lower booking box is used
+  // IMPORTANT:
+  // Booking points are handled only by renderBookingPoints().
+  // This upper booking box is hidden to avoid duplicate/conflicting UI.
   if (workBox && workList) {
     workBox.style.display = "none";
     workList.innerHTML = "";
   }
 
-  // Show recheck option only for Rework/Other
+  const machine = card.querySelector(".machineSelect")?.value || "";
+  const department = card.querySelector(".deptSelect")?.value || "";
+  const subWork = card.querySelector(".subWorkSelect")?.value || "";
+
+  const machineObj = (machines || []).find(m => String(m.name) === String(machine));
+  const typeId = String(machineObj?.type || "");
+  const typeObj = (adminOverrides?.machineTypes || machineTypes || []).find(t => String(t.id) === typeId);
+  const machineCategory = typeObj?.name || typeId || "";
+
   if (recheckBox) {
     if (workNature === "Rework" || workNature === "Other") {
       recheckBox.style.display = "flex";
@@ -464,23 +474,12 @@ async function renderCheckpointFields(card) {
     ((workNature === "Rework" || workNature === "Other") && recheckInput?.checked);
 
   if (qualBox && qualList) {
-    if (!allowQuality || qualityPoints.length === 0) {
+    if (!allowQuality || qualityPoints.length === 0 || !machine || !department || !subWork) {
       qualBox.style.display = "none";
       qualList.innerHTML = "";
     } else {
       qualBox.style.display = "block";
-      qualList.innerHTML = `
-        <div class="small-hint">Checking previous quality records...</div>
-      `;
-
-      const machine = card.querySelector(".machineSelect")?.value || "";
-      const department = card.querySelector(".deptSelect")?.value || "";
-      const subWork = card.querySelector(".subWorkSelect")?.value || "";
-
-      const machineObj = (machines || []).find(m => String(m.name) === String(machine));
-      const typeId = String(machineObj?.type || "");
-      const typeObj = (adminOverrides?.machineTypes || machineTypes || []).find(t => String(t.id) === typeId);
-      const machineCategory = typeObj?.name || typeId || "";
+      qualList.innerHTML = `<div class="small-hint">Checking previous quality records...</div>`;
 
       const completedQuality = await getCompletedQualityPointsFromSheet(
         machine,
@@ -501,7 +500,6 @@ async function renderCheckpointFields(card) {
         const old = completedMap[name.toLowerCase()];
         const isDone = !!old;
 
-        // Already done: show recheck checkbox first
         if (isDone) {
           return `
             <div class="quality-entry-row quality-done-row">
@@ -514,9 +512,7 @@ async function renderCheckpointFields(card) {
               </label>
 
               <div>
-               
                 <label class="quality-recheck-line">
-
                   <input type="checkbox"
                          class="qualityRecheckPointInput"
                          data-target-quality="${escapeAttr(name)}" />
@@ -547,7 +543,6 @@ async function renderCheckpointFields(card) {
           `;
         }
 
-        // Not done: normal entry field
         if (qp.inputType === "reading") {
           return `
             <div class="quality-entry-row">
@@ -615,15 +610,25 @@ function recalcStdFromCheckpoints(card) {
   const std = card.querySelector(".standardTime");
   const cps = Array.from(card.querySelectorAll(".workCheckpointInput"));
   if (!std) return;
+
   if (!cps.length) {
     const base = Number(card.dataset.baseStd || std.value || 0);
     std.value = String(base);
     return;
   }
-  const selectedWithStd = cps.filter(cb => cb.checked).reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
-  const totalWithStd = cps.reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
-  if (totalWithStd > 0) {
+
+  const selectedWithStd = cps
+    .filter(cb => cb.checked && !cb.disabled)
+    .reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
+
+  const totalWithStd = cps
+    .filter(cb => !cb.disabled)
+    .reduce((sum, cb) => sum + Number(cb.dataset.std || 0), 0);
+
+  if (totalWithStd > 0 || selectedWithStd > 0) {
     std.value = String(selectedWithStd);
+  } else {
+    std.value = "0";
   }
 }
 
@@ -656,11 +661,114 @@ async function getCompletedBookingPointsFromSheet(machine, machineCategory, depa
     });
 
     if (!res || !res.ok) return [];
-    return Array.isArray(res.completed) ? res.completed : [];
+
+    const completed = Array.isArray(res.completed) ? res.completed : [];
+
+    /*
+      New backend returns object rows:
+      {
+        point,
+        standardTime,
+        consumedTime,
+        remainingTime,
+        completionPct,
+        status
+      }
+
+      Old backend returned string rows:
+      ["Point 1", "Point 2"]
+
+      This keeps both formats supported.
+    */
+    return completed.map((x) => {
+      if (typeof x === "string") {
+        return {
+          point: x,
+          standardTime: 0,
+          consumedTime: 0,
+          remainingTime: 0,
+          completionPct: 100,
+          status: "DONE"
+        };
+      }
+
+      const std = Number(x.standardTime || 0);
+      const consumed = Number(x.consumedTime || 0);
+      const remaining = Number(x.remainingTime || Math.max(0, std - consumed));
+      const status = String(x.status || (remaining <= 0 ? "DONE" : consumed > 0 ? "PARTIAL" : "PENDING")).trim();
+
+      return {
+        point: String(x.point || "").trim(),
+        standardTime: std,
+        consumedTime: consumed,
+        remainingTime: remaining,
+        completionPct: Number(x.completionPct || (std > 0 ? Math.min(100, (consumed / std) * 100) : 0)),
+        status
+      };
+    }).filter(x => x.point);
   } catch (err) {
     console.warn("Completed booking fetch failed:", err);
     return [];
   }
+}
+
+function buildBookingStatusMap(completedBooking) {
+  const map = {};
+
+  (completedBooking || []).forEach((x) => {
+    const point = String(x.point || x.name || x || "").trim();
+    if (!point) return;
+
+    const std = Number(x.standardTime || 0);
+    const consumed = Number(x.consumedTime || 0);
+    const remaining = Number(x.remainingTime || Math.max(0, std - consumed));
+    const status = String(x.status || "").trim().toUpperCase();
+
+    map[point.toLowerCase()] = {
+      point,
+      standardTime: std,
+      consumedTime: consumed,
+      remainingTime: remaining,
+      completionPct: Number(x.completionPct || 0),
+      status: status || (remaining <= 0 ? "DONE" : consumed > 0 ? "PARTIAL" : "PENDING"),
+      isDone: status === "DONE" || (std > 0 && remaining <= 0)
+    };
+  });
+
+  return map;
+}
+
+function getBookingPointStatus(statusMap, pointName, configuredStd) {
+  const name = String(pointName || "").trim();
+  const old = statusMap[String(name).toLowerCase()];
+
+  if (!old) {
+    return {
+      point: name,
+      standardTime: Number(configuredStd || 0),
+      consumedTime: 0,
+      remainingTime: Number(configuredStd || 0),
+      completionPct: 0,
+      status: "PENDING",
+      isDone: false
+    };
+  }
+
+  const configured = Number(configuredStd || 0);
+  const std = Number(old.standardTime || configured || 0);
+  const consumed = Number(old.consumedTime || 0);
+  const remaining = std > 0 ? Math.max(0, std - consumed) : Number(old.remainingTime || 0);
+  const isDone = String(old.status || "").toUpperCase() === "DONE" || (std > 0 && remaining <= 0);
+
+  return {
+    point: name,
+    standardTime: std,
+    consumedTime: consumed,
+    remainingTime: remaining,
+    completionPct: std > 0 ? Math.min(100, (consumed / std) * 100) : Number(old.completionPct || 0),
+    status: isDone ? "DONE" : consumed > 0 ? "PARTIAL" : "PENDING",
+    isDone
+  };
 }
 
 async function getCompletedQualityPointsFromSheet(machine, machineCategory, department, subWork) {
@@ -1006,7 +1114,9 @@ async function renderBookingPoints(card, subObj) {
     return;
   }
 
-  if (!subObj || !Array.isArray(subObj.checkpoints) || subObj.checkpoints.length === 0) {
+  const bookingPoints = normalizeBookingPoints(subObj?.checkpoints || []);
+
+  if (!subObj || bookingPoints.length === 0 || !machine || !department || !subWork) {
     box.style.display = "none";
     box.innerHTML = "";
     return;
@@ -1025,24 +1135,44 @@ async function renderBookingPoints(card, subObj) {
     subWork
   );
 
-  const completedSet = new Set(
-    completed.map(x => String(x || "").trim().toLowerCase())
-  );
+  const statusMap = buildBookingStatusMap(completed);
 
   box.innerHTML = `
     <div style="font-weight:700; margin-bottom:8px;">Booking Points</div>
-    ${subObj.checkpoints.map((cp) => {
+    ${bookingPoints.map((cp) => {
       const name = String(cp.name || "").trim();
-      const done = completedSet.has(name.toLowerCase());
+      if (!name) return "";
+
+      const configuredStd = Number(cp.standardTime || 0);
+      const st = getBookingPointStatus(statusMap, name, configuredStd);
+
+      const isDone = st.isDone === true;
+      const isPartial = !isDone && String(st.status || "").toUpperCase() === "PARTIAL";
+
+      const remaining = isDone
+        ? 0
+        : isPartial
+          ? Number(st.remainingTime || 0)
+          : Number(configuredStd || st.standardTime || 0);
+
+      const labelText = isDone
+        ? `${name} — Completed`
+        : isPartial
+          ? `${name} (${remaining.toFixed(1)} min remaining / ${Number(st.standardTime || configuredStd || 0)} min)`
+          : `${name} (${Number(configuredStd || 0)} min)`;
 
       return `
-        <label class="booking-point-row ${done ? "booking-point-done" : ""}">
+        <label class="booking-point-row ${isDone ? "booking-point-done" : isPartial ? "booking-point-partial" : ""}">
           <input type="checkbox"
                  class="bpCheck"
                  value="${escapeAttr(name)}"
-                 data-time="${Number(cp.standardTime || 0)}"
-                 ${done ? "disabled" : "checked"} />
-          <span>${escapeHtml(name)} (${Number(cp.standardTime || 0)} min)${done ? " — Completed" : ""}</span>
+                 data-time="${escapeAttr(remaining)}"
+                 data-original-time="${escapeAttr(configuredStd)}"
+                 data-consumed="${escapeAttr(st.consumedTime || 0)}"
+                 data-remaining="${escapeAttr(remaining)}"
+                 data-status="${escapeAttr(st.status || "PENDING")}"
+                 ${isDone ? "disabled" : "checked"} />
+          <span>${escapeHtml(labelText)}</span>
         </label>
       `;
     }).join("")}
@@ -1055,7 +1185,7 @@ async function renderBookingPoints(card, subObj) {
       total += Number(c.dataset.time || 0);
     });
 
-    if (std) std.value = String(total);
+    if (std) std.value = String(Number(total.toFixed(1)));
     updateSummaryDebounced();
   }
 
