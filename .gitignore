@@ -4,3 +4,8 @@ release/
 .env
 .env.local
 .env.*.local
+
+# Local database tools / PocketBase runtime
+local-tools/
+pb_data/
+pb_migrations/
