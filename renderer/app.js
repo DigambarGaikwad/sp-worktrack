@@ -642,15 +642,27 @@ function getCheckedValues(card, selector) {
 function getCheckedBookingPoints(card) {
   return Array.from(card.querySelectorAll(".bpCheck"))
     .filter(x => x.checked && !x.disabled)
-    .map(x => ({
-      name: x.value,
-      standardTime: Number(x.dataset.time || 0),
-      originalTime: Number(x.dataset.originalTime || 0),
-      consumedTime: Number(x.dataset.consumed || 0),
-      remainingTime: Number(x.dataset.remaining || 0),
-      status: x.dataset.status || "PENDING"
-    }))
-    .filter(x => x.name);
+    .map(x => {
+      const row = x.closest(".booking-point-row");
+      const bookInput = row?.querySelector(".bpBookTime");
+
+      const maxRemaining = Number(x.dataset.remaining || x.dataset.time || 0);
+      let bookedTime = Number(bookInput?.value || maxRemaining || 0);
+
+      if (bookedTime < 0) bookedTime = 0;
+      if (maxRemaining > 0 && bookedTime > maxRemaining) bookedTime = maxRemaining;
+
+      return {
+        name: x.value,
+        standardTime: bookedTime,
+        bookedTime: bookedTime,
+        originalTime: Number(x.dataset.originalTime || 0),
+        consumedTime: Number(x.dataset.consumed || 0),
+        remainingTime: maxRemaining,
+        status: x.dataset.status || "PENDING"
+      };
+    })
+    .filter(x => x.name && Number(x.bookedTime || 0) > 0);
 }
 
 // ✅ Get completed booking points from backend
@@ -1154,6 +1166,10 @@ async function renderBookingPoints(card, subObj) {
 
   box.innerHTML = `
     <div style="font-weight:700; margin-bottom:8px;">Booking Points</div>
+    <div class="small-hint" style="margin-bottom:8px;">
+      Select completed/partially completed points. Book Min is full remaining time by default; change it only for partial booking.
+    </div>
+
     ${bookingPoints.map((cp) => {
       const name = String(cp.name || "").trim();
       if (!name) return "";
@@ -1177,18 +1193,36 @@ async function renderBookingPoints(card, subObj) {
           : `${name} (${Number(configuredStd || 0)} min)`;
 
       return `
-        <label class="booking-point-row ${isDone ? "booking-point-done" : isPartial ? "booking-point-partial" : ""}">
-          <input type="checkbox"
-                 class="bpCheck"
-                 value="${escapeAttr(name)}"
-                 data-time="${escapeAttr(remaining)}"
-                 data-original-time="${escapeAttr(configuredStd)}"
-                 data-consumed="${escapeAttr(st.consumedTime || 0)}"
-                 data-remaining="${escapeAttr(remaining)}"
-                 data-status="${escapeAttr(st.status || "PENDING")}"
-                 ${isDone ? "disabled" : "checked"} />
-          <span>${escapeHtml(labelText)}</span>
-        </label>
+        <div class="booking-point-row ${isDone ? "booking-point-done" : isPartial ? "booking-point-partial" : ""}"
+             style="display:grid; grid-template-columns: 1fr 130px; gap:12px; align-items:center; margin:8px 0;">
+          
+          <label style="display:flex; gap:8px; align-items:center;">
+            <input type="checkbox"
+                   class="bpCheck"
+                   value="${escapeAttr(name)}"
+                   data-time="${escapeAttr(remaining)}"
+                   data-original-time="${escapeAttr(configuredStd)}"
+                   data-consumed="${escapeAttr(st.consumedTime || 0)}"
+                   data-remaining="${escapeAttr(remaining)}"
+                   data-status="${escapeAttr(st.status || "PENDING")}"
+                   ${isDone ? "disabled" : "checked"} />
+            <span>${escapeHtml(labelText)}</span>
+          </label>
+
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="small-hint">Book</span>
+            <input type="number"
+                   class="bpBookTime"
+                   min="0"
+                   max="${escapeAttr(remaining)}"
+                   value="${escapeAttr(remaining)}"
+                   data-point="${escapeAttr(name)}"
+                   data-max="${escapeAttr(remaining)}"
+                   ${isDone ? "disabled" : ""}
+                   style="width:72px; padding:6px 8px; border:1px solid #d0d7de; border-radius:8px;" />
+            <span class="small-hint">min</span>
+          </div>
+        </div>
       `;
     }).join("")}
   `;
@@ -1196,8 +1230,28 @@ async function renderBookingPoints(card, subObj) {
   function recalcBookingStd() {
     let total = 0;
 
-    box.querySelectorAll(".bpCheck:checked:not(:disabled)").forEach(c => {
-      total += Number(c.dataset.time || 0);
+    box.querySelectorAll(".bpCheck").forEach(chk => {
+      const row = chk.closest(".booking-point-row");
+      const inp = row?.querySelector(".bpBookTime");
+
+      if (!inp) return;
+
+      if (!chk.checked || chk.disabled) {
+        inp.disabled = true;
+        total += 0;
+        return;
+      }
+
+      inp.disabled = false;
+
+      const max = Number(inp.dataset.max || chk.dataset.remaining || chk.dataset.time || 0);
+      let val = Number(inp.value || 0);
+
+      if (val < 0) val = 0;
+      if (max > 0 && val > max) val = max;
+
+      inp.value = String(Number(val.toFixed(1)));
+      total += val;
     });
 
     if (std) std.value = String(Number(total.toFixed(1)));
@@ -1206,6 +1260,11 @@ async function renderBookingPoints(card, subObj) {
 
   box.querySelectorAll(".bpCheck").forEach(chk => {
     chk.onchange = recalcBookingStd;
+  });
+
+  box.querySelectorAll(".bpBookTime").forEach(inp => {
+    inp.oninput = recalcBookingStd;
+    inp.onchange = recalcBookingStd;
   });
 
   recalcBookingStd();

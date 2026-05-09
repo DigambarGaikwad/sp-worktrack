@@ -611,24 +611,26 @@ function appendBookingLog_(ss, body, works) {
     const points = normalizeBookingPointList_(w.workCheckpoints || w.checkpoints || []);
     if (!points.length) return;
 
-    const actualTime = Number(w.actualTime || 0) || 0;
-    const actualPerPoint = points.length > 0 ? actualTime / points.length : 0;
-
     points.forEach(function(cp) {
       const point = clean_(cp.name || cp.point || cp.value || cp);
       if (!point) return;
 
-      let stdTime = Number(cp.standardTime || cp.remainingTime || cp.time || 0) || 0;
+      let stdTime = Number(cp.originalTime || 0) || 0;
 
-if (stdTime <= 0) {
-  stdTime = getBookingPointStdFromAdmin_(
-    ss,
-    clean_(w.machineCategory),
-    clean_(w.department),
-    clean_(w.subWork),
-    point
-  );
-}
+      if (stdTime <= 0) {
+        stdTime = getBookingPointStdFromAdmin_(
+          ss,
+          clean_(w.machineCategory),
+          clean_(w.department),
+          clean_(w.subWork),
+          point
+        );
+      }
+
+      let bookedTime = Number(cp.bookedTime || cp.standardTime || cp.remainingTime || cp.time || 0) || 0;
+
+      if (bookedTime <= 0) return;
+
       rows.push([
         new Date(),
         normalizeWorkDate_(body.workDate),
@@ -638,7 +640,7 @@ if (stdTime <= 0) {
         clean_(w.subWork),
         point,
         stdTime,
-        actualPerPoint,
+        bookedTime,
         clean_(body.teamMemberId),
         clean_(body.teamMemberName),
         clean_(body.shiftName),
