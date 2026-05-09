@@ -6,10 +6,11 @@
   "author": "SP WorkTrack",
   "license": "ISC",
   "scripts": {
-    "start": "electron .",
-    "server": "node server/app.js",
-    "dist": "electron-builder"
-  },
+  "start": "electron .",
+  "server": "node server/app.js",
+  "db:setup": "node server/db/setupPocketBaseSchema.js",
+  "dist": "electron-builder"
+},
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^24.9.1"
