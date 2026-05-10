@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ===================== LOAD DATA =====================
 async function loadData() {
-  // Base JSON (kept for fallback compatibility)
+  // Base JSON fallback compatibility
   machines = await fetch("data/machines.json").then(r => r.json());
   employees = await fetch("data/employees.json").then(r => r.json());
   shifts = await fetch("data/shifts.json").then(r => r.json());
@@ -65,8 +65,32 @@ async function loadData() {
   mainWorks = await fetch("data/mainWorks.json").then(r => r.json());
   subWorksMap = await fetch("data/subWorks.json").then(r => r.json());
 
-  // Admin overrides (electron)
-  adminOverrides = await window.api.getAdminOverrides();
+  const dataSource = window.SPWT_CONFIG?.DATA_SOURCE || "local";
+  const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
+
+  if (dataSource === "db") {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/admin/master-data`);
+
+      if (!res.ok) {
+        throw new Error(`API error ${res.status}`);
+      }
+
+      const payload = await res.json();
+
+      if (!payload?.ok || !payload?.data) {
+        throw new Error(payload?.message || "Invalid master data response");
+      }
+
+      adminOverrides = payload.data;
+      console.log("Loaded master data from DB:", adminOverrides?.meta || {});
+    } catch (err) {
+      console.warn("DB master data load failed. Falling back to local adminOverrides.", err);
+      adminOverrides = await window.api.getAdminOverrides();
+    }
+  } else {
+    adminOverrides = await window.api.getAdminOverrides();
+  }
 
   applyOverrides();
 }
