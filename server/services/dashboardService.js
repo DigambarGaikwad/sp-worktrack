@@ -301,12 +301,13 @@ async function getMachineDetail(params = {}) {
     throw err;
   }
 
-  const [
+                            const [
     summaryData,
     machines,
     machineTypes,
     subworks,
     bookingPoints,
+    qualityPoints,
     lines,
     bookingStatus,
     qualityLogs
@@ -316,6 +317,7 @@ async function getMachineDetail(params = {}) {
     listAll("machine_types", { perPage: 500 }),
     listAll("subworks", { perPage: 1000 }),
     listAll("booking_points", { perPage: 1000 }),
+    listAll("quality_points", { perPage: 1000 }),
     listAll("production_entry_lines", {
       perPage: 1000,
       filter: `machine_no="${machineNo.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
@@ -617,13 +619,18 @@ async function getMachineDetail(params = {}) {
     lastEmpName: clean(bp.last_emp_name)
   })).sort((a, b) => a.department.localeCompare(b.department) || a.subwork.localeCompare(b.subwork) || a.point.localeCompare(b.point));
 
+  // Quality checklist = planned master quality_points + latest quality_logs overlay.
   const latestQualityByPoint = new Map();
 
   qualityLogs.forEach((q) => {
+    const dept = getDepartmentDisplayName(q.department_code || q.department_name, q.department_name);
+    const subwork = clean(q.subwork_name || q.subwork_code);
+    const point = clean(q.point_name || q.point_code);
+
     const key = [
-      clean(q.department_name),
-      clean(q.subwork_name),
-      clean(q.point_name)
+      dept,
+      subwork,
+      point
     ].join("|").toLowerCase();
 
     const existing = latestQualityByPoint.get(key);
@@ -635,18 +642,86 @@ async function getMachineDetail(params = {}) {
     }
   });
 
-  const qualityStatus = Array.from(latestQualityByPoint.values()).map((q) => ({
-    department: clean(q.department_name),
-    subwork: clean(q.subwork_name),
-    point: clean(q.point_name),
-    inputType: clean(q.input_type),
-    value: clean(q.value || q.status),
-    status: clean(q.status),
-    workDate: clean(q.work_date),
-    empCode: clean(q.emp_code),
-    empName: clean(q.emp_name),
-    isRecheck: q.is_recheck === true
-  })).sort((a, b) => a.department.localeCompare(b.department) || a.subwork.localeCompare(b.subwork) || a.point.localeCompare(b.point));
+  const plannedQualityMap = new Map();
+
+  qualityPoints.forEach((qp) => {
+    if (qp.active === false) return;
+    if (clean(qp.machine_type_code) !== machineTypeCode) return;
+
+    const dept = getDepartmentDisplayName(qp.department_code || qp.department_name, qp.department_name);
+    const subwork = clean(qp.subwork_name || qp.subwork_code);
+    const point = clean(qp.point_name || qp.point_code);
+
+    if (!point) return;
+
+    const key = [
+      dept,
+      subwork,
+      point
+    ].join("|").toLowerCase();
+
+    plannedQualityMap.set(key, {
+      department: dept,
+      subwork,
+      point,
+      inputType: clean(qp.input_type || "status"),
+      mandatory: qp.mandatory === true
+    });
+  });
+
+  // Include any logged point even if it was not found in master, so old records are not hidden.
+  latestQualityByPoint.forEach((q, key) => {
+    if (plannedQualityMap.has(key)) return;
+
+    const dept = getDepartmentDisplayName(q.department_code || q.department_name, q.department_name);
+    const subwork = clean(q.subwork_name || q.subwork_code);
+    const point = clean(q.point_name || q.point_code);
+
+    plannedQualityMap.set(key, {
+      department: dept,
+      subwork,
+      point,
+      inputType: clean(q.input_type || "status"),
+      mandatory: false
+    });
+  });
+
+  const qualityStatus = Array.from(plannedQualityMap.entries()).map(([key, planned]) => {
+    const q = latestQualityByPoint.get(key) || null;
+
+    const value = clean(q?.value || q?.status);
+    const rawStatus = clean(q?.status);
+    const upperValue = value.toUpperCase();
+    const upperStatus = rawStatus.toUpperCase();
+
+    let status = "PENDING";
+
+    if (q && value) {
+      status = "DONE";
+    }
+
+    if (upperValue.includes("NOT OK") || upperStatus.includes("NOT OK")) {
+      status = "NOT OK";
+    }
+
+    return {
+      department: planned.department,
+      subwork: planned.subwork,
+      point: planned.point,
+      inputType: planned.inputType,
+      mandatory: planned.mandatory,
+      value: value || "",
+      status,
+      workDate: clean(q?.work_date),
+      empCode: clean(q?.emp_code),
+      empName: clean(q?.emp_name),
+      isRecheck: q?.is_recheck === true
+    };
+  }).sort((a, b) =>
+    a.department.localeCompare(b.department) ||
+    a.subwork.localeCompare(b.subwork) ||
+    a.point.localeCompare(b.point)
+  );
 
   return {
     machine: {
@@ -673,6 +748,7 @@ async function getMachineDetail(params = {}) {
         completedWork: completedWork.length,
         completedEntries: completedWorks.length,
         bookingPoints: bookingPointsStatus.length,
+        qualityPoints: qualityPoints.length,
         qualityStatus: qualityStatus.length,
         overrunDetails: overrunDetails.length,
         reworkOtherDetails: reworkOtherDetails.length

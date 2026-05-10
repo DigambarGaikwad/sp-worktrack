@@ -350,8 +350,8 @@ async function loadMachineDetails(machineRow) {
 
       qualityChecklist: (Array.isArray(d.qualityStatus) ? d.qualityStatus : []).map((q) => ({
         qualityPoint: q.point || "-",
-        status: q.value ? "DONE" : "PENDING",
-        readingStatus: q.value || q.status || "-",
+        status: clean(q.status) || "PENDING",
+        readingStatus: q.value || "-",
         doneByName: q.empName || q.empCode || "-",
         doneDate: q.workDate || ""
       })),
