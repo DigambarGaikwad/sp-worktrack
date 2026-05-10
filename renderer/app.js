@@ -690,59 +690,26 @@ function getCheckedBookingPoints(card) {
 }
 
 // ✅ Get completed booking points from backend
+// ✅ Get completed/partial booking points from DB
 async function getCompletedBookingPointsFromSheet(machine, machineCategory, department, subWork) {
   try {
-    if (!window.api?.submitToSheets) return [];
+    const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
 
-    const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
-    const secret = window.SPWT_CONFIG?.SECRET;
-
-    if (!webAppUrl || !secret) return [];
-
-    const res = await window.api.submitToSheets({
-      webAppUrl,
-      data: {
-        secret,
-        action: "getCompletedBookingPoints",
-        machine,
-        machineCategory,
-        department,
-        subWork
-      }
+    const params = new URLSearchParams({
+      machine: machine || "",
+      machineCategory: machineCategory || "",
+      department: department || "",
+      subWork: subWork || ""
     });
 
-    if (!res || !res.ok) return [];
+    const res = await fetch(`${apiBaseUrl}/api/production/booking-status?${params.toString()}`);
+    const data = await res.json().catch(() => null);
 
-    const completed = Array.isArray(res.completed) ? res.completed : [];
+    if (!res.ok || !data?.ok) return [];
 
-    /*
-      New backend returns object rows:
-      {
-        point,
-        standardTime,
-        consumedTime,
-        remainingTime,
-        completionPct,
-        status
-      }
+    const completed = Array.isArray(data.items) ? data.items : [];
 
-      Old backend returned string rows:
-      ["Point 1", "Point 2"]
-
-      This keeps both formats supported.
-    */
     return completed.map((x) => {
-      if (typeof x === "string") {
-        return {
-          point: x,
-          standardTime: 0,
-          consumedTime: 0,
-          remainingTime: 0,
-          completionPct: 100,
-          status: "DONE"
-        };
-      }
-
       const std = Number(x.standardTime || 0);
       const consumed = Number(x.consumedTime || 0);
       const remaining = Number(x.remainingTime || Math.max(0, std - consumed));
@@ -758,11 +725,10 @@ async function getCompletedBookingPointsFromSheet(machine, machineCategory, depa
       };
     }).filter(x => x.point);
   } catch (err) {
-    console.warn("Completed booking fetch failed:", err);
+    console.warn("Completed booking fetch from DB failed:", err);
     return [];
   }
 }
-
 function buildBookingStatusMap(completedBooking) {
   const map = {};
 
@@ -824,29 +790,23 @@ function getBookingPointStatus(statusMap, pointName, configuredStd) {
 
 async function getCompletedQualityPointsFromSheet(machine, machineCategory, department, subWork) {
   try {
-    if (!window.api?.submitToSheets) return [];
+    const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
 
-    const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
-    const secret = window.SPWT_CONFIG?.SECRET;
-
-    if (!webAppUrl || !secret) return [];
-
-    const res = await window.api.submitToSheets({
-      webAppUrl,
-      data: {
-        secret,
-        action: "getCompletedQualityPoints",
-        machine,
-        machineCategory,
-        department,
-        subWork
-      }
+    const params = new URLSearchParams({
+      machine: machine || "",
+      machineCategory: machineCategory || "",
+      department: department || "",
+      subWork: subWork || ""
     });
 
-    if (!res || !res.ok) return [];
-    return Array.isArray(res.completed) ? res.completed : [];
+    const res = await fetch(`${apiBaseUrl}/api/production/quality-status?${params.toString()}`);
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data?.ok) return [];
+
+    return Array.isArray(data.items) ? data.items : [];
   } catch (err) {
-    console.warn("Completed quality fetch failed:", err);
+    console.warn("Completed quality fetch from DB failed:", err);
     return [];
   }
 }

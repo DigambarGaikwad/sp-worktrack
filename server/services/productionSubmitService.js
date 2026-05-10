@@ -522,6 +522,93 @@ async function submitProduction(payload) {
   };
 }
 
+async function getBookingStatus(params = {}) {
+  const machine = clean(params.machine || params.machineNo || params.machine_no);
+  const department = clean(params.department || params.departmentName || params.department_name);
+  const subWork = clean(params.subWork || params.subwork || params.subworkName || params.subwork_name);
+
+  if (!machine || !department || !subWork) {
+    return [];
+  }
+
+  const filter = [
+    `machine_no="${pbEscape(machine)}"`,
+    `department_name="${pbEscape(department)}"`,
+    `subwork_name="${pbEscape(subWork)}"`
+  ].join(" && ");
+
+  const items = await pocketBaseList("booking_status", {
+    page: 1,
+    perPage: 200,
+    filter
+  });
+
+  return items.map((x) => ({
+    point: clean(x.point_name),
+    standardTime: toNumber(x.standard_minutes, 0),
+    consumedTime: toNumber(x.consumed_minutes, 0),
+    remainingTime: toNumber(x.remaining_minutes, 0),
+    completionPct: toNumber(x.completion_percent, 0),
+    status: clean(x.status || "PENDING"),
+    lastWorkDate: clean(x.last_work_date),
+    lastEmpCode: clean(x.last_emp_code),
+    lastEmpName: clean(x.last_emp_name)
+  })).filter(x => x.point);
+}
+
+async function getQualityStatus(params = {}) {
+  const machine = clean(params.machine || params.machineNo || params.machine_no);
+  const department = clean(params.department || params.departmentName || params.department_name);
+  const subWork = clean(params.subWork || params.subwork || params.subworkName || params.subwork_name);
+
+  if (!machine || !department || !subWork) {
+    return [];
+  }
+
+  const filter = [
+    `machine_no="${pbEscape(machine)}"`,
+    `department_name="${pbEscape(department)}"`,
+    `subwork_name="${pbEscape(subWork)}"`
+  ].join(" && ");
+
+  const logs = await pocketBaseList("quality_logs", {
+    page: 1,
+    perPage: 500,
+    filter
+  });
+
+  // Keep latest record per quality point.
+  // PocketBase returns unsorted here, so we use created/updated/date fallback by string comparison where available.
+  const latestByPoint = new Map();
+
+  logs.forEach((x) => {
+    const point = clean(x.point_name);
+    if (!point) return;
+
+    const key = point.toLowerCase();
+    const current = latestByPoint.get(key);
+
+    const xTime = clean(x.updated || x.created || x.work_date);
+    const cTime = clean(current?.updated || current?.created || current?.work_date);
+
+    if (!current || xTime >= cTime) {
+      latestByPoint.set(key, x);
+    }
+  });
+
+  return Array.from(latestByPoint.values()).map((x) => ({
+    point: clean(x.point_name),
+    value: clean(x.value || x.status),
+    status: clean(x.status),
+    inputType: clean(x.input_type || "status"),
+    date: clean(x.work_date),
+    doneBy: clean(x.emp_name || x.emp_code),
+    isRecheck: x.is_recheck === true
+  })).filter(x => x.point);
+}
+
 module.exports = {
-  submitProduction
+  submitProduction,
+  getBookingStatus,
+  getQualityStatus
 };
