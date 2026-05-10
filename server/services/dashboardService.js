@@ -301,7 +301,7 @@ async function getMachineDetail(params = {}) {
     throw err;
   }
 
-                            const [
+  const [
     summaryData,
     machines,
     machineTypes,
@@ -348,8 +348,7 @@ async function getMachineDetail(params = {}) {
 
   const machineCategory = typeMap.get(machineTypeCode) || machineSummary?.machineCategory || machineTypeCode;
 
-
-    const deptNameByCode = new Map();
+  const deptNameByCode = new Map();
 
   subworks.forEach((sw) => {
     const code = clean(sw.department_code).toLowerCase();
