@@ -292,6 +292,396 @@ async function getMachineSummary(params = {}) {
   };
 }
 
+async function getMachineDetail(params = {}) {
+  const machineNo = clean(params.machine || params.machineNo || "");
+
+  if (!machineNo) {
+    const err = new Error("Machine is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const [
+    summaryData,
+    machines,
+    machineTypes,
+    subworks,
+    bookingPoints,
+    lines,
+    bookingStatus,
+    qualityLogs
+  ] = await Promise.all([
+    getMachineSummary({ machine: machineNo }),
+    listAll("machines", { perPage: 500 }),
+    listAll("machine_types", { perPage: 500 }),
+    listAll("subworks", { perPage: 1000 }),
+    listAll("booking_points", { perPage: 1000 }),
+    listAll("production_entry_lines", {
+      perPage: 1000,
+      filter: `machine_no="${machineNo.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+      sort: "-work_date"
+    }),
+    listAll("booking_status", {
+      perPage: 1000,
+      filter: `machine_no="${machineNo.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+    }),
+    listAll("quality_logs", {
+      perPage: 1000,
+      filter: `machine_no="${machineNo.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+      sort: "-work_date"
+    })
+  ]);
+
+  const machineSummary = summaryData.machines?.[0] || null;
+
+  const machine = machines.find((m) => clean(m.machine_no || m.name || m.machineNo) === machineNo) || {};
+  const machineTypeCode = clean(machine.machine_type_code || machine.type || machineSummary?.machineTypeCode || "");
+
+  const typeMap = new Map();
+  machineTypes.forEach((t) => {
+    const code = clean(t.type_code || t.id || t.typeCode);
+    const name = clean(t.type_name || t.name || t.typeName);
+    if (code) typeMap.set(code, name || code);
+  });
+
+  const machineCategory = typeMap.get(machineTypeCode) || machineSummary?.machineCategory || machineTypeCode;
+
+
+    const deptNameByCode = new Map();
+
+  subworks.forEach((sw) => {
+    const code = clean(sw.department_code).toLowerCase();
+    const name = clean(sw.department_name || sw.department_code);
+    if (code && name) deptNameByCode.set(code, name);
+  });
+
+  lines.forEach((line) => {
+    const code = clean(line.department_code).toLowerCase();
+    const name = clean(line.department_name || line.department_code);
+    if (code && name) deptNameByCode.set(code, name);
+  });
+
+  function getDepartmentDisplayName(codeOrName, fallback = "") {
+    const raw = clean(codeOrName || fallback);
+    const key = raw.toLowerCase();
+
+    const mapped = deptNameByCode.get(key);
+    const value = clean(mapped || raw);
+
+    const known = {
+      electrical: "Electrical",
+      mechanical: "Mechanical",
+      tubing: "Tubing",
+      welding_fitting_and_painting: "Welding/Fitting/Painting",
+      welding_fitting_and_paint: "Welding/Fitting/Painting",
+      programming_support: "Programming Support",
+      other_rework: "Other/Rework"
+    };
+
+    if (known[key]) return known[key];
+
+    // If mapped value is still code-style, convert it to readable title style.
+    return value
+      .replace(/_/g, " ")
+      .replace(/\band\b/gi, "&")
+      .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+  }
+
+  // Booking point standard by subwork
+  const bookingStdBySubworkKey = new Map();
+  bookingPoints.forEach((bp) => {
+    if (bp.active === false) return;
+    if (clean(bp.machine_type_code) !== machineTypeCode) return;
+
+    const key = [
+      clean(bp.department_code),
+      clean(bp.subwork_code)
+    ].join("|");
+
+    bookingStdBySubworkKey.set(
+      key,
+      toNumber(bookingStdBySubworkKey.get(key), 0) + toNumber(bp.standard_time, 0)
+    );
+  });
+
+  // Planned work list from master subworks for this machine category
+  const plannedWork = subworks
+    .filter((sw) => sw.active !== false && clean(sw.machine_type_code) === machineTypeCode)
+    .map((sw) => {
+      const key = [
+        clean(sw.department_code),
+        clean(sw.subwork_code)
+      ].join("|");
+
+      const subworkStd = toNumber(sw.standard_time, 0);
+      const bookingStd = toNumber(bookingStdBySubworkKey.get(key), 0);
+      const plannedMinutes = subworkStd > 0 ? subworkStd : bookingStd;
+
+      return {
+        departmentCode: clean(sw.department_code),
+        departmentName: getDepartmentDisplayName(sw.department_code, sw.department_name),
+        subworkCode: clean(sw.subwork_code),
+        subworkName: clean(sw.subwork_name),
+        plannedMinutes
+      };
+    })
+    .filter((x) => x.subworkName);
+
+  const deptMap = new Map();
+  const subworkDoneMap = new Map();
+
+  plannedWork.forEach((pw) => {
+    const deptKey = pw.departmentName || pw.departmentCode || "Unknown";
+
+    if (!deptMap.has(deptKey)) {
+      deptMap.set(deptKey, {
+        department: deptKey,
+        plannedMinutes: 0,
+        completedStandardMinutes: 0,
+        actualMinutes: 0,
+        remainingMinutes: 0,
+        overrunMinutes: 0,
+        completionPct: 0,
+        efficiencyPct: 0
+      });
+    }
+
+    deptMap.get(deptKey).plannedMinutes += pw.plannedMinutes;
+
+    const swKey = [
+      String(pw.departmentName || pw.departmentCode).toLowerCase(),
+      String(pw.subworkName).toLowerCase()
+    ].join("|");
+
+    subworkDoneMap.set(swKey, {
+      ...pw,
+      completedStandardMinutes: 0,
+      actualMinutes: 0,
+      overrunMinutes: 0,
+      lastWorkDate: "",
+      status: "PENDING"
+    });
+  });
+
+  const completedWorks = [];
+  const overrunDetails = [];
+  const reworkOtherDetails = [];
+
+  lines.forEach((line) => {
+    const departmentName = getDepartmentDisplayName(line.department_code || line.department_name || "Unknown", line.department_name);
+    const subworkName = clean(line.subwork_name || line.subwork_code || "");
+    const nature = clean(line.work_nature || "Normal");
+
+    const standard = toNumber(line.standard_minutes, 0);
+    const actual = toNumber(line.actual_minutes, 0);
+    const overrun = toNumber(line.overrun_minutes, Math.max(0, actual - standard));
+    const workDate = clean(line.work_date);
+
+    if (!deptMap.has(departmentName)) {
+      deptMap.set(departmentName, {
+        department: departmentName,
+        plannedMinutes: 0,
+        completedStandardMinutes: 0,
+        actualMinutes: 0,
+        remainingMinutes: 0,
+        overrunMinutes: 0,
+        completionPct: 0,
+        efficiencyPct: 0
+      });
+    }
+
+    const dept = deptMap.get(departmentName);
+    dept.actualMinutes += actual;
+    dept.overrunMinutes += overrun;
+
+    if (nature.toLowerCase() === "normal") {
+      dept.completedStandardMinutes += standard;
+    }
+
+    const swKey = [
+      departmentName.toLowerCase(),
+      subworkName.toLowerCase()
+    ].join("|");
+
+    if (!subworkDoneMap.has(swKey)) {
+      subworkDoneMap.set(swKey, {
+        departmentCode: clean(line.department_code),
+        departmentName,
+        subworkCode: clean(line.subwork_code),
+        subworkName,
+        plannedMinutes: standard,
+        completedStandardMinutes: 0,
+        actualMinutes: 0,
+        overrunMinutes: 0,
+        lastWorkDate: "",
+        status: "PENDING"
+      });
+    }
+
+    const sw = subworkDoneMap.get(swKey);
+    if (nature.toLowerCase() === "normal") {
+      sw.completedStandardMinutes += standard;
+    }
+    sw.actualMinutes += actual;
+    sw.overrunMinutes += overrun;
+    if (workDate && workDate > sw.lastWorkDate) sw.lastWorkDate = workDate;
+    sw.status = sw.plannedMinutes > 0 && sw.completedStandardMinutes >= sw.plannedMinutes ? "DONE" : "PARTIAL";
+
+    const lineItem = {
+      entryNo: clean(line.entry_no),
+      lineNo: toNumber(line.line_no, 0),
+      workDate,
+      empCode: clean(line.emp_code),
+      empName: clean(line.emp_name),
+      department: departmentName,
+      subwork: subworkName,
+      workNature: nature,
+      standardMinutes: standard,
+      actualMinutes: actual,
+      overrunMinutes: overrun,
+      efficiencyReason: clean(line.efficiency_reason),
+      description: clean(line.description),
+      rootArea: clean(line.root_area)
+    };
+
+    completedWorks.push(lineItem);
+
+    if (overrun > 0 || lineItem.efficiencyReason) {
+      overrunDetails.push(lineItem);
+    }
+
+    if (nature.toLowerCase() === "rework" || nature.toLowerCase() === "other") {
+      reworkOtherDetails.push(lineItem);
+    }
+  });
+
+  const departments = Array.from(deptMap.values()).map((d) => {
+    d.remainingMinutes = Math.max(0, d.plannedMinutes - d.completedStandardMinutes);
+
+    d.completionPct = d.plannedMinutes > 0
+      ? Number(Math.min(100, (d.completedStandardMinutes / d.plannedMinutes) * 100).toFixed(1))
+      : 0;
+
+    d.efficiencyPct = d.actualMinutes > 0
+      ? Number(((d.completedStandardMinutes / d.actualMinutes) * 100).toFixed(1))
+      : 0;
+
+    return {
+      ...d,
+      plannedHours: Number((d.plannedMinutes / 60).toFixed(2)),
+      completedStandardHours: Number((d.completedStandardMinutes / 60).toFixed(2)),
+      actualHours: Number((d.actualMinutes / 60).toFixed(2)),
+      remainingHours: Number((d.remainingMinutes / 60).toFixed(2)),
+      overrunHours: Number((d.overrunMinutes / 60).toFixed(2))
+    };
+  }).sort((a, b) => a.department.localeCompare(b.department));
+
+  const allSubworks = Array.from(subworkDoneMap.values()).map((x) => {
+    const remainingMinutes = Math.max(0, x.plannedMinutes - x.completedStandardMinutes);
+    const completionPct = x.plannedMinutes > 0
+      ? Number(Math.min(100, (x.completedStandardMinutes / x.plannedMinutes) * 100).toFixed(1))
+      : 0;
+
+    return {
+      ...x,
+      remainingMinutes,
+      completionPct,
+      plannedHours: Number((x.plannedMinutes / 60).toFixed(2)),
+      completedStandardHours: Number((x.completedStandardMinutes / 60).toFixed(2)),
+      actualHours: Number((x.actualMinutes / 60).toFixed(2)),
+      remainingHours: Number((remainingMinutes / 60).toFixed(2)),
+      overrunHours: Number((x.overrunMinutes / 60).toFixed(2)),
+      status: remainingMinutes <= 0 && x.plannedMinutes > 0 ? "DONE" : x.completedStandardMinutes > 0 ? "PARTIAL" : "PENDING"
+    };
+  });
+
+  const remainingWork = allSubworks
+    .filter((x) => x.status !== "DONE")
+    .sort((a, b) => a.departmentName.localeCompare(b.departmentName) || a.subworkName.localeCompare(b.subworkName));
+
+  const completedWork = allSubworks
+    .filter((x) => x.status === "DONE")
+    .sort((a, b) => a.departmentName.localeCompare(b.departmentName) || a.subworkName.localeCompare(b.subworkName));
+
+  const bookingPointsStatus = bookingStatus.map((bp) => ({
+    department: clean(bp.department_name),
+    subwork: clean(bp.subwork_name),
+    point: clean(bp.point_name),
+    standardMinutes: toNumber(bp.standard_minutes, 0),
+    consumedMinutes: toNumber(bp.consumed_minutes, 0),
+    remainingMinutes: toNumber(bp.remaining_minutes, 0),
+    completionPct: toNumber(bp.completion_percent, 0),
+    status: clean(bp.status || "PENDING"),
+    lastWorkDate: clean(bp.last_work_date),
+    lastEmpCode: clean(bp.last_emp_code),
+    lastEmpName: clean(bp.last_emp_name)
+  })).sort((a, b) => a.department.localeCompare(b.department) || a.subwork.localeCompare(b.subwork) || a.point.localeCompare(b.point));
+
+  const latestQualityByPoint = new Map();
+
+  qualityLogs.forEach((q) => {
+    const key = [
+      clean(q.department_name),
+      clean(q.subwork_name),
+      clean(q.point_name)
+    ].join("|").toLowerCase();
+
+    const existing = latestQualityByPoint.get(key);
+    const currentTime = clean(q.updated || q.created || q.work_date);
+    const existingTime = clean(existing?.updated || existing?.created || existing?.work_date);
+
+    if (!existing || currentTime >= existingTime) {
+      latestQualityByPoint.set(key, q);
+    }
+  });
+
+  const qualityStatus = Array.from(latestQualityByPoint.values()).map((q) => ({
+    department: clean(q.department_name),
+    subwork: clean(q.subwork_name),
+    point: clean(q.point_name),
+    inputType: clean(q.input_type),
+    value: clean(q.value || q.status),
+    status: clean(q.status),
+    workDate: clean(q.work_date),
+    empCode: clean(q.emp_code),
+    empName: clean(q.emp_name),
+    isRecheck: q.is_recheck === true
+  })).sort((a, b) => a.department.localeCompare(b.department) || a.subwork.localeCompare(b.subwork) || a.point.localeCompare(b.point));
+
+  return {
+    machine: {
+      machineNo,
+      machineCategory,
+      machineTypeCode,
+      status: clean(machine.status || machineSummary?.status || "Active")
+    },
+    summary: machineSummary,
+    departments,
+    remainingWork,
+    completedWork,
+    completedEntries: completedWorks,
+    bookingPoints: bookingPointsStatus,
+    qualityStatus,
+    overrunDetails,
+    reworkOtherDetails,
+    meta: {
+      source: "pocketbase",
+      generatedAt: new Date().toISOString(),
+      counts: {
+        departments: departments.length,
+        remainingWork: remainingWork.length,
+        completedWork: completedWork.length,
+        completedEntries: completedWorks.length,
+        bookingPoints: bookingPointsStatus.length,
+        qualityStatus: qualityStatus.length,
+        overrunDetails: overrunDetails.length,
+        reworkOtherDetails: reworkOtherDetails.length
+      }
+    }
+  };
+}
+
 module.exports = {
-  getMachineSummary
+  getMachineSummary,
+  getMachineDetail
 };
