@@ -1636,8 +1636,12 @@ async function submitToDbApi(payload) {
 
   const data = await res.json().catch(() => null);
 
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.message || `DB submit failed with status ${res.status}`);
+   if (!res.ok || !data?.ok) {
+    const err = new Error(data?.message || `DB submit failed with status ${res.status}`);
+    err.status = res.status;
+    err.details = data?.details || null;
+    err.response = data || null;
+    throw err;
   }
 
   return data;
@@ -1687,9 +1691,38 @@ async function submit() {
         // Keep DB response attached for summary/debug only.
         payload.dbSubmitResult = submitResult;
         payload.dbEntryNo = submitResult.entryNo || "";
-      } catch (dbErr) {
+            } catch (dbErr) {
         console.error("DB submit failed:", dbErr);
 
+                const isDuplicate =
+          Number(dbErr?.status) === 409 ||
+          String(dbErr?.message || "").toLowerCase().includes("duplicate entry blocked") ||
+          dbErr?.details?.existingEntryNo;
+
+        const isZeroStandardTime =
+          dbErr?.details?.reasonCode === "ZERO_STANDARD_TIME" ||
+          String(dbErr?.message || "").toLowerCase().includes("available standard time is 0");
+
+        if (isDuplicate) {
+          showEntryMessage(
+            "Duplicate Entry Blocked:\n" +
+            (dbErr?.message || "This employee already has an entry for the selected date and shift.") +
+            (dbErr?.details?.existingEntryNo ? `\nExisting Entry: ${dbErr.details.existingEntryNo}` : ""),
+            "error"
+          );
+          focusFirstEntryError();
+          return;
+        }
+
+        if (isZeroStandardTime) {
+          showEntryMessage(
+            "Normal Entry Blocked:\n" +
+            (dbErr?.message || "Available standard time is 0 for this sub work. If this is extra work, change Work Nature to Rework or Other."),
+            "error"
+          );
+          focusFirstEntryError();
+          return;
+        }
         if (!enableSheetsFallback) {
           showEntryMessage("DB Save Failed: " + (dbErr?.message || "Unknown error"), "error");
           focusFirstEntryError();

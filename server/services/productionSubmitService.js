@@ -429,6 +429,76 @@ async function saveQualityLogs(payload, entryNo, line, qualityPoints, lineNo) {
 
   return created;
 }
+async function assertNoDuplicateProductionEntry(payload) {
+  const workDate = clean(payload.workDate);
+  const shiftCode = getShiftCode(payload);
+  const empCode = getPayloadEmpCode(payload);
+
+  const filter = [
+    `work_date="${pbEscape(workDate)}"`,
+    `shift_code="${pbEscape(shiftCode)}"`,
+    `emp_code="${pbEscape(empCode)}"`,
+    `status!="CANCELLED"`
+  ].join(" && ");
+
+  const existing = await findOneByFilter("production_entries", filter);
+
+  if (existing?.id) {
+    const err = new Error(
+      `Duplicate entry blocked. ${empCode} already has an entry for ${workDate} / ${shiftCode}.`
+    );
+
+    err.status = 409;
+    err.details = {
+      existingEntryNo: existing.entry_no,
+      existingId: existing.id,
+      workDate,
+      shiftCode,
+      empCode
+    };
+
+    throw err;
+  }
+}
+
+function assertNormalLinesHaveStandardTime(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const workNature = getLineWorkNature(line).toLowerCase();
+
+    const standardMinutes = toNumber(
+      line.standardTime ??
+      line.standardMinutes ??
+      line.standard_minutes,
+      0
+    );
+
+    const isNormal = workNature === "normal";
+
+    if (isNormal && standardMinutes <= 0) {
+      const machineNo = getLineMachineNo(line);
+      const departmentName = getLineDepartmentName(line);
+      const subworkName = getLineSubworkName(line);
+
+      const err = new Error(
+        `Available standard time is 0 for ${subworkName || "this sub work"} on ${machineNo || "selected machine"} / ${departmentName || "selected department"}. If this is extra work, change Work Nature to Rework or Other.`
+      );
+
+      err.status = 409;
+      err.details = {
+        reasonCode: "ZERO_STANDARD_TIME",
+        lineNo: i + 1,
+        machineNo,
+        departmentName,
+        subworkName,
+        workNature: getLineWorkNature(line),
+        standardMinutes
+      };
+
+      throw err;
+    }
+  }
+}
 
 async function upsertAttendance(payload, entryNo, header) {
   const attKey = recordKey(header.work_date, header.shift_code, header.emp_code);
@@ -472,9 +542,12 @@ async function submitProduction(payload) {
     throw new Error("Employee code is required.");
   }
 
-  if (!Array.isArray(lines) || lines.length === 0) {
+   if (!Array.isArray(lines) || lines.length === 0) {
     throw new Error("At least one work line is required.");
   }
+
+   await assertNoDuplicateProductionEntry(payload);
+  assertNormalLinesHaveStandardTime(lines);
 
   const entryNo = createEntryNo(payload);
   const header = buildHeader(payload, entryNo, lines);
