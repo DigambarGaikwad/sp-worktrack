@@ -127,6 +127,204 @@ const collectionsToCreate = [
       { name: "area_name", type: "text", required: true },
       { name: "active", type: "bool", required: false }
     ]
+  },
+
+  // ---------------- TRANSACTION TABLES ----------------
+  // Production header: one record per employee/date/shift submission.
+  {
+    name: "production_entries",
+    type: "base",
+    fields: [
+      { name: "entry_no", type: "text", required: true },
+      { name: "work_date", type: "text", required: true },
+      { name: "work_year", type: "number", required: true },
+
+      { name: "shift_code", type: "text", required: true },
+      { name: "shift_name", type: "text", required: true },
+      { name: "shift_start", type: "text", required: false },
+      { name: "shift_end", type: "text", required: false },
+      { name: "break_minutes", type: "number", required: false },
+      { name: "flexible_shift_minutes", type: "number", required: false },
+
+      { name: "work_type", type: "text", required: false },
+      { name: "emp_code", type: "text", required: true },
+      { name: "emp_name", type: "text", required: true },
+
+      { name: "gross_shift_available", type: "number", required: false },
+      { name: "major_loss_reason", type: "text", required: false },
+      { name: "major_loss_minutes", type: "number", required: false },
+      { name: "shift_available", type: "number", required: false },
+
+      { name: "total_standard_minutes", type: "number", required: false },
+      { name: "total_actual_minutes", type: "number", required: false },
+      { name: "remaining_minutes", type: "number", required: false },
+      { name: "productivity_percent", type: "number", required: false },
+
+      { name: "source", type: "text", required: false },
+      { name: "status", type: "text", required: false },
+      { name: "remarks", type: "text", required: false }
+    ]
+  },
+
+  // Production line: one record per work card.
+  {
+    name: "production_entry_lines",
+    type: "base",
+    fields: [
+      { name: "entry_no", type: "text", required: true },
+      { name: "line_no", type: "number", required: true },
+
+      { name: "work_date", type: "text", required: true },
+      { name: "work_year", type: "number", required: true },
+
+      { name: "emp_code", type: "text", required: true },
+      { name: "emp_name", type: "text", required: true },
+
+      { name: "machine_no", type: "text", required: true },
+      { name: "machine_type_code", type: "text", required: false },
+      { name: "machine_category", type: "text", required: false },
+
+      { name: "department_code", type: "text", required: false },
+      { name: "department_name", type: "text", required: true },
+
+      { name: "subwork_code", type: "text", required: false },
+      { name: "subwork_name", type: "text", required: true },
+
+      { name: "work_nature", type: "text", required: true },
+      { name: "description", type: "text", required: false },
+      { name: "root_area", type: "text", required: false },
+
+      { name: "standard_minutes", type: "number", required: false },
+      { name: "actual_minutes", type: "number", required: false },
+      { name: "overrun_minutes", type: "number", required: false },
+      { name: "efficiency_reason", type: "text", required: false },
+
+      { name: "booking_points_json", type: "json", required: false },
+      { name: "quality_points_json", type: "json", required: false }
+    ]
+  },
+
+  // Booking logs: every booking point time transaction.
+  {
+    name: "booking_logs",
+    type: "base",
+    fields: [
+      { name: "entry_no", type: "text", required: true },
+      { name: "line_no", type: "number", required: true },
+
+      { name: "work_date", type: "text", required: true },
+      { name: "work_year", type: "number", required: true },
+
+      { name: "emp_code", type: "text", required: true },
+      { name: "emp_name", type: "text", required: true },
+
+      { name: "machine_no", type: "text", required: true },
+      { name: "machine_type_code", type: "text", required: false },
+      { name: "machine_category", type: "text", required: false },
+
+      { name: "department_code", type: "text", required: false },
+      { name: "department_name", type: "text", required: true },
+
+      { name: "subwork_code", type: "text", required: false },
+      { name: "subwork_name", type: "text", required: true },
+
+      { name: "point_code", type: "text", required: false },
+      { name: "point_name", type: "text", required: true },
+
+      { name: "original_minutes", type: "number", required: false },
+      { name: "booked_minutes", type: "number", required: false },
+      { name: "consumed_before", type: "number", required: false },
+      { name: "consumed_after", type: "number", required: false },
+      { name: "remaining_after", type: "number", required: false },
+      { name: "status_after", type: "text", required: false }
+    ]
+  },
+
+  // Booking status: current status per machine/subwork/booking point.
+  {
+    name: "booking_status",
+    type: "base",
+    fields: [
+      { name: "machine_no", type: "text", required: true },
+      { name: "machine_type_code", type: "text", required: false },
+      { name: "machine_category", type: "text", required: false },
+
+      { name: "department_code", type: "text", required: false },
+      { name: "department_name", type: "text", required: true },
+
+      { name: "subwork_code", type: "text", required: false },
+      { name: "subwork_name", type: "text", required: true },
+
+      { name: "point_code", type: "text", required: false },
+      { name: "point_name", type: "text", required: true },
+
+      { name: "standard_minutes", type: "number", required: false },
+      { name: "consumed_minutes", type: "number", required: false },
+      { name: "remaining_minutes", type: "number", required: false },
+      { name: "completion_percent", type: "number", required: false },
+      { name: "status", type: "text", required: false },
+
+      { name: "last_entry_no", type: "text", required: false },
+      { name: "last_work_date", type: "text", required: false },
+      { name: "last_emp_code", type: "text", required: false },
+      { name: "last_emp_name", type: "text", required: false }
+    ]
+  },
+
+  // Quality logs: every quality check/recheck transaction.
+  {
+    name: "quality_logs",
+    type: "base",
+    fields: [
+      { name: "entry_no", type: "text", required: true },
+      { name: "line_no", type: "number", required: true },
+
+      { name: "work_date", type: "text", required: true },
+      { name: "work_year", type: "number", required: true },
+
+      { name: "emp_code", type: "text", required: true },
+      { name: "emp_name", type: "text", required: true },
+
+      { name: "machine_no", type: "text", required: true },
+      { name: "machine_type_code", type: "text", required: false },
+      { name: "machine_category", type: "text", required: false },
+
+      { name: "department_code", type: "text", required: false },
+      { name: "department_name", type: "text", required: true },
+
+      { name: "subwork_code", type: "text", required: false },
+      { name: "subwork_name", type: "text", required: true },
+
+      { name: "point_code", type: "text", required: false },
+      { name: "point_name", type: "text", required: true },
+      { name: "input_type", type: "text", required: false },
+      { name: "value", type: "text", required: false },
+      { name: "status", type: "text", required: false },
+      { name: "is_recheck", type: "bool", required: false }
+    ]
+  },
+
+  // Attendance: one status per employee/date/shift.
+  {
+    name: "attendance",
+    type: "base",
+    fields: [
+      { name: "att_key", type: "text", required: true },
+      { name: "work_date", type: "text", required: true },
+      { name: "work_year", type: "number", required: true },
+
+      { name: "shift_code", type: "text", required: true },
+      { name: "shift_name", type: "text", required: true },
+
+      { name: "emp_code", type: "text", required: true },
+      { name: "emp_name", type: "text", required: true },
+
+      { name: "status", type: "text", required: true },
+      { name: "shift_available", type: "number", required: false },
+      { name: "utilized_minutes", type: "number", required: false },
+      { name: "source_entry_no", type: "text", required: false },
+      { name: "remarks", type: "text", required: false }
+    ]
   }
 ];
 
