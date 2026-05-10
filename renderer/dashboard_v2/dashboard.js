@@ -40,22 +40,46 @@ async function loadDashboard() {
   try {
     setLoadingState(true);
 
-    const res = await fetch(window.SPWT_CONFIG.SHEETS_WEBAPP_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        secret: window.SPWT_CONFIG.SECRET,
-        action: "getDashboardFeed",
-        year: new Date().getFullYear()
-      })
-    });
+    const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
 
-    const json = await res.json();
+    const res = await fetch(`${apiBaseUrl}/api/dashboard/machine-summary`);
+    const json = await res.json().catch(() => null);
 
-    if (!json.ok) {
-      throw new Error(json.error || "Dashboard feed failed");
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || `Dashboard DB API failed with status ${res.status}`);
     }
 
-    dashboardRows = tableToObjects(json.table || []);
+    const machines = Array.isArray(json.data?.machines) ? json.data.machines : [];
+
+    dashboardRows = machines.map((m) => ({
+      machineName: clean(m.machineNo),
+      type: clean(m.machineCategory || m.machineTypeCode),
+      status: clean(m.status) || "Active",
+
+      stdMin: num(m.standardMinutes),
+      completedStdMin: num(m.completedStandardMinutes),
+      actualMin: num(m.actualMinutes),
+      remainingMin: num(m.remainingMinutes),
+      overrunMin: num(m.overrunMinutes),
+
+      progressPct: num(m.completionPct),
+      remainingPct: num(m.standardMinutes) > 0 ? (num(m.remainingMinutes) / num(m.standardMinutes)) * 100 : 0,
+      overrunPct: num(m.actualMinutes) > 0 ? (num(m.overrunMinutes) / num(m.actualMinutes)) * 100 : 0,
+
+      reworkMin: num(m.reworkMinutes),
+      otherMin: num(m.otherMinutes),
+
+      dept: {},
+      efficiencyReasons: "",
+      workCheckpoints: "",
+      qualityCheckpoints: "",
+      qualityStatus: "",
+      qualityNotOkCount: 0,
+      bookingDoneCount: num(m.bookingDoneCount),
+
+      raw: m
+    })).filter((x) => x.machineName);
+
     buildFilterOptions();
     applyFilters();
   } catch (err) {
@@ -277,8 +301,6 @@ async function renderSelectedMachine() {
   setText("reworkPct", ((selectedMachine.reworkMin / actualForLossPct) * 100).toFixed(1) + "%");
   setText("otherPct", ((selectedMachine.otherMin / actualForLossPct) * 100).toFixed(1) + "%");
 
-  renderDeptChartAndTable(selectedMachine);
-
   await loadMachineDetails(selectedMachine);
 }
 
@@ -286,25 +308,63 @@ async function loadMachineDetails(machineRow) {
   try {
     latestMachineDetails = null;
 
-    const res = await fetch(window.SPWT_CONFIG.SHEETS_WEBAPP_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        secret: window.SPWT_CONFIG.SECRET,
-        action: "getMachineDashboardDetails",
-        year: new Date().getFullYear(),
-        machine: machineRow.machineName,
-        machineCategory: machineRow.type
-      })
-    });
+    const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
+    const machineName = machineRow?.machineName || "";
 
-    const json = await res.json();
+    const res = await fetch(
+      `${apiBaseUrl}/api/dashboard/machine-detail?machine=${encodeURIComponent(machineName)}`
+    );
 
-    if (!json.ok) {
-      throw new Error(json.error || "Machine details failed");
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || `Machine detail DB API failed with status ${res.status}`);
     }
 
-    latestMachineDetails = json;
+    const d = json.data || {};
 
+    latestMachineDetails = {
+      raw: d,
+
+      departments: Array.isArray(d.departments) ? d.departments : [],
+
+      remainingWork: (Array.isArray(d.remainingWork) ? d.remainingWork : []).map((w) => ({
+        department: w.departmentName || w.department || "-",
+        subWork: w.subworkName || w.subwork || "-",
+        stdTime: num(w.plannedMinutes),
+        actualTime: num(w.actualMinutes),
+        remainingTime: num(w.remainingMinutes),
+        overrunTime: num(w.overrunMinutes),
+        doneDate: w.lastWorkDate || ""
+      })),
+
+      completedWork: (Array.isArray(d.completedWork) ? d.completedWork : []).map((w) => ({
+        department: w.departmentName || w.department || "-",
+        subWork: w.subworkName || w.subwork || "-",
+        stdTime: num(w.plannedMinutes),
+        actualTime: num(w.actualMinutes),
+        remainingTime: num(w.remainingMinutes),
+        overrunTime: num(w.overrunMinutes),
+        doneDate: w.lastWorkDate || ""
+      })),
+
+      qualityChecklist: (Array.isArray(d.qualityStatus) ? d.qualityStatus : []).map((q) => ({
+        qualityPoint: q.point || "-",
+        status: q.value ? "DONE" : "PENDING",
+        readingStatus: q.value || q.status || "-",
+        doneByName: q.empName || q.empCode || "-",
+        doneDate: q.workDate || ""
+      })),
+
+      lastSixWorkDays: {
+        workDonePct: 0,
+        actualHours: 0
+      },
+
+      shortageMaterial: []
+    };
+
+    renderDeptChartAndTableFromDb();
     renderQualityTable();
     renderWorkTable();
     renderLastSixAndShortage();
@@ -357,6 +417,56 @@ function renderDeptChartAndTable(machineRow) {
         { label: "Std", data: names.map((n) => minToHoursNum(num(deptObj[n].std))) },
         { label: "Actual", data: names.map((n) => minToHoursNum(num(deptObj[n].cons))) },
         { label: "Overrun", data: names.map((n) => minToHoursNum(num(deptObj[n].ov))) }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "top" }
+      },
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+function renderDeptChartAndTableFromDb() {
+  const departments = latestMachineDetails?.departments || [];
+
+  const tableBody = el("departmentTableBody");
+  tableBody.innerHTML = "";
+
+  if (!departments.length) {
+    tableBody.innerHTML = `<tr><td colspan="6">No department data available</td></tr>`;
+  } else {
+    departments.forEach((d) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(d.department || "-")}</td>
+        <td>${minToHours(num(d.plannedMinutes))}</td>
+        <td>${minToHours(num(d.actualMinutes))}</td>
+        <td>${minToHours(num(d.remainingMinutes))}</td>
+        <td>${minToHours(num(d.overrunMinutes))}</td>
+        <td>${safePct(num(d.completionPct)).toFixed(1)}%</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  }
+
+  const ctx = el("deptChart");
+  if (!ctx || typeof Chart === "undefined") return;
+
+  if (deptChart) deptChart.destroy();
+
+  deptChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: departments.map((d) => d.department),
+      datasets: [
+        { label: "Std", data: departments.map((d) => minToHoursNum(num(d.plannedMinutes))) },
+        { label: "Actual", data: departments.map((d) => minToHoursNum(num(d.actualMinutes))) },
+        { label: "Overrun", data: departments.map((d) => minToHoursNum(num(d.overrunMinutes))) }
       ]
     },
     options: {
