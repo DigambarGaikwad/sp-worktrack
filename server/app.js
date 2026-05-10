@@ -6,6 +6,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const employeesRoutes = require("./routes/employeesRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 dotenv.config();
 
@@ -23,6 +24,8 @@ app.use(express.json({ limit: "10mb" }));
 
 // ---------- Routes ----------
 app.use("/api/employees", employeesRoutes);
+
+app.use("/api/admin", adminRoutes);
 // ---------- Health Check ----------
 app.get("/api/health", (req, res) => {
   res.json({

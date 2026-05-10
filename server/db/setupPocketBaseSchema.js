@@ -154,18 +154,18 @@ function buildFields(fields) {
 }
 
 async function createCollection(collectionDef) {
-  const payload = {
-    name: collectionDef.name,
-    type: collectionDef.type || "base",
-    system: false,
-    schema: buildFields(collectionDef.fields),
-    indexes: [],
-    listRule: null,
-    viewRule: null,
-    createRule: null,
-    updateRule: null,
-    deleteRule: null
-  };
+ const payload = {
+  name: collectionDef.name,
+  type: collectionDef.type || "base",
+  system: false,
+  fields: buildFields(collectionDef.fields),
+  indexes: [],
+  listRule: null,
+  viewRule: null,
+  createRule: null,
+  updateRule: null,
+  deleteRule: null
+};
 
   return pocketBaseRequest("/api/collections", {
     method: "POST",
