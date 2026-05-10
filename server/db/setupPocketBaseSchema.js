@@ -231,8 +231,14 @@ const collectionsToCreate = [
       { name: "point_code", type: "text", required: false },
       { name: "point_name", type: "text", required: true },
 
-      { name: "original_minutes", type: "number", required: false },
+           { name: "original_minutes", type: "number", required: false },
       { name: "booked_minutes", type: "number", required: false },
+
+      // For assembly: booked time may exceed remaining standard time with reason.
+      { name: "standard_consumed", type: "number", required: false },
+      { name: "extra_minutes", type: "number", required: false },
+      { name: "overbooking_reason", type: "text", required: false },
+
       { name: "consumed_before", type: "number", required: false },
       { name: "consumed_after", type: "number", required: false },
       { name: "remaining_after", type: "number", required: false },

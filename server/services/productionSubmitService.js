@@ -296,10 +296,39 @@ async function upsertBookingStatus(payload, entryNo, line, bookingPoint, lineNo)
   ].join(" && ");
 
   const existing = await findOneByFilter("booking_status", filter);
-
   const consumedBefore = toNumber(existing?.consumed_minutes, 0);
   const standardMinutes = toNumber(existing?.standard_minutes, originalMinutes);
-  const consumedAfter = consumedBefore + bookedMinutes;
+
+  const remainingBefore = Math.max(0, standardMinutes - consumedBefore);
+  const standardConsumed = Math.min(bookedMinutes, remainingBefore);
+  const extraMinutes = Math.max(0, bookedMinutes - remainingBefore);
+  const overbookingReason = clean(
+    bookingPoint.overbookingReason ||
+    bookingPoint.extraReason ||
+    bookingPoint.reason
+  );
+
+  if (extraMinutes > 0 && !overbookingReason) {
+    const err = new Error(
+      `Only ${remainingBefore} min remaining for booking point "${pointName}". Extra ${extraMinutes} min requires reason.`
+    );
+
+    err.status = 409;
+    err.details = {
+      reasonCode: "BOOKING_EXTRA_REASON_REQUIRED",
+      machineNo,
+      departmentName,
+      subworkName,
+      pointName,
+      remainingBefore,
+      bookedMinutes,
+      extraMinutes
+    };
+
+    throw err;
+  }
+
+  const consumedAfter = consumedBefore + standardConsumed;
   const remainingAfter = Math.max(0, standardMinutes - consumedAfter);
   const completionPercent = standardMinutes > 0
     ? Math.min(100, (consumedAfter / standardMinutes) * 100)
@@ -362,8 +391,13 @@ async function upsertBookingStatus(payload, entryNo, line, bookingPoint, lineNo)
     point_code: pointCode,
     point_name: pointName,
 
-    original_minutes: standardMinutes,
+     original_minutes: standardMinutes,
     booked_minutes: bookedMinutes,
+
+    standard_consumed: standardConsumed,
+    extra_minutes: extraMinutes,
+    overbooking_reason: overbookingReason,
+
     consumed_before: consumedBefore,
     consumed_after: consumedAfter,
     remaining_after: remainingAfter,
@@ -499,6 +533,64 @@ function assertNormalLinesHaveStandardTime(lines) {
     }
   }
 }
+function assertEfficiencyReasonForOverrun(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    const workNature = getLineWorkNature(line).toLowerCase();
+
+    const standardMinutes = toNumber(
+      line.standardTime ??
+      line.standardMinutes ??
+      line.standard_minutes,
+      0
+    );
+
+    const actualMinutes = toNumber(
+      line.actualTime ??
+      line.actualMinutes ??
+      line.actual_minutes,
+      0
+    );
+
+    const efficiencyReason = clean(
+      line.efficiencyReason ||
+      line.efficiency_reason ||
+      line.lessEfficiencyReason ||
+      line.overrunReason
+    );
+
+    const isNormal = workNature === "normal";
+    const limit = standardMinutes * 1.2;
+
+    if (isNormal && standardMinutes > 0 && actualMinutes > limit && !efficiencyReason) {
+      const machineNo = getLineMachineNo(line);
+      const departmentName = getLineDepartmentName(line);
+      const subworkName = getLineSubworkName(line);
+      const overrunMinutes = actualMinutes - standardMinutes;
+
+      const err = new Error(
+        `Reason required. Actual time ${actualMinutes} min is more than 120% of standard time ${standardMinutes} min for ${subworkName || "this sub work"} on ${machineNo || "selected machine"} / ${departmentName || "selected department"}.`
+      );
+
+      err.status = 409;
+      err.details = {
+        reasonCode: "EFFICIENCY_REASON_REQUIRED",
+        lineNo: i + 1,
+        machineNo,
+        departmentName,
+        subworkName,
+        workNature: getLineWorkNature(line),
+        standardMinutes,
+        actualMinutes,
+        limit,
+        overrunMinutes
+      };
+
+      throw err;
+    }
+  }
+}
 
 async function upsertAttendance(payload, entryNo, header) {
   const attKey = recordKey(header.work_date, header.shift_code, header.emp_code);
@@ -546,8 +638,9 @@ async function submitProduction(payload) {
     throw new Error("At least one work line is required.");
   }
 
-   await assertNoDuplicateProductionEntry(payload);
+      await assertNoDuplicateProductionEntry(payload);
   assertNormalLinesHaveStandardTime(lines);
+  assertEfficiencyReasonForOverrun(lines);
 
   const entryNo = createEntryNo(payload);
   const header = buildHeader(payload, entryNo, lines);

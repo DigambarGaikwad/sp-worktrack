@@ -674,15 +674,29 @@ function getCheckedBookingPoints(card) {
       let bookedTime = Number(bookInput?.value || maxRemaining || 0);
 
       if (bookedTime < 0) bookedTime = 0;
-      if (maxRemaining > 0 && bookedTime > maxRemaining) bookedTime = maxRemaining;
+
+      const reasonInput = row?.querySelector(".bpOverReason");
+      const extraMinutes = Math.max(0, bookedTime - maxRemaining);
+      const overbookingReason = (reasonInput?.value || "").trim();
+
+            if (extraMinutes > 0 && !overbookingReason) {
+        row?.classList.add("entry-error");
+      } else {
+        row?.classList.remove("entry-error");
+      }
 
       return {
         name: x.value,
-        standardTime: bookedTime,
+
+        // standardTime is standard consumed, not extra actual time
+        standardTime: maxRemaining > 0 ? Math.min(bookedTime, maxRemaining) : bookedTime,
         bookedTime: bookedTime,
+
         originalTime: Number(x.dataset.originalTime || 0),
         consumedTime: Number(x.dataset.consumed || 0),
         remainingTime: maxRemaining,
+        extraMinutes,
+        overbookingReason,
         status: x.dataset.status || "PENDING"
       };
     })
@@ -1176,79 +1190,115 @@ async function renderBookingPoints(card, subObj) {
           ? `${name} (${remaining.toFixed(1)} min remaining / ${Number(st.standardTime || configuredStd || 0)} min)`
           : `${name} (${Number(configuredStd || 0)} min)`;
 
-      return `
-        <div class="booking-point-row ${isDone ? "booking-point-done" : isPartial ? "booking-point-partial" : ""}"
-             style="display:grid; grid-template-columns: 1fr 130px; gap:12px; align-items:center; margin:8px 0;">
-          
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input type="checkbox"
-                   class="bpCheck"
-                   value="${escapeAttr(name)}"
-                   data-time="${escapeAttr(remaining)}"
-                   data-original-time="${escapeAttr(configuredStd)}"
-                   data-consumed="${escapeAttr(st.consumedTime || 0)}"
-                   data-remaining="${escapeAttr(remaining)}"
-                   data-status="${escapeAttr(st.status || "PENDING")}"
-                   ${isDone ? "disabled" : "checked"} />
-            <span>${escapeHtml(labelText)}</span>
-          </label>
+return `
+  <div class="booking-point-row ${isDone ? "booking-point-done" : isPartial ? "booking-point-partial" : ""}"
+       style="display:grid; grid-template-columns: 1fr 130px; gap:12px; align-items:center; margin:8px 0;">
+    
+    <label style="display:flex; gap:8px; align-items:center;">
+      <input type="checkbox"
+             class="bpCheck"
+             value="${escapeAttr(name)}"
+             data-time="${escapeAttr(remaining)}"
+             data-original-time="${escapeAttr(configuredStd)}"
+             data-consumed="${escapeAttr(st.consumedTime || 0)}"
+             data-remaining="${escapeAttr(remaining)}"
+             data-status="${escapeAttr(st.status || "PENDING")}"
+             ${isDone ? "disabled" : "checked"} />
+      <span>${escapeHtml(labelText)}</span>
+    </label>
 
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span class="small-hint">Book</span>
-            <input type="number"
-                   class="bpBookTime"
-                   min="0"
-                   max="${escapeAttr(remaining)}"
-                   value="${escapeAttr(remaining)}"
-                   data-point="${escapeAttr(name)}"
-                   data-max="${escapeAttr(remaining)}"
-                   ${isDone ? "disabled" : ""}
-                   style="width:72px; padding:6px 8px; border:1px solid #d0d7de; border-radius:8px;" />
-            <span class="small-hint">min</span>
-          </div>
-        </div>
-      `;
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span class="small-hint">Book</span>
+      <input type="number"
+             class="bpBookTime"
+             min="0"
+             value="${escapeAttr(remaining)}"
+             data-point="${escapeAttr(name)}"
+             data-max="${escapeAttr(remaining)}"
+             ${isDone ? "disabled" : ""}
+             style="width:72px; padding:6px 8px; border:1px solid #d0d7de; border-radius:8px;" />
+      <span class="small-hint">min</span>
+    </div>
+
+    <div class="bpOverReasonBox" style="display:none; grid-column: 1 / -1; margin:6px 0 0 30px;">
+      <div class="small-hint bpOverHint" style="color:#b45309; margin-bottom:4px;"></div>
+      <input type="text"
+             class="bpOverReason"
+             placeholder="Reason for extra time beyond remaining standard"
+             style="width:100%; padding:7px 9px; border:1px solid #f59e0b; border-radius:8px;" />
+    </div>
+  </div>
+`;
     }).join("")}
   `;
+function recalcBookingStd() {
+  let totalStandardConsumed = 0;
+  let totalActualBooked = 0;
 
-  function recalcBookingStd() {
-    let total = 0;
+  box.querySelectorAll(".bpCheck").forEach(chk => {
+    const row = chk.closest(".booking-point-row");
+    const inp = row?.querySelector(".bpBookTime");
 
-    box.querySelectorAll(".bpCheck").forEach(chk => {
-      const row = chk.closest(".booking-point-row");
-      const inp = row?.querySelector(".bpBookTime");
+    if (!inp) return;
 
-      if (!inp) return;
+    if (!chk.checked || chk.disabled) {
+      inp.disabled = true;
+      return;
+    }
 
-      if (!chk.checked || chk.disabled) {
-        inp.disabled = true;
-        total += 0;
-        return;
-      }
+    inp.disabled = false;
 
-      inp.disabled = false;
+    const max = Number(inp.dataset.max || chk.dataset.remaining || chk.dataset.time || 0);
+    let val = Number(inp.value || 0);
 
-      const max = Number(inp.dataset.max || chk.dataset.remaining || chk.dataset.time || 0);
-      let val = Number(inp.value || 0);
+    if (val < 0) val = 0;
 
-      if (val < 0) val = 0;
-      if (max > 0 && val > max) val = max;
+    const extra = Math.max(0, val - max);
+    const reasonBox = row?.querySelector(".bpOverReasonBox");
+    const reasonHint = row?.querySelector(".bpOverHint");
 
-      inp.value = String(Number(val.toFixed(1)));
-      total += val;
-    });
+    if (reasonBox) reasonBox.style.display = extra > 0 ? "block" : "none";
 
-    if (std) std.value = String(Number(total.toFixed(1)));
-    updateSummaryDebounced();
+    if (reasonHint) {
+      reasonHint.textContent = extra > 0
+        ? `Extra ${extra} min beyond remaining ${max} min. Reason required.`
+        : "";
+    }
+
+    inp.value = String(Number(val.toFixed(1)));
+
+    // Standard consumed is capped to remaining standard balance.
+    totalStandardConsumed += max > 0 ? Math.min(val, max) : val;
+
+    // Actual booked must record the real time entered by operator.
+    totalActualBooked += val;
+  });
+
+  if (std) {
+    std.value = String(Number(totalStandardConsumed.toFixed(1)));
   }
+
+  const actualInput = card.querySelector(".actualTime");
+  if (actualInput && totalActualBooked > 0) {
+    actualInput.value = String(Number(totalActualBooked.toFixed(1)));
+
+    // Important: trigger old 120% reason logic from attachCardEvents()
+    actualInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  updateSummaryDebounced();
+}
 
   box.querySelectorAll(".bpCheck").forEach(chk => {
     chk.onchange = recalcBookingStd;
   });
-
   box.querySelectorAll(".bpBookTime").forEach(inp => {
-    inp.oninput = recalcBookingStd;
-    inp.onchange = recalcBookingStd;
+  inp.oninput = recalcBookingStd;
+  inp.onchange = recalcBookingStd;
+});
+    box.querySelectorAll(".bpOverReason").forEach(inp => {
+    inp.oninput = updateSummaryDebounced;
+    inp.onchange = updateSummaryDebounced;
   });
 
   recalcBookingStd();
@@ -1694,14 +1744,43 @@ async function submit() {
             } catch (dbErr) {
         console.error("DB submit failed:", dbErr);
 
-                const isDuplicate =
-          Number(dbErr?.status) === 409 ||
-          String(dbErr?.message || "").toLowerCase().includes("duplicate entry blocked") ||
-          dbErr?.details?.existingEntryNo;
+               const errorMessage = String(dbErr?.message || "");
+        const errorMessageLower = errorMessage.toLowerCase();
+        const reasonCode = String(dbErr?.details?.reasonCode || "");
+
+        const isDuplicate =
+          Number(dbErr?.status) === 409 &&
+          (
+            errorMessageLower.includes("duplicate entry blocked") ||
+            !!dbErr?.details?.existingEntryNo
+          );
 
         const isZeroStandardTime =
-          dbErr?.details?.reasonCode === "ZERO_STANDARD_TIME" ||
-          String(dbErr?.message || "").toLowerCase().includes("available standard time is 0");
+          Number(dbErr?.status) === 409 &&
+          (
+            reasonCode === "ZERO_STANDARD_TIME" ||
+            errorMessageLower.includes("available standard time is 0")
+          );
+
+        const isBookingExtraReasonRequired =
+          Number(dbErr?.status) === 409 &&
+          (
+            reasonCode === "BOOKING_EXTRA_REASON_REQUIRED" ||
+            (
+              errorMessageLower.includes("extra") &&
+              errorMessageLower.includes("requires reason")
+            )
+          );
+
+                  const isEfficiencyReasonRequired =
+          Number(dbErr?.status) === 409 &&
+          (
+            reasonCode === "EFFICIENCY_REASON_REQUIRED" ||
+            (
+              errorMessageLower.includes("reason required") &&
+              errorMessageLower.includes("120%")
+            )
+          );
 
         if (isDuplicate) {
           showEntryMessage(
@@ -1723,6 +1802,27 @@ async function submit() {
           focusFirstEntryError();
           return;
         }
+
+        if (isBookingExtraReasonRequired) {
+          showEntryMessage(
+            "Booking Extra Time Reason Required:\n" +
+            (dbErr?.message || "Extra booking time requires reason."),
+            "error"
+          );
+          focusFirstEntryError();
+          return;
+        }
+
+                if (isEfficiencyReasonRequired) {
+          showEntryMessage(
+            "Efficiency Reason Required:\n" +
+            (dbErr?.message || "Actual time is more than 120% of standard time. Please enter reason for low efficiency."),
+            "error"
+          );
+          focusFirstEntryError();
+          return;
+        }
+
         if (!enableSheetsFallback) {
           showEntryMessage("DB Save Failed: " + (dbErr?.message || "Unknown error"), "error");
           focusFirstEntryError();
