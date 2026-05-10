@@ -10,7 +10,13 @@ window.SPWT_CONFIG = {
   // Data source control
   // "db" = load from PocketBase through Node API
   // "local" = old local JSON/adminOverrides fallback
-  DATA_SOURCE: "db"
+    DATA_SOURCE: "db",
+
+  // Submit control
+  // "db" = submit production entries to PocketBase through Node API
+  // "sheets" = old Google Sheet submit
+  SUBMIT_TARGET: "db",
+  ENABLE_SHEETS_FALLBACK: true
 };
 
 // Old / backup Google Apps Script URL

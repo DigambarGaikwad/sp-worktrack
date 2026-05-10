@@ -1555,6 +1555,133 @@ function focusFirstEntryError() {
   return false;
 }
 
+function buildDbSubmitPayload(payload) {
+  const selectedEmpId =
+    payload.empId ||
+    payload.empCode ||
+    payload.employeeId ||
+    payload.teamMemberId ||
+    payload.teamMember ||
+    document.getElementById("employeeSelect")?.value ||
+    "";
+
+  const selectedShiftId =
+    payload.shiftId ||
+    payload.shiftCode ||
+    payload.shift ||
+    document.getElementById("shiftSelect")?.value ||
+    "";
+
+  const empObj = (employees || []).find(e =>
+    String(e.empId) === String(selectedEmpId) ||
+    String(e.id) === String(selectedEmpId)
+  );
+
+  const shiftObj = (shifts || []).find(s =>
+    String(s.id ?? s.name) === String(selectedShiftId)
+  );
+
+  const employeeName =
+    payload.empName ||
+    payload.teamMemberName ||
+    payload.employeeName ||
+    empObj?.name ||
+    "";
+
+  const majorLossReason =
+    payload.majorLossReason ||
+    payload.lossReason ||
+    document.getElementById("lossReasonSelect")?.value ||
+    "";
+
+  const majorLossMinutes =
+    Number(
+      payload.majorLossMinutes ??
+      payload.lossMinutes ??
+      document.getElementById("lossRemark")?.value ??
+      0
+    ) || 0;
+
+  const shiftAvailable = Number(payload.summary?.shiftAvailable || payload.shiftAvailable || 0);
+  const utilized = Number(payload.summary?.utilized || payload.utilized || 0);
+
+  return {
+    ...payload,
+
+    // Backend-compatible employee fields
+    empCode: selectedEmpId,
+    empName: employeeName,
+
+    // Backend-compatible shift fields
+    shiftCode: selectedShiftId,
+    shiftName: shiftObj?.name || payload.shiftName || selectedShiftId || "",
+    shiftStart: shiftObj?.start || payload.shiftStart || "",
+    shiftEnd: shiftObj?.end || payload.shiftEnd || "",
+    breakMinutes: Number(shiftObj?.breakMinutes || payload.breakMinutes || 0),
+
+    workType: payload.workType || document.getElementById("workTypeTop")?.value || "Normal",
+
+    grossShiftAvailable: shiftAvailable + majorLossMinutes,
+    shiftAvailable,
+
+    majorLossReason,
+    majorLossMinutes,
+
+    totalActualMinutes: utilized,
+
+    // Backend accepts works, but lines is clearer and safer
+    lines: (payload.works || []).map(w => ({
+      ...w,
+
+      machine: w.machine || "",
+      machineTypeCode: w.machineTypeId || w.machineTypeCode || "",
+      machineCategory: w.machineCategory || "",
+
+      department: w.department || "",
+      subWork: w.subWork || "",
+
+      type: w.type || "Normal",
+      actualTime: Number(w.actualTime || 0),
+      standardTime: Number(w.standardTime || 0),
+
+      rootArea: w.rootArea || "",
+      efficiencyReason: w.efficiencyReason || "",
+      description: w.description || "",
+
+      // Backend expects qualityCheckpoints or qualityPoints
+      qualityCheckpoints: Array.isArray(w.quality)
+        ? w.quality
+        : (Array.isArray(w.qualityCheckpoints) ? w.qualityCheckpoints : []),
+
+      // Backend expects workCheckpoints or bookingPoints
+      workCheckpoints: Array.isArray(w.workCheckpoints)
+        ? w.workCheckpoints
+        : []
+    })),
+
+    source: "electron-db"
+  };
+}
+
+async function submitToDbApi(payload) {
+  const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
+
+  const res = await fetch(`${apiBaseUrl}/api/production/submit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.message || `DB submit failed with status ${res.status}`);
+  }
+
+  return data;
+}
 // ===================== SUBMIT (LOCKED) =====================
 async function submit() {
   if (isSubmitting) return;
@@ -1585,26 +1712,59 @@ async function submit() {
       }
     }
 
-    const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
-    if (!webAppUrl) {
-      showEntryMessage("Google Sheet URL not found in renderer/config.js", "error");
-      return;
+    const submitTarget = window.SPWT_CONFIG?.SUBMIT_TARGET || "sheets";
+    const enableSheetsFallback = window.SPWT_CONFIG?.ENABLE_SHEETS_FALLBACK === true;
+
+    let submitResult = null;
+    let savedTo = "";
+
+    if (submitTarget === "db") {
+      try {
+        const dbPayload = buildDbSubmitPayload(payload);
+        submitResult = await submitToDbApi(dbPayload);
+        savedTo = "DB";
+
+        // Keep DB response attached for summary/debug only.
+        payload.dbSubmitResult = submitResult;
+        payload.dbEntryNo = submitResult.entryNo || "";
+      } catch (dbErr) {
+        console.error("DB submit failed:", dbErr);
+
+        if (!enableSheetsFallback) {
+          showEntryMessage("DB Save Failed: " + (dbErr?.message || "Unknown error"), "error");
+          focusFirstEntryError();
+          return;
+        }
+
+        console.warn("Trying Google Sheet fallback because DB submit failed...");
+        savedTo = "Google Sheet fallback";
+      }
     }
 
-    const res = await window.api.submitToSheets({ webAppUrl, data: payload });
-    if (!res || !res.ok) {
-      showEntryMessage("Save Failed: " + (res?.error || "Unknown"), "error");
-      focusFirstEntryError();
-      return;
+    if (submitTarget !== "db" || savedTo === "Google Sheet fallback") {
+      const webAppUrl = window.SPWT_CONFIG?.SHEETS_WEBAPP_URL;
+      if (!webAppUrl) {
+        showEntryMessage("Google Sheet URL not found in renderer/config.js", "error");
+        return;
+      }
+
+      const res = await window.api.submitToSheets({ webAppUrl, data: payload });
+      if (!res || !res.ok) {
+        showEntryMessage("Save Failed: " + (res?.error || "Unknown"), "error");
+        focusFirstEntryError();
+        return;
+      }
+
+      submitResult = res;
+      savedTo = savedTo || "Google Sheet";
     }
 
-    showEntryMessage("Saved successfully.", "success");
+    showEntryMessage(`Saved successfully to ${savedTo}.`, "success");
     showSummaryScreen(payload);
-    clearEntryAndStartNew();
 
   } catch (e) {
     console.error(e);
-    showEntryMessage("Submit Error: " + (e?.message || e), "error");
+    showEntryMessage("Submit error: " + (e?.message || e), "error");
     focusFirstEntryError();
   } finally {
     isSubmitting = false;
@@ -1612,7 +1772,6 @@ async function submit() {
     if (saveBtn) saveBtn.disabled = false;
   }
 }
-
 // ===================== ADMIN MODAL =====================
 function openAdminModal() {
   const modal = document.getElementById("adminModal");
