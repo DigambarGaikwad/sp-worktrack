@@ -604,20 +604,105 @@ async function getMachineDetail(params = {}) {
     .filter((x) => x.status === "DONE")
     .sort((a, b) => a.departmentName.localeCompare(b.departmentName) || a.subworkName.localeCompare(b.subworkName));
 
-  const bookingPointsStatus = bookingStatus.map((bp) => ({
-    department: clean(bp.department_name),
-    subwork: clean(bp.subwork_name),
-    point: clean(bp.point_name),
-    standardMinutes: toNumber(bp.standard_minutes, 0),
-    consumedMinutes: toNumber(bp.consumed_minutes, 0),
-    remainingMinutes: toNumber(bp.remaining_minutes, 0),
-    completionPct: toNumber(bp.completion_percent, 0),
-    status: clean(bp.status || "PENDING"),
-    lastWorkDate: clean(bp.last_work_date),
-    lastEmpCode: clean(bp.last_emp_code),
-    lastEmpName: clean(bp.last_emp_name)
-  })).sort((a, b) => a.department.localeCompare(b.department) || a.subwork.localeCompare(b.subwork) || a.point.localeCompare(b.point));
+   // Booking point checklist = planned master booking_points + booking_status overlay.
+  const latestBookingStatusByPoint = new Map();
 
+  bookingStatus.forEach((bp) => {
+    const dept = getDepartmentDisplayName(bp.department_code || bp.department_name, bp.department_name);
+    const subwork = clean(bp.subwork_name || bp.subwork_code);
+    const point = clean(bp.point_name || bp.point_code || bp.point);
+
+    if (!point) return;
+
+    const key = [
+      dept,
+      subwork,
+      point
+    ].join("|").toLowerCase();
+
+    latestBookingStatusByPoint.set(key, bp);
+  });
+
+  const plannedBookingMap = new Map();
+
+  bookingPoints.forEach((bp) => {
+    if (bp.active === false) return;
+    if (clean(bp.machine_type_code) !== machineTypeCode) return;
+
+    const dept = getDepartmentDisplayName(bp.department_code || bp.department_name, bp.department_name);
+    const subwork = clean(bp.subwork_name || bp.subwork_code);
+    const point = clean(bp.point_name || bp.point_code || bp.name || bp.point);
+
+    if (!point) return;
+
+    const key = [
+      dept,
+      subwork,
+      point
+    ].join("|").toLowerCase();
+
+    plannedBookingMap.set(key, {
+      department: dept,
+      subwork,
+      point,
+      standardMinutes: toNumber(bp.standard_time || bp.standard_minutes, 0)
+    });
+  });
+
+  // Keep old/touched booking records even if master point was later changed.
+  latestBookingStatusByPoint.forEach((bp, key) => {
+    if (plannedBookingMap.has(key)) return;
+
+    const dept = getDepartmentDisplayName(bp.department_code || bp.department_name, bp.department_name);
+    const subwork = clean(bp.subwork_name || bp.subwork_code);
+    const point = clean(bp.point_name || bp.point_code || bp.point);
+
+    plannedBookingMap.set(key, {
+      department: dept,
+      subwork,
+      point,
+      standardMinutes: toNumber(bp.standard_minutes, 0)
+    });
+  });
+
+  const bookingPointsStatus = Array.from(plannedBookingMap.entries()).map(([key, planned]) => {
+    const bp = latestBookingStatusByPoint.get(key) || null;
+
+    const standardMinutes = toNumber(bp?.standard_minutes, planned.standardMinutes);
+    const consumedMinutes = toNumber(bp?.consumed_minutes, 0);
+    const remainingMinutes = bp
+      ? toNumber(bp.remaining_minutes, Math.max(0, standardMinutes - consumedMinutes))
+      : standardMinutes;
+
+    let status = clean(bp?.status || "");
+    if (!status) {
+      status = remainingMinutes <= 0 && standardMinutes > 0
+        ? "DONE"
+        : consumedMinutes > 0
+          ? "PARTIAL"
+          : "PENDING";
+    }
+
+    return {
+      department: planned.department,
+      subwork: planned.subwork,
+      point: planned.point,
+      standardMinutes,
+      consumedMinutes,
+      remainingMinutes,
+      completionPct: standardMinutes > 0
+        ? Number(Math.min(100, (consumedMinutes / standardMinutes) * 100).toFixed(1))
+        : 0,
+      status,
+      lastWorkDate: clean(bp?.last_work_date),
+      lastEmpCode: clean(bp?.last_emp_code),
+      lastEmpName: clean(bp?.last_emp_name)
+    };
+  }).sort((a, b) =>
+    a.department.localeCompare(b.department) ||
+    a.subwork.localeCompare(b.subwork) ||
+    a.point.localeCompare(b.point)
+  );
   // Quality checklist = planned master quality_points + latest quality_logs overlay.
   const latestQualityByPoint = new Map();
 
