@@ -322,15 +322,55 @@ async function loadMachineDetails(machineRow) {
     }
 
     const d = json.data || {};
+        const bookingPointsBySubwork = {};
+    (Array.isArray(d.bookingPoints) ? d.bookingPoints : []).forEach((bp) => {
+      const key = [
+        clean(bp.department),
+        clean(bp.subwork)
+      ].join("|").toLowerCase();
+
+      if (!bookingPointsBySubwork[key]) bookingPointsBySubwork[key] = [];
+      bookingPointsBySubwork[key].push(bp);
+    });
+
+    function bookingPointTextForWork(w) {
+      const dept = clean(w.departmentName || w.department || "");
+      const sub = clean(w.subworkName || w.subwork || "");
+      const key = [dept, sub].join("|").toLowerCase();
+
+      const points = bookingPointsBySubwork[key] || [];
+
+      if (!points.length) return "-";
+
+      return points.map((bp) => {
+        const status = clean(bp.status || "PENDING").toUpperCase();
+        const remaining = num(bp.remainingMinutes);
+        const consumed = num(bp.consumedMinutes);
+        const std = num(bp.standardMinutes);
+
+        if (status === "DONE") {
+          return `${bp.point}: DONE`;
+        }
+
+        if (status === "PARTIAL") {
+          return `${bp.point}: PARTIAL (${consumed}/${std} min, ${remaining} rem)`;
+        }
+
+        return `${bp.point}: PENDING (${remaining || std} min)`;
+      }).join(" | ");
+    }
 
     latestMachineDetails = {
       raw: d,
 
       departments: Array.isArray(d.departments) ? d.departments : [],
 
-      remainingWork: (Array.isArray(d.remainingWork) ? d.remainingWork : []).map((w) => ({
+            reworkOtherDetails: Array.isArray(d.reworkOtherDetails) ? d.reworkOtherDetails : [],
+
+          remainingWork: (Array.isArray(d.remainingWork) ? d.remainingWork : []).map((w) => ({
         department: w.departmentName || w.department || "-",
         subWork: w.subworkName || w.subwork || "-",
+        bookingPoints: bookingPointTextForWork(w),
         stdTime: num(w.plannedMinutes),
         actualTime: num(w.actualMinutes),
         remainingTime: num(w.remainingMinutes),
@@ -338,9 +378,10 @@ async function loadMachineDetails(machineRow) {
         doneDate: w.lastWorkDate || ""
       })),
 
-      completedWork: (Array.isArray(d.completedWork) ? d.completedWork : []).map((w) => ({
+         completedWork: (Array.isArray(d.completedWork) ? d.completedWork : []).map((w) => ({
         department: w.departmentName || w.department || "-",
         subWork: w.subworkName || w.subwork || "-",
+        bookingPoints: bookingPointTextForWork(w),
         stdTime: num(w.plannedMinutes),
         actualTime: num(w.actualMinutes),
         remainingTime: num(w.remainingMinutes),
@@ -366,6 +407,7 @@ async function loadMachineDetails(machineRow) {
 
     renderDeptChartAndTableFromDb();
     renderQualityTable();
+    renderReworkOtherTable();   
     renderWorkTable();
     renderLastSixAndShortage();
   } catch (err) {
@@ -513,11 +555,39 @@ function renderQualityTable() {
   });
 }
 
+function renderReworkOtherTable() {
+  const body = el("reworkOtherTableBody");
+  if (!body) return;
+
+  const rows = latestMachineDetails?.reworkOtherDetails || [];
+  body.innerHTML = "";
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6">No Rework / Other entries found</td></tr>`;
+    return;
+  }
+
+  rows.forEach((r) => {
+    const reason = clean(r.description || r.efficiencyReason || r.rootArea || "-");
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(formatDisplayDate(r.workDate))}</td>
+      <td>${escapeHtml(r.workNature || "-")}</td>
+      <td>${escapeHtml(r.department || "-")}</td>
+      <td>${escapeHtml(r.subwork || "-")}</td>
+      <td>${minToHours(num(r.actualMinutes))}</td>
+      <td>${escapeHtml(reason)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
 function renderWorkTable() {
   const body = el("workTableBody");
 
   if (!latestMachineDetails) {
-    body.innerHTML = `<tr><td colspan="7">Select a machine to load work details</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8">Select a machine to load work details</td></tr>`;
     return;
   }
 
@@ -528,15 +598,16 @@ function renderWorkTable() {
   body.innerHTML = "";
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="7">No ${selectedWorkTab} work found</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8">No ${selectedWorkTab} work found</td></tr>`;
     return;
   }
 
   rows.forEach((w) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
+       tr.innerHTML = `
       <td>${escapeHtml(w.department || "-")}</td>
       <td>${escapeHtml(w.subWork || "-")}</td>
+      <td>${escapeHtml(w.bookingPoints || "-")}</td>
       <td>${minToHours(num(w.stdTime))}</td>
       <td>${minToHours(num(w.actualTime))}</td>
       <td>${minToHours(num(w.remainingTime))}</td>
@@ -564,6 +635,7 @@ function clearMachineDetails() {
   el("machineCardGrid").innerHTML = "";
   el("departmentTableBody").innerHTML = "";
   el("qualityTableBody").innerHTML = "";
+    if (el("reworkOtherTableBody")) el("reworkOtherTableBody").innerHTML = "";
   el("workTableBody").innerHTML = "";
   if (deptChart) deptChart.destroy();
 }
