@@ -519,56 +519,8 @@ tbody tr:nth-child(even) {
     font-size: 22px;
   }
 }
-.detail-grid-full {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
-  margin-top: 18px;
-}
+/* ===================== DASHBOARD RESPONSIVE + OVERFLOW FIX ===================== */
 
-#workTableBody td:nth-child(3) {
-  min-width: 320px;
-  white-space: normal;
-  line-height: 1.35;
-}
-
-.loss-grid-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.detail-grid-full {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
-  margin-top: 18px;
-}
-
-#workTableBody td:nth-child(3) {
-  min-width: 360px;
-  white-space: normal;
-  line-height: 1.35;
-}
-
-#reworkOtherTableBody td:nth-child(6) {
-  min-width: 260px;
-  white-space: normal;
-  line-height: 1.35;
-}
-
-@media (max-width: 1200px) {
-  .loss-grid-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 700px) {
-  .loss-grid-4 {
-    grid-template-columns: 1fr;
-  }
-}
-/* ===================== PHASE 6.4 LAYOUT FIX ===================== */
-
-/* Prevent page-level horizontal overflow */
 html,
 body,
 .sp-app-shell,
@@ -578,7 +530,6 @@ body,
   overflow-x: hidden;
 }
 
-/* Allow grid children to shrink correctly */
 .panel,
 .kpi-card,
 .machine-card,
@@ -593,13 +544,11 @@ body,
   min-width: 0;
 }
 
-/* Two-column rows must never push outside screen */
 .detail-grid-lower {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
 }
 
-/* Full-width row for Remaining / Completed Work */
 .detail-grid-full {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -607,7 +556,6 @@ body,
   margin-top: 18px;
 }
 
-/* Chart wrapper avoids canvas overflow */
 .chart-wrap {
   width: 100%;
   max-width: 100%;
@@ -619,12 +567,10 @@ body,
   max-width: 100% !important;
 }
 
-/* Rework / Other boxes in one line */
 .loss-grid-4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-/* Prevent text from forcing boxes wider than page */
 .loss-box strong,
 .loss-box span,
 .kpi-value,
@@ -637,79 +583,24 @@ body,
   overflow-wrap: anywhere;
 }
 
-/* Tables scroll inside their own container only */
 .table-wrap {
   max-width: 100%;
   overflow-x: auto;
 }
 
-/* Keep table readable but inside scroll wrapper */
 .table-wrap table {
   width: 100%;
 }
 
-/* Work table needs more width because Booking Points is long */
 .work-table-wrap table {
   min-width: 1050px;
 }
 
-/* Booking Points column: wrap text inside cell */
 #workTableBody td:nth-child(3) {
   min-width: 360px;
   max-width: 520px;
   white-space: normal;
   line-height: 1.35;
-}
-
-/* Rework description column: wrap long reason */
-#reworkOtherTableBody td:nth-child(6) {
-  min-width: 260px;
-  max-width: 420px;
-  white-space: normal;
-  line-height: 1.35;
-}
-
-/* Quality table should not stretch page */
-#qualityTableBody td {
-  white-space: normal;
-}
-
-/* Header/filter controls should wrap instead of overflow */
-.dash-topbar,
-.filter-bar,
-.panel-head,
-.machine-header-card,
-.machine-header-metrics {
-  max-width: 100%;
-}
-
-/* Responsive behavior */
-@media (max-width: 1200px) {
-  .detail-grid-lower {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .loss-grid-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 700px) {
-  .loss-grid-4 {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dash-shell {
-    padding: 12px;
-  }
-
-  .panel {
-    padding: 14px;
-  }
-
-  .work-table-wrap table {
-    min-width: 900px;
-  }
 }
 
 #reworkOtherTableBody td:nth-child(5),
@@ -719,6 +610,33 @@ body,
   white-space: normal;
   line-height: 1.35;
 }
+
+#qualityTableBody td {
+  white-space: normal;
+}
+
+.dash-topbar,
+.filter-bar,
+.panel-head,
+.machine-header-card,
+.machine-header-metrics {
+  max-width: 100%;
+}
+
+/* ===================== LOSS SUMMARY SECTION ===================== */
+
+.loss-summary-panel {
+  display: block;
+}
+
+.loss-summary-panel > .panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .loss-filter-bar {
   display: flex;
   gap: 8px;
@@ -729,6 +647,12 @@ body,
 
 .loss-date-input {
   width: 150px;
+}
+
+.loss-summary-panel > .loss-summary-kpis,
+.loss-summary-panel > .detail-grid-lower,
+.loss-summary-panel > .detail-grid-full {
+  width: 100%;
 }
 
 .loss-summary-kpis {
@@ -742,6 +666,10 @@ body,
   box-shadow: none;
   margin-top: 0;
   background: #fbfcff;
+}
+
+.loss-summary-panel .inner-panel {
+  min-width: 0;
 }
 
 .loss-box.purple {
@@ -761,25 +689,8 @@ body,
   line-height: 1.35;
 }
 
-@media (max-width: 1200px) {
-  .loss-summary-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+/* ===================== APPLY BUTTON EFFECT ===================== */
 
-  .loss-filter-bar {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 700px) {
-  .loss-summary-kpis {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .loss-date-input {
-    width: 100%;
-  }
-}
 .loss-apply-btn {
   display: inline-flex;
   align-items: center;
@@ -818,39 +729,43 @@ body,
     transform: rotate(360deg);
   }
 }
-/* Loss summary section must stack rows vertically */
-.loss-summary-panel {
-  display: block;
+
+/* ===================== RESPONSIVE ===================== */
+
+@media (max-width: 1200px) {
+  .detail-grid-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .loss-grid-4,
+  .loss-summary-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loss-filter-bar {
+    justify-content: flex-start;
+  }
 }
 
-.loss-summary-panel > .panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 14px;
-  flex-wrap: wrap;
-}
+@media (max-width: 700px) {
+  .loss-grid-4,
+  .loss-summary-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-.loss-summary-panel > .loss-summary-kpis,
-.loss-summary-panel > .detail-grid-lower,
-.loss-summary-panel > .detail-grid-full {
-  width: 100%;
-}
+  .loss-date-input {
+    width: 100%;
+  }
 
-.loss-summary-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
+  .dash-shell {
+    padding: 12px;
+  }
 
-.loss-summary-panel .inner-panel {
-  min-width: 0;
-}
+  .panel {
+    padding: 14px;
+  }
 
-#lossDetailBody td:nth-child(7) {
-  min-width: 260px;
-  max-width: 520px;
-  white-space: normal;
-  line-height: 1.35;
+  .work-table-wrap table {
+    min-width: 900px;
+  }
 }
