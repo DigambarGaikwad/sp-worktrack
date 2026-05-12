@@ -347,8 +347,7 @@ async function getMachineDetail(params = {}) {
   });
 
   const machineCategory = typeMap.get(machineTypeCode) || machineSummary?.machineCategory || machineTypeCode;
-
-    const lineWorkDates = lines
+  const lineWorkDates = lines
     .map((line) => clean(line.work_date))
     .filter(Boolean)
     .sort();
@@ -477,11 +476,10 @@ async function getMachineDetail(params = {}) {
       status: "PENDING"
     });
   });
-
-    const completedWorks = [];
-    const overrunDetails = [];
-    const reworkOtherDetails = [];
-    const workDayTrendMap = new Map();
+  const completedWorks = [];
+  const overrunDetails = [];
+  const reworkOtherDetails = [];
+  const workDayTrendMap = new Map();
 
 
 
@@ -494,8 +492,7 @@ async function getMachineDetail(params = {}) {
     const actual = toNumber(line.actual_minutes, 0);
     const overrun = toNumber(line.overrun_minutes, Math.max(0, actual - standard));
     const workDate = clean(line.work_date);
-
-        if (workDate) {
+    if (workDate) {
       if (!workDayTrendMap.has(workDate)) {
         workDayTrendMap.set(workDate, {
           workDate,
@@ -748,8 +745,7 @@ async function getMachineDetail(params = {}) {
   const completedWork = allSubworks
     .filter((x) => x.status === "DONE")
     .sort((a, b) => a.departmentName.localeCompare(b.departmentName) || a.subworkName.localeCompare(b.subworkName));
-
-   // Booking point checklist = planned master booking_points + booking_status overlay.
+  // Booking point checklist = planned master booking_points + booking_status overlay.
   const latestBookingStatusByPoint = new Map();
 
   bookingStatus.forEach((bp) => {
@@ -953,7 +949,7 @@ async function getMachineDetail(params = {}) {
   );
 
   return {
-      machine: {
+    machine: {
       machineNo,
       machineCategory,
       machineTypeCode,
