@@ -840,8 +840,269 @@ async function getMachineDetail(params = {}) {
     }
   };
 }
+function toDateOnly(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLossDateRange(params = {}) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+
+  const customFrom = clean(params.from || params.startDate || "");
+  const customTo = clean(params.to || params.endDate || "");
+
+  if (customFrom && customTo) {
+    return {
+      from: customFrom,
+      to: customTo,
+      label: `${customFrom} to ${customTo}`
+    };
+  }
+
+  const range = clean(params.range || "currentMonth").toLowerCase();
+
+  if (range === "lastmonth") {
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0);
+    return {
+      from: toDateOnly(start),
+      to: toDateOnly(end),
+      label: "Last Month"
+    };
+  }
+
+  if (range === "last6months") {
+    const start = new Date(year, month - 5, 1);
+    const end = today;
+    return {
+      from: toDateOnly(start),
+      to: toDateOnly(end),
+      label: "Last 6 Months"
+    };
+  }
+
+  if (range === "year") {
+    const start = new Date(year, 0, 1);
+    const end = today;
+    return {
+      from: toDateOnly(start),
+      to: toDateOnly(end),
+      label: "Current Year"
+    };
+  }
+
+  const start = new Date(year, month, 1);
+  const end = today;
+
+  return {
+    from: toDateOnly(start),
+    to: toDateOnly(end),
+    label: "Current Month"
+  };
+}
+
+function addGroupedMinutes(map, key, minutes, extra = {}) {
+  const cleanKey = clean(key || "Not Specified") || "Not Specified";
+
+  if (!map.has(cleanKey)) {
+    map.set(cleanKey, {
+      name: cleanKey,
+      minutes: 0,
+      count: 0,
+      ...extra
+    });
+  }
+
+  const item = map.get(cleanKey);
+  item.minutes += toNumber(minutes, 0);
+  item.count += 1;
+
+  return item;
+}
+
+function mapGroupToList(map) {
+  return Array.from(map.values())
+    .map((x) => ({
+      ...x,
+      hours: Number((toNumber(x.minutes, 0) / 60).toFixed(2))
+    }))
+    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
+}
+
+async function getLossSummary(params = {}) {
+  const range = getLossDateRange(params);
+
+  const from = range.from;
+  const to = range.to;
+
+  const dateFilter = [
+    `work_date>="${from}"`,
+    `work_date<="${to}"`
+  ].join(" && ");
+
+  const [entries, lines] = await Promise.all([
+    listAll("production_entries", {
+      perPage: 1000,
+      filter: dateFilter,
+      sort: "-work_date"
+    }),
+    listAll("production_entry_lines", {
+      perPage: 1000,
+      filter: dateFilter,
+      sort: "-work_date"
+    })
+  ]);
+
+  const reworkByRootArea = new Map();
+  const reworkByMachine = new Map();
+  const reworkByDepartment = new Map();
+
+  const otherByDescription = new Map();
+  const otherByMachine = new Map();
+  const otherByDepartment = new Map();
+
+  const majorLossByReason = new Map();
+  const majorLossByEmployee = new Map();
+  const majorLossByDate = new Map();
+
+  const detailRows = [];
+
+  let reworkMinutes = 0;
+  let otherMinutes = 0;
+  let majorLossMinutes = 0;
+
+  lines.forEach((line) => {
+    const nature = clean(line.work_nature || "Normal").toLowerCase();
+    const actualMinutes = toNumber(line.actual_minutes, 0);
+
+    if (nature !== "rework" && nature !== "other") return;
+
+    const workDate = clean(line.work_date);
+    const machineNo = clean(line.machine_no);
+    const department = clean(line.department_name || line.department_code);
+    const subwork = clean(line.subwork_name || line.subwork_code);
+    const rootArea = clean(line.root_area || "Not Specified");
+    const description = clean(line.description || line.efficiency_reason || subwork || "Not Specified");
+    const empName = clean(line.emp_name || line.emp_code);
+
+    const row = {
+      source: "production_entry_lines",
+      workDate,
+      type: nature === "rework" ? "Rework" : "Other",
+      machineNo,
+      department,
+      subwork,
+      rootArea,
+      reason: description,
+      empName,
+      minutes: actualMinutes,
+      hours: Number((actualMinutes / 60).toFixed(2)),
+      entryNo: clean(line.entry_no)
+    };
+
+    detailRows.push(row);
+
+    if (nature === "rework") {
+      reworkMinutes += actualMinutes;
+      addGroupedMinutes(reworkByRootArea, rootArea, actualMinutes);
+      addGroupedMinutes(reworkByMachine, machineNo, actualMinutes);
+      addGroupedMinutes(reworkByDepartment, department, actualMinutes);
+    }
+
+    if (nature === "other") {
+      otherMinutes += actualMinutes;
+      addGroupedMinutes(otherByDescription, description, actualMinutes);
+      addGroupedMinutes(otherByMachine, machineNo, actualMinutes);
+      addGroupedMinutes(otherByDepartment, department, actualMinutes);
+    }
+  });
+
+  entries.forEach((entry) => {
+    const minutes = toNumber(entry.major_loss_minutes, 0);
+    const reason = clean(entry.major_loss_reason || "Not Specified");
+
+    if (minutes <= 0 && !reason) return;
+    if (minutes <= 0) return;
+
+    const workDate = clean(entry.work_date);
+    const empName = clean(entry.emp_name || entry.emp_code);
+
+    majorLossMinutes += minutes;
+
+    addGroupedMinutes(majorLossByReason, reason, minutes);
+    addGroupedMinutes(majorLossByEmployee, empName, minutes);
+    addGroupedMinutes(majorLossByDate, workDate, minutes);
+
+    detailRows.push({
+      source: "production_entries",
+      workDate,
+      type: "Major Loss",
+      machineNo: "-",
+      department: "-",
+      subwork: "-",
+      rootArea: "-",
+      reason,
+      empName,
+      minutes,
+      hours: Number((minutes / 60).toFixed(2)),
+      entryNo: clean(entry.entry_no)
+    });
+  });
+
+  detailRows.sort((a, b) => {
+    if (a.workDate !== b.workDate) return b.workDate.localeCompare(a.workDate);
+    return b.minutes - a.minutes;
+  });
+
+  const totalLossMinutes = reworkMinutes + otherMinutes + majorLossMinutes;
+
+  return {
+    range,
+    summary: {
+      reworkMinutes,
+      reworkHours: Number((reworkMinutes / 60).toFixed(2)),
+      otherMinutes,
+      otherHours: Number((otherMinutes / 60).toFixed(2)),
+      majorLossMinutes,
+      majorLossHours: Number((majorLossMinutes / 60).toFixed(2)),
+      totalLossMinutes,
+      totalLossHours: Number((totalLossMinutes / 60).toFixed(2)),
+      detailCount: detailRows.length
+    },
+    rework: {
+      byRootArea: mapGroupToList(reworkByRootArea),
+      byMachine: mapGroupToList(reworkByMachine),
+      byDepartment: mapGroupToList(reworkByDepartment)
+    },
+    other: {
+      byDescription: mapGroupToList(otherByDescription),
+      byMachine: mapGroupToList(otherByMachine),
+      byDepartment: mapGroupToList(otherByDepartment)
+    },
+    majorLoss: {
+      byReason: mapGroupToList(majorLossByReason),
+      byEmployee: mapGroupToList(majorLossByEmployee),
+      byDate: mapGroupToList(majorLossByDate)
+    },
+    details: detailRows,
+    meta: {
+      source: "pocketbase",
+      generatedAt: new Date().toISOString(),
+      counts: {
+        entries: entries.length,
+        lines: lines.length,
+        details: detailRows.length
+      }
+    }
+  };
+}
 
 module.exports = {
   getMachineSummary,
-  getMachineDetail
+  getMachineDetail,
+  getLossSummary
 };
