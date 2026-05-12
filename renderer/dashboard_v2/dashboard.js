@@ -563,7 +563,7 @@ function renderReworkOtherTable() {
   body.innerHTML = "";
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="6">No Rework / Other entries found</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7">No Rework / Other entries found</td></tr>`;
     return;
   }
 
@@ -571,11 +571,12 @@ function renderReworkOtherTable() {
     const reason = clean(r.description || r.efficiencyReason || r.rootArea || "-");
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `
+        tr.innerHTML = `
       <td>${escapeHtml(formatDisplayDate(r.workDate))}</td>
       <td>${escapeHtml(r.workNature || "-")}</td>
       <td>${escapeHtml(r.department || "-")}</td>
       <td>${escapeHtml(r.subwork || "-")}</td>
+      <td>${escapeHtml(r.rootArea || "-")}</td>
       <td>${minToHours(num(r.actualMinutes))}</td>
       <td>${escapeHtml(reason)}</td>
     `;

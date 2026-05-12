@@ -711,3 +711,11 @@ body,
     min-width: 900px;
   }
 }
+
+#reworkOtherTableBody td:nth-child(5),
+#reworkOtherTableBody td:nth-child(7) {
+  min-width: 180px;
+  max-width: 420px;
+  white-space: normal;
+  line-height: 1.35;
+}
