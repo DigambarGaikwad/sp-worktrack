@@ -348,6 +348,20 @@ async function getMachineDetail(params = {}) {
 
   const machineCategory = typeMap.get(machineTypeCode) || machineSummary?.machineCategory || machineTypeCode;
 
+    const lineWorkDates = lines
+    .map((line) => clean(line.work_date))
+    .filter(Boolean)
+    .sort();
+
+  const firstWorkDate = lineWorkDates[0] || "";
+  const lastWorkDate = lineWorkDates[lineWorkDates.length - 1] || "";
+
+  const machineStatus = clean(machine.status || machineSummary?.status || "Active");
+  const machineStartDate = clean(machine.start_date || machine.startDate || firstWorkDate);
+  const machineEndDate = machineStatus.toLowerCase() === "completed"
+    ? clean(machine.end_date || machine.endDate || lastWorkDate)
+    : "";
+
   const deptNameByCode = new Map();
 
   subworks.forEach((sw) => {
@@ -464,9 +478,12 @@ async function getMachineDetail(params = {}) {
     });
   });
 
-  const completedWorks = [];
-  const overrunDetails = [];
-  const reworkOtherDetails = [];
+    const completedWorks = [];
+    const overrunDetails = [];
+    const reworkOtherDetails = [];
+    const workDayTrendMap = new Map();
+
+
 
   lines.forEach((line) => {
     const departmentName = getDepartmentDisplayName(line.department_code || line.department_name || "Unknown", line.department_name);
@@ -477,6 +494,32 @@ async function getMachineDetail(params = {}) {
     const actual = toNumber(line.actual_minutes, 0);
     const overrun = toNumber(line.overrun_minutes, Math.max(0, actual - standard));
     const workDate = clean(line.work_date);
+
+        if (workDate) {
+      if (!workDayTrendMap.has(workDate)) {
+        workDayTrendMap.set(workDate, {
+          workDate,
+          standardMinutes: 0,
+          actualMinutes: 0,
+          overrunMinutes: 0,
+          reworkOtherMinutes: 0,
+          normalMinutes: 0,
+          entryCount: 0
+        });
+      }
+
+      const day = workDayTrendMap.get(workDate);
+      day.actualMinutes += actual;
+      day.overrunMinutes += overrun;
+      day.entryCount += 1;
+
+      if (nature.toLowerCase() === "normal") {
+        day.standardMinutes += standard;
+        day.normalMinutes += actual;
+      } else if (nature.toLowerCase() === "rework" || nature.toLowerCase() === "other") {
+        day.reworkOtherMinutes += actual;
+      }
+    }
 
     if (!deptMap.has(departmentName)) {
       deptMap.set(departmentName, {
@@ -555,6 +598,108 @@ async function getMachineDetail(params = {}) {
       reworkOtherDetails.push(lineItem);
     }
   });
+  function parseDateOnly(value) {
+    const s = clean(value);
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+    if (!m) return null;
+
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+
+  function addDays(date, days) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+
+  function isSunday(date) {
+    return date.getDay() === 0;
+  }
+
+  function getLastSixCalendarDaysExceptSunday() {
+    let cursor = new Date();
+    const days = [];
+
+    while (days.length < 6) {
+      if (!isSunday(cursor)) {
+        days.push(toDateOnly(cursor));
+      }
+
+      cursor = addDays(cursor, -1);
+    }
+
+    // Oldest to latest, so frontend displays Day 6 ... Day 1.
+    return days.reverse();
+  }
+
+  const machinePlannedStandardMinutes = toNumber(
+    machineSummary?.standardMinutes,
+    plannedWork.reduce((sum, x) => sum + toNumber(x.plannedMinutes, 0), 0)
+  );
+
+  const calendarDays = getLastSixCalendarDaysExceptSunday();
+
+  let cumulativeCompletedStandardMinutes = 0;
+
+  const sortedAllWorkDays = Array.from(workDayTrendMap.values())
+    .sort((a, b) => a.workDate.localeCompare(b.workDate));
+
+  const completedStandardBeforeRange = sortedAllWorkDays
+    .filter((d) => d.workDate < calendarDays[0])
+    .reduce((sum, d) => sum + toNumber(d.standardMinutes, 0), 0);
+
+  cumulativeCompletedStandardMinutes = completedStandardBeforeRange;
+
+  const lastSixWorkDayItems = calendarDays.map((workDate) => {
+    const d = workDayTrendMap.get(workDate) || {
+      workDate,
+      standardMinutes: 0,
+      actualMinutes: 0,
+      overrunMinutes: 0,
+      reworkOtherMinutes: 0,
+      normalMinutes: 0,
+      entryCount: 0
+    };
+
+    cumulativeCompletedStandardMinutes += toNumber(d.standardMinutes, 0);
+
+    const efficiencyPct = d.actualMinutes > 0
+      ? Number(((d.standardMinutes / d.actualMinutes) * 100).toFixed(1))
+      : 0;
+
+    const progressPct = machinePlannedStandardMinutes > 0
+      ? Number(Math.min(100, (cumulativeCompletedStandardMinutes / machinePlannedStandardMinutes) * 100).toFixed(1))
+      : 0;
+
+    return {
+      ...d,
+      hasEntry: d.entryCount > 0,
+      progressPct,
+      efficiencyPct,
+      standardHours: Number((d.standardMinutes / 60).toFixed(2)),
+      actualHours: Number((d.actualMinutes / 60).toFixed(2)),
+      overrunHours: Number((d.overrunMinutes / 60).toFixed(2)),
+      reworkOtherHours: Number((d.reworkOtherMinutes / 60).toFixed(2)),
+      normalHours: Number((d.normalMinutes / 60).toFixed(2))
+    };
+  });
+
+  const lastSixTotalStandard = lastSixWorkDayItems.reduce((sum, d) => sum + toNumber(d.standardMinutes, 0), 0);
+  const lastSixTotalActual = lastSixWorkDayItems.reduce((sum, d) => sum + toNumber(d.actualMinutes, 0), 0);
+  const lastSixTotalOverrun = lastSixWorkDayItems.reduce((sum, d) => sum + toNumber(d.overrunMinutes, 0), 0);
+  const lastSixTotalReworkOther = lastSixWorkDayItems.reduce((sum, d) => sum + toNumber(d.reworkOtherMinutes, 0), 0);
+
+  const lastSixWorkDays = {
+    workDonePct: lastSixTotalActual > 0
+      ? Number(((lastSixTotalStandard / lastSixTotalActual) * 100).toFixed(1))
+      : 0,
+    standardHours: Number((lastSixTotalStandard / 60).toFixed(2)),
+    actualHours: Number((lastSixTotalActual / 60).toFixed(2)),
+    overrunHours: Number((lastSixTotalOverrun / 60).toFixed(2)),
+    reworkOtherHours: Number((lastSixTotalReworkOther / 60).toFixed(2)),
+    days: lastSixWorkDayItems
+  };
 
   const departments = Array.from(deptMap.values()).map((d) => {
     d.remainingMinutes = Math.max(0, d.plannedMinutes - d.completedStandardMinutes);
@@ -808,11 +953,13 @@ async function getMachineDetail(params = {}) {
   );
 
   return {
-    machine: {
+      machine: {
       machineNo,
       machineCategory,
       machineTypeCode,
-      status: clean(machine.status || machineSummary?.status || "Active")
+      status: machineStatus,
+      startDate: machineStartDate,
+      endDate: machineEndDate
     },
     summary: machineSummary,
     departments,
@@ -823,6 +970,7 @@ async function getMachineDetail(params = {}) {
     qualityStatus,
     overrunDetails,
     reworkOtherDetails,
+    lastSixWorkDays,
     meta: {
       source: "pocketbase",
       generatedAt: new Date().toISOString(),
@@ -835,7 +983,8 @@ async function getMachineDetail(params = {}) {
         qualityPoints: qualityPoints.length,
         qualityStatus: qualityStatus.length,
         overrunDetails: overrunDetails.length,
-        reworkOtherDetails: reworkOtherDetails.length
+        reworkOtherDetails: reworkOtherDetails.length,
+        lastSixWorkDays: lastSixWorkDayItems.length
       }
     }
   };
@@ -979,6 +1128,7 @@ async function getLossSummary(params = {}) {
     const nature = clean(line.work_nature || "Normal").toLowerCase();
     const actualMinutes = toNumber(line.actual_minutes, 0);
 
+    
     if (nature !== "rework" && nature !== "other") return;
 
     const workDate = clean(line.work_date);

@@ -280,7 +280,6 @@ async function renderSelectedMachine() {
 
   setText("selectedMachineName", selectedMachine.machineName);
   setText("selectedMachineMeta", `${selectedMachine.type} • ${selectedMachine.status}`);
-
   setText("machineStdHours", minToHours(selectedMachine.stdMin));
   setText("machineActualHours", minToHours(selectedMachine.actualMin));
   setText("machineRemainingHours", minToHours(selectedMachine.remainingMin));
@@ -344,7 +343,19 @@ async function loadMachineDetails(machineRow) {
       throw new Error(json?.message || `Machine detail DB API failed with status ${res.status}`);
     }
 
-    const d = json.data || {};
+        const d = json.data || {};
+        const machineInfo = d.machine || {};
+        const machineStartDate = machineInfo.startDate || "";
+        const machineEndDate = machineInfo.endDate || "";
+            const dateText = machineEndDate
+      ? `Start: ${formatDisplayDate(machineStartDate)} • End: ${formatDisplayDate(machineEndDate)}`
+      : `Start: ${formatDisplayDate(machineStartDate)}`;
+
+    setText(
+      "selectedMachineMeta",
+      `${machineInfo.machineCategory || selectedMachine?.type || "-"} • ${machineInfo.status || selectedMachine?.status || "-"} • ${dateText}`
+    );
+
         const bookingPointsBySubwork = {};
     (Array.isArray(d.bookingPoints) ? d.bookingPoints : []).forEach((bp) => {
       const key = [
@@ -420,24 +431,35 @@ async function loadMachineDetails(machineRow) {
         doneDate: q.workDate || ""
       })),
 
-      lastSixWorkDays: {
+        lastSixWorkDays: d.lastSixWorkDays || {
         workDonePct: 0,
-        actualHours: 0
+        standardHours: 0,
+        actualHours: 0,
+        overrunHours: 0,
+        reworkOtherHours: 0,
+        days: []
       },
 
       shortageMaterial: []
     };
 
+        // Render Last 6 Work Days immediately after data is prepared.
+    // This avoids losing mini cards if chart/table rendering fails later.
+    renderLastSixAndShortage();
+    renderLastSixTrendCards();
+
     renderDeptChartAndTableFromDb();
     renderQualityTable();
-    renderReworkOtherTable();   
+    renderReworkOtherTable();
     renderWorkTable();
-    renderLastSixAndShortage();
   } catch (err) {
     console.error(err);
     latestMachineDetails = null;
     setText("lastSixPct", "0%");
     setText("lastSixHours", "0 hrs");
+        if (el("lastSixGrid")) {
+      el("lastSixGrid").innerHTML = `<div class="empty-state">Failed to load last 6 work days trend</div>`;
+    }
     setText("shortageCount", "0");
     el("qualityTableBody").innerHTML = `<tr><td colspan="5">Failed to load quality details</td></tr>`;
     el("workTableBody").innerHTML = `<tr><td colspan="8">Failed to load work details</td></tr>`;
@@ -651,6 +673,69 @@ function renderLastSixAndShortage() {
   setText("shortageCount", shortage.length || 0);
 }
 
+function renderLastSixTrendCards() {
+  const host = el("lastSixGrid");
+  if (!host) return;
+
+  const daysRaw = latestMachineDetails?.lastSixWorkDays?.days || [];
+
+  host.innerHTML = "";
+
+  if (!daysRaw.length) {
+    host.innerHTML = `<div class="empty-state">No work trend available for this machine.</div>`;
+    return;
+  }
+
+  const days = [...daysRaw].sort((a, b) => clean(a.workDate).localeCompare(clean(b.workDate)));
+  const padded = [];
+
+  const blankCount = Math.max(0, 6 - days.length);
+  for (let i = 0; i < blankCount; i++) {
+    padded.push(null);
+  }
+
+  days.forEach((d) => padded.push(d));
+
+  padded.slice(-6).forEach((d, idx) => {
+    const dayNo = 6 - idx;
+
+    if (!d) {
+      const blank = document.createElement("div");
+      blank.className = "last-six-card empty";
+      blank.innerHTML = `
+        <div class="last-six-day">Day ${dayNo}</div>
+        <div class="last-six-date">No Data</div>
+        <div class="last-six-eff">-</div>
+        <div class="last-six-line">Std: -</div>
+        <div class="last-six-line">Actual: -</div>
+        <div class="last-six-line">Overrun: -</div>
+      `;
+      host.appendChild(blank);
+      return;
+    }
+
+        const hasEntry = d.hasEntry !== false && num(d.entryCount) > 0;
+        const efficiency = safePct(num(d.efficiencyPct));
+        const progress = safePct(num(d.progressPct));
+        const badgeClass = !hasEntry ? "empty" : efficiency >= 90 ? "good" : efficiency >= 70 ? "warn" : "bad";
+    
+    const card = document.createElement("div");
+    card.className = `last-six-card ${badgeClass}`;
+        card.innerHTML = `
+      <div class="last-six-day">Day ${dayNo}</div>
+      <div class="last-six-date">${escapeHtml(formatDisplayDate(d.workDate))}</div>
+      <div class="last-six-eff">${hasEntry ? progress.toFixed(1) + "%" : "No Entry"}</div>
+      <div class="last-six-line">Progress: ${progress.toFixed(1)}%</div>
+      <div class="last-six-line">Efficiency: ${hasEntry ? efficiency.toFixed(1) + "%" : "-"}</div>
+      <div class="last-six-line">Std: ${num(d.standardHours).toFixed(2)} hr</div>
+      <div class="last-six-line">Actual: ${num(d.actualHours).toFixed(2)} hr</div>
+      <div class="last-six-line">Overrun: ${num(d.overrunHours).toFixed(2)} hr</div>
+      <div class="last-six-line">Rework/Other: ${num(d.reworkOtherHours).toFixed(2)} hr</div>
+    `;
+    host.appendChild(card);
+  });
+}
+
 function clearMachineDetails() {
   ["machineStdHours", "machineActualHours", "machineRemainingHours", "machineOverrunHours"].forEach((id) => setText(id, "0"));
   ["machineEfficiencyPct", "machineCompletionPct", "lastSixPct"].forEach((id) => setText(id, "0%"));
@@ -660,6 +745,7 @@ function clearMachineDetails() {
   el("departmentTableBody").innerHTML = "";
   el("qualityTableBody").innerHTML = "";
     if (el("reworkOtherTableBody")) el("reworkOtherTableBody").innerHTML = "";
+      if (el("lastSixGrid")) el("lastSixGrid").innerHTML = "";
   el("workTableBody").innerHTML = "";
   if (deptChart) deptChart.destroy();
 }
