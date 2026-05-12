@@ -321,6 +321,134 @@
             </div>
 
           </div>
+            <!-- ROW 5: REWORK / OTHER / MAJOR LOSS SUMMARY -->
+          <section class="panel loss-summary-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Rework / Other / Major Loss Summary</h2>
+                <p id="lossSummaryRangeLabel">Current Month</p>
+              </div>
+
+              <div class="loss-filter-bar">
+                <select id="lossRangeSelect" class="dash-select">
+                  <option value="currentMonth">Current Month</option>
+                  <option value="lastMonth">Last Month</option>
+                  <option value="last6Months">Last 6 Months</option>
+                  <option value="year">Current Year</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+
+                <input id="lossFromDate" class="dash-select loss-date-input" type="date" />
+                <input id="lossToDate" class="dash-select loss-date-input" type="date" />
+
+                <button class="dash-btn primary loss-apply-btn" id="lossApplyBtn">
+                  <span class="btn-spinner" id="lossApplySpinner"></span>
+                  <span id="lossApplyText">Apply</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Summary cards in one line -->
+            <div class="loss-summary-kpis">
+              <div class="loss-box red">
+                <span>Rework Hours</span>
+                <strong id="lossReworkHours">0</strong>
+              </div>
+
+              <div class="loss-box orange">
+                <span>Other Hours</span>
+                <strong id="lossOtherHours">0</strong>
+              </div>
+
+              <div class="loss-box purple">
+                <span>Major Loss Hours</span>
+                <strong id="lossMajorHours">0</strong>
+              </div>
+
+              <div class="loss-box navy">
+                <span>Total Loss Hours</span>
+                <strong id="lossTotalHours">0</strong>
+              </div>
+            </div>
+
+            <!-- Rework and Major Loss tables in second line -->
+            <div class="detail-grid-lower">
+              <div class="panel inner-panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Rework by Root Area</h2>
+                    <p>Root cause area wise rework hours</p>
+                  </div>
+                </div>
+
+                <div class="table-wrap small-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Root Area</th>
+                        <th>Count</th>
+                        <th>Hours</th>
+                      </tr>
+                    </thead>
+                    <tbody id="lossReworkRootBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel inner-panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Major Loss by Reason</h2>
+                    <p>No power, short leave, meeting, waiting etc.</p>
+                  </div>
+                </div>
+
+                <div class="table-wrap small-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Reason</th>
+                        <th>Count</th>
+                        <th>Hours</th>
+                      </tr>
+                    </thead>
+                    <tbody id="lossMajorReasonBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- All loss details in third line -->
+            <div class="detail-grid-full">
+              <div class="panel inner-panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>All Loss Details</h2>
+                    <p>Combined Rework, Other Work and Major Loss entries</p>
+                  </div>
+                </div>
+
+                <div class="table-wrap work-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Machine</th>
+                        <th>Dept</th>
+                        <th>Sub Work</th>
+                        <th>Root Area</th>
+                        <th>Reason</th>
+                        <th>Hours</th>
+                        <th>Employee</th>
+                      </tr>
+                    </thead>
+                    <tbody id="lossDetailBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
 
           <!-- SHORTAGE PLACEHOLDER -->
           <section class="panel">

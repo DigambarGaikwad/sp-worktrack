@@ -4,18 +4,41 @@ let selectedMachine = null;
 let selectedWorkTab = "remaining";
 let deptChart = null;
 let latestMachineDetails = null;
+let latestLossSummary = null;
 
 const el = (id) => document.getElementById(id);
 
 document.addEventListener("DOMContentLoaded", () => {
   wireEvents();
   loadDashboard();
+
+  // Load loss summary separately, but never block main dashboard.
+  setTimeout(() => {
+    try {
+      loadLossSummary();
+    } catch (err) {
+      console.error("Loss summary delayed load failed:", err);
+    }
+  }, 500);
 });
 
 function wireEvents() {
   el("refreshBtn")?.addEventListener("click", loadDashboard);
 
- 
+       el("lossRangeSelect")?.addEventListener("change", () => {
+    const isCustom = el("lossRangeSelect")?.value === "custom";
+
+    if (el("lossFromDate")) el("lossFromDate").disabled = !isCustom;
+    if (el("lossToDate")) el("lossToDate").disabled = !isCustom;
+  });
+
+  el("lossApplyBtn")?.addEventListener("click", () => {
+    loadLossSummary();
+  });
+
+  // Default: date inputs disabled unless Custom Range is selected.
+  if (el("lossFromDate")) el("lossFromDate").disabled = true;
+  if (el("lossToDate")) el("lossToDate").disabled = true;
 
   el("statusFilter")?.addEventListener("change", applyFilters);
   el("typeFilter")?.addEventListener("change", applyFilters);
@@ -417,7 +440,7 @@ async function loadMachineDetails(machineRow) {
     setText("lastSixHours", "0 hrs");
     setText("shortageCount", "0");
     el("qualityTableBody").innerHTML = `<tr><td colspan="5">Failed to load quality details</td></tr>`;
-    el("workTableBody").innerHTML = `<tr><td colspan="7">Failed to load work details</td></tr>`;
+    el("workTableBody").innerHTML = `<tr><td colspan="8">Failed to load work details</td></tr>`;
   }
 }
 
@@ -639,6 +662,138 @@ function clearMachineDetails() {
     if (el("reworkOtherTableBody")) el("reworkOtherTableBody").innerHTML = "";
   el("workTableBody").innerHTML = "";
   if (deptChart) deptChart.destroy();
+}
+async function loadLossSummary() {
+  try {
+    setLossApplyLoading(true);
+
+    const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
+
+    const range = el("lossRangeSelect")?.value || "currentMonth";
+    const from = el("lossFromDate")?.value || "";
+    const to = el("lossToDate")?.value || "";
+
+    let url = `${apiBaseUrl}/api/dashboard/loss-summary?range=${encodeURIComponent(range)}`;
+
+    if (range === "custom") {
+      if (!from || !to) {
+        alert("Please select From Date and To Date for custom range.");
+        return;
+      }
+
+      url = `${apiBaseUrl}/api/dashboard/loss-summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    }
+
+    const res = await fetch(url);
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.message || `Loss summary API failed with status ${res.status}`);
+    }
+
+    latestLossSummary = json.data || {};
+    renderLossSummary();
+
+  } catch (err) {
+    console.error(err);
+    latestLossSummary = null;
+    renderLossSummaryError(err.message);
+
+  } finally {
+    setLossApplyLoading(false);
+  }
+}
+
+function renderLossSummary() {
+  const data = latestLossSummary || {};
+  const summary = data.summary || {};
+
+  setText("lossSummaryRangeLabel", `${data.range?.label || ""} (${data.range?.from || "-"} to ${data.range?.to || "-"})`);
+  setText("lossReworkHours", num(summary.reworkHours).toFixed(2));
+  setText("lossOtherHours", num(summary.otherHours).toFixed(2));
+  setText("lossMajorHours", num(summary.majorLossHours).toFixed(2));
+  setText("lossTotalHours", num(summary.totalLossHours).toFixed(2));
+
+  renderLossGroupTable("lossReworkRootBody", data.rework?.byRootArea || [], "No rework data found");
+  renderLossGroupTable("lossMajorReasonBody", data.majorLoss?.byReason || [], "No major loss data found");
+  renderLossDetails(data.details || []);
+}
+
+function renderLossGroupTable(bodyId, rows, emptyMessage) {
+  const body = el(bodyId);
+  if (!body) return;
+
+  body.innerHTML = "";
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="3">${escapeHtml(emptyMessage)}</td></tr>`;
+    return;
+  }
+
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name || "-")}</td>
+      <td>${num(r.count)}</td>
+      <td>${num(r.hours).toFixed(2)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderLossDetails(rows) {
+  const body = el("lossDetailBody");
+  if (!body) return;
+
+  body.innerHTML = "";
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="9">No loss entries found for selected range</td></tr>`;
+    return;
+  }
+
+  rows.slice(0, 200).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(formatDisplayDate(r.workDate))}</td>
+      <td>${escapeHtml(r.type || "-")}</td>
+      <td>${escapeHtml(r.machineNo || "-")}</td>
+      <td>${escapeHtml(r.department || "-")}</td>
+      <td>${escapeHtml(r.subwork || "-")}</td>
+      <td>${escapeHtml(r.rootArea || "-")}</td>
+      <td>${escapeHtml(r.reason || "-")}</td>
+      <td>${num(r.hours).toFixed(2)}</td>
+      <td>${escapeHtml(r.empName || "-")}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderLossSummaryError(message) {
+  setText("lossSummaryRangeLabel", "Loss summary load failed");
+  setText("lossReworkHours", "0");
+  setText("lossOtherHours", "0");
+  setText("lossMajorHours", "0");
+  setText("lossTotalHours", "0");
+
+  const msg = escapeHtml(message || "Unknown error");
+  if (el("lossReworkRootBody")) el("lossReworkRootBody").innerHTML = `<tr><td colspan="3">${msg}</td></tr>`;
+  if (el("lossMajorReasonBody")) el("lossMajorReasonBody").innerHTML = `<tr><td colspan="3">${msg}</td></tr>`;
+  if (el("lossDetailBody")) el("lossDetailBody").innerHTML = `<tr><td colspan="9">${msg}</td></tr>`;
+}
+
+function setLossApplyLoading(isLoading) {
+  const btn = el("lossApplyBtn");
+  const text = el("lossApplyText");
+
+  if (!btn) return;
+
+  btn.disabled = isLoading;
+  btn.classList.toggle("loading", isLoading);
+
+  if (text) {
+    text.textContent = isLoading ? "Applying..." : "Apply";
+  }
 }
 
 function setLoadingState(isLoading) {

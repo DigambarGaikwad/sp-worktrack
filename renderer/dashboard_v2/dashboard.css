@@ -719,3 +719,138 @@ body,
   white-space: normal;
   line-height: 1.35;
 }
+.loss-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.loss-date-input {
+  width: 150px;
+}
+
+.loss-summary-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.inner-panel {
+  box-shadow: none;
+  margin-top: 0;
+  background: #fbfcff;
+}
+
+.loss-box.purple {
+  background: var(--purple-light);
+  color: var(--purple);
+}
+
+.loss-box.navy {
+  background: var(--blue-light);
+  color: var(--navy);
+}
+
+#lossDetailBody td:nth-child(7) {
+  min-width: 260px;
+  max-width: 520px;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+@media (max-width: 1200px) {
+  .loss-summary-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loss-filter-bar {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .loss-summary-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .loss-date-input {
+    width: 100%;
+  }
+}
+.loss-apply-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 86px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+
+.loss-apply-btn:active {
+  transform: scale(0.94);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.loss-apply-btn.loading {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(46, 158, 85, 0.25);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  display: none;
+  animation: spwtSpin 0.75s linear infinite;
+}
+
+.loss-apply-btn.loading .btn-spinner {
+  display: inline-block;
+}
+
+@keyframes spwtSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Loss summary section must stack rows vertically */
+.loss-summary-panel {
+  display: block;
+}
+
+.loss-summary-panel > .panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.loss-summary-panel > .loss-summary-kpis,
+.loss-summary-panel > .detail-grid-lower,
+.loss-summary-panel > .detail-grid-full {
+  width: 100%;
+}
+
+.loss-summary-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.loss-summary-panel .inner-panel {
+  min-width: 0;
+}
+
+#lossDetailBody td:nth-child(7) {
+  min-width: 260px;
+  max-width: 520px;
+  white-space: normal;
+  line-height: 1.35;
+}
