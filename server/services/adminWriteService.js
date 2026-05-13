@@ -34,6 +34,30 @@ function pbEscape(value) {
   return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function isMissingCollectionError(err) {
+  return err?.status === 404 || /missing collection context/i.test(String(err?.message || ""));
+}
+
+function plannedAbsenceCollectionMissingError() {
+  const err = new Error("PocketBase collection planned_absences is missing. Create it before saving planned absences.");
+  err.status = 400;
+  err.details = {
+    reasonCode: "PLANNED_ABSENCES_COLLECTION_MISSING",
+    collection: "planned_absences",
+    requiredFields: [
+      "emp_code",
+      "emp_name",
+      "department",
+      "from_date",
+      "to_date",
+      "reason",
+      "remark",
+      "status"
+    ]
+  };
+  return err;
+}
+
 async function listAll(collectionName, options = {}) {
   const all = [];
   let page = 1;
@@ -367,7 +391,13 @@ function normalizePlannedAbsence(body = {}) {
 async function listPlannedAbsences(params = {}) {
   const status = clean(params.status || "");
   const filter = status ? `status="${pbEscape(status)}"` : "";
-  return listAll("planned_absences", { perPage: 500, sort: "-from_date", filter });
+
+  try {
+    return await listAll("planned_absences", { perPage: 500, sort: "-from_date", filter });
+  } catch (err) {
+    if (isMissingCollectionError(err)) return [];
+    throw err;
+  }
 }
 
 async function savePlannedAbsence(body = {}) {
@@ -376,16 +406,27 @@ async function savePlannedAbsence(body = {}) {
   if (!data.from_date) throw new Error("From date is required for planned absence.");
   if (!data.to_date) data.to_date = data.from_date;
 
-  if (clean(body.id)) {
-    return updateRecord("planned_absences", clean(body.id), data);
-  }
+  try {
+    if (clean(body.id)) {
+      return await updateRecord("planned_absences", clean(body.id), data);
+    }
 
-  return createRecord("planned_absences", data);
+    return await createRecord("planned_absences", data);
+  } catch (err) {
+    if (isMissingCollectionError(err)) throw plannedAbsenceCollectionMissingError();
+    throw err;
+  }
 }
 
 async function deletePlannedAbsence(id) {
   if (!clean(id)) throw new Error("Planned absence ID is required.");
-  return deleteRecord("planned_absences", clean(id));
+
+  try {
+    return await deleteRecord("planned_absences", clean(id));
+  } catch (err) {
+    if (isMissingCollectionError(err)) throw plannedAbsenceCollectionMissingError();
+    throw err;
+  }
 }
 
 module.exports = {
