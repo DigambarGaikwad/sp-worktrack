@@ -3,7 +3,7 @@
 // If syncMode = "deactivateMissing", records removed from admin screen are marked inactive.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
-const planned = require("./adminWriteService");
+const planned = require("./plannedAbsenceService");
 
 function clean(value) { return String(value ?? "").trim(); }
 function slug(value) { return clean(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
@@ -17,24 +17,6 @@ function bool(value, defaultValue = true) {
 function num(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function isMissingCollectionError(err) { return err?.status === 404 || /missing collection context/i.test(String(err?.message || "")); }
-function isGeneralShift(value) { const text = clean(value).toLowerCase(); return text.includes("general") || text === "g" || text === "gen"; }
-function timeToMinutes(value) { const text = clean(value); const m = text.match(/^(\d{1,2}):(\d{2})/); if (!m) return null; return Number(m[1]) * 60 + Number(m[2]); }
-function calculateShiftMinutes(shift) {
-  const explicit = num(shift.available_minutes, 0) || num(shift.shift_available, 0);
-  if (explicit > 0) return explicit;
-  const start = timeToMinutes(shift.start_time || shift.start);
-  const end = timeToMinutes(shift.end_time || shift.end);
-  const breakMinutes = num(shift.break_minutes ?? shift.breakMinutes, 0);
-  if (start == null || end == null) return 0;
-  let gross = end - start;
-  if (gross < 0) gross += 24 * 60;
-  return Math.max(gross - breakMinutes, 0);
-}
-async function getGeneralShiftMinutesFromDb() {
-  const shifts = await listAll("shifts", { perPage: 500 });
-  const general = shifts.find((s) => isGeneralShift(s.shift_name || s.shift_code));
-  return general ? calculateShiftMinutes(general) : 0;
-}
 
 async function listAll(collectionName, options = {}) {
   const all = [];
@@ -57,7 +39,6 @@ async function updateRecord(collectionName, id, body) { return pocketBaseRequest
 async function deleteRecord(collectionName, id) { return pocketBaseRequest(`/api/collections/${collectionName}/records/${id}`, { method: "DELETE" }); }
 
 function makeMap(records, keyFn) { const map = new Map(); records.forEach((r) => { const key = keyFn(r); if (key) map.set(key, r); }); return map; }
-
 async function syncCollection({ collection, records, keyFn, deactivateMissing = false, deactivateBody = { active: false } }) {
   const existing = await listAll(collection, { perPage: 1000 });
   const existingMap = makeMap(existing, keyFn);
@@ -142,24 +123,6 @@ async function saveAdminMasterData(rawData = {}) {
   return { ok: true, mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only", message: deactivateMissing ? "Admin master data saved. Missing records marked inactive." : "Admin master data saved to PocketBase.", results };
 }
 
-function dateAddDays(date, days) { const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()); d.setDate(d.getDate() + days); return d; }
-function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
-function workingDatesBetween(from, to) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean(from))) return [];
-  const endText = /^\d{4}-\d{2}-\d{2}$/.test(clean(to)) ? clean(to) : clean(from);
-  const [fy, fm, fd] = clean(from).split("-").map(Number); const [ty, tm, td] = endText.split("-").map(Number);
-  let cursor = new Date(fy, fm - 1, fd); const end = new Date(ty, tm - 1, td); const dates = [];
-  while (cursor <= end) { if (cursor.getDay() !== 0) dates.push(dateKey(cursor)); cursor = dateAddDays(cursor, 1); }
-  return dates;
-}
-async function listPlannedAbsences(params = {}) {
-  const [items, generalShiftMinutes] = await Promise.all([planned.listPlannedAbsences(params), getGeneralShiftMinutesFromDb()]);
-  return items.map((item) => {
-    const plannedDates = workingDatesBetween(item.from_date, item.to_date);
-    return { ...item, plannedDates, plannedDays: plannedDates.length, plannedHours: Number(((plannedDates.length * generalShiftMinutes) / 60).toFixed(1)), generalShiftMinutes };
-  });
-}
-
 function missingSkillCollectionError() { const err = new Error("PocketBase collection skill_matrix is missing. Create it before saving skill matrix."); err.status = 400; err.details = { reasonCode: "SKILL_MATRIX_COLLECTION_MISSING", collection: "skill_matrix" }; return err; }
 async function listSkillMatrix(params = {}) {
   const emp = clean(params.emp_code || params.empCode);
@@ -189,4 +152,12 @@ async function saveSkillMatrix(body = {}) {
 }
 async function deleteSkillMatrix(id) { try { return await deleteRecord("skill_matrix", clean(id)); } catch (err) { if (isMissingCollectionError(err)) throw missingSkillCollectionError(); throw err; } }
 
-module.exports = { saveAdminMasterData, listPlannedAbsences, savePlannedAbsence: planned.savePlannedAbsence, deletePlannedAbsence: planned.deletePlannedAbsence, listSkillMatrix, saveSkillMatrix, deleteSkillMatrix };
+module.exports = {
+  saveAdminMasterData,
+  listPlannedAbsences: planned.listPlannedAbsences,
+  savePlannedAbsence: planned.savePlannedAbsence,
+  deletePlannedAbsence: planned.deletePlannedAbsence,
+  listSkillMatrix,
+  saveSkillMatrix,
+  deleteSkillMatrix
+};
