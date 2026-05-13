@@ -105,6 +105,12 @@ router.get("/people", async (req, res) => {
   try {
     const data = await getPeopleDashboard(req.query);
 
+    data.meta = {
+      ...(data.meta || {}),
+      service: "peopleDashboardServiceV2",
+      scoringVersion: "people-score-v2-capped-2026-05-13"
+    };
+
     res.json({
       ok: true,
       data
