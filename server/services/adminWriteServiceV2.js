@@ -5,8 +5,6 @@
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const planned = require("./adminWriteService");
 
-const GENERAL_SHIFT_MINUTES = 465;
-
 function clean(value) { return String(value ?? "").trim(); }
 function slug(value) { return clean(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
 function bool(value, defaultValue = true) {
@@ -19,6 +17,24 @@ function bool(value, defaultValue = true) {
 function num(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function isMissingCollectionError(err) { return err?.status === 404 || /missing collection context/i.test(String(err?.message || "")); }
+function isGeneralShift(value) { const text = clean(value).toLowerCase(); return text.includes("general") || text === "g" || text === "gen"; }
+function timeToMinutes(value) { const text = clean(value); const m = text.match(/^(\d{1,2}):(\d{2})/); if (!m) return null; return Number(m[1]) * 60 + Number(m[2]); }
+function calculateShiftMinutes(shift) {
+  const explicit = num(shift.available_minutes, 0) || num(shift.shift_available, 0);
+  if (explicit > 0) return explicit;
+  const start = timeToMinutes(shift.start_time || shift.start);
+  const end = timeToMinutes(shift.end_time || shift.end);
+  const breakMinutes = num(shift.break_minutes ?? shift.breakMinutes, 0);
+  if (start == null || end == null) return 0;
+  let gross = end - start;
+  if (gross < 0) gross += 24 * 60;
+  return Math.max(gross - breakMinutes, 0);
+}
+async function getGeneralShiftMinutesFromDb() {
+  const shifts = await listAll("shifts", { perPage: 500 });
+  const general = shifts.find((s) => isGeneralShift(s.shift_name || s.shift_code));
+  return general ? calculateShiftMinutes(general) : 0;
+}
 
 async function listAll(collectionName, options = {}) {
   const all = [];
@@ -137,10 +153,10 @@ function workingDatesBetween(from, to) {
   return dates;
 }
 async function listPlannedAbsences(params = {}) {
-  const items = await planned.listPlannedAbsences(params);
+  const [items, generalShiftMinutes] = await Promise.all([planned.listPlannedAbsences(params), getGeneralShiftMinutesFromDb()]);
   return items.map((item) => {
     const plannedDates = workingDatesBetween(item.from_date, item.to_date);
-    return { ...item, plannedDates, plannedDays: plannedDates.length, plannedHours: Number(((plannedDates.length * GENERAL_SHIFT_MINUTES) / 60).toFixed(1)) };
+    return { ...item, plannedDates, plannedDays: plannedDates.length, plannedHours: Number(((plannedDates.length * generalShiftMinutes) / 60).toFixed(1)), generalShiftMinutes };
   });
 }
 
