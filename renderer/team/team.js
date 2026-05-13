@@ -2,6 +2,8 @@
   const CONFIG = window.SPWT_CONFIG || {};
   const WEBAPP_URL = CONFIG.SHEETS_WEBAPP_URL || "";
   const SECRET = CONFIG.SECRET || "DIGAMBAR";
+  const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
+  const DATA_SOURCE = CONFIG.DATA_SOURCE || "local";
 
   const $ = (id) => document.getElementById(id);
 
@@ -34,21 +36,53 @@
   }
 
   function wireEvents() {
-    $("refreshPeopleBtn")?.addEventListener("click", async function () {
-      showLoading();
-
-      try {
-        const payload = await fetchPeopleDashboard();
-        renderDashboard(payload);
-      } catch (err) {
-        console.error(err);
-        renderDashboard(samplePayload());
-        showOfflineNotice(err);
-      }
+    ["periodFilter", "shiftFilter", "departmentFilter", "employeeFilter"].forEach(function (id) {
+      $(id)?.addEventListener("change", reloadPeopleDashboard);
     });
+
+    $("refreshPeopleBtn")?.addEventListener("click", reloadPeopleDashboard);
+  }
+
+  async function reloadPeopleDashboard() {
+    showLoading();
+
+    try {
+      const payload = await fetchPeopleDashboard();
+      renderDashboard(payload);
+    } catch (err) {
+      console.error(err);
+      renderDashboard(samplePayload());
+      showOfflineNotice(err);
+    }
   }
 
   async function fetchPeopleDashboard() {
+    if (DATA_SOURCE === "db") {
+      return fetchPeopleDashboardFromDb();
+    }
+
+    return fetchPeopleDashboardFromSheet();
+  }
+
+  async function fetchPeopleDashboardFromDb() {
+    const params = new URLSearchParams({
+      period: $("periodFilter")?.value || "today",
+      shift: $("shiftFilter")?.value || "All",
+      department: $("departmentFilter")?.value || "All",
+      employee: $("employeeFilter")?.value || "All"
+    });
+
+    const res = await fetch(`${API_BASE_URL}/api/dashboard/people?${params.toString()}`);
+    const payload = await res.json().catch(() => null);
+
+    if (!res.ok || !payload?.ok) {
+      throw new Error(payload?.message || `People Dashboard DB API failed with status ${res.status}`);
+    }
+
+    return payload.data || {};
+  }
+
+  async function fetchPeopleDashboardFromSheet() {
     if (!WEBAPP_URL) {
       throw new Error("Missing SHEETS_WEBAPP_URL in renderer/config.js");
     }
@@ -154,9 +188,9 @@
 
     cards.push(winnerCard({
       icon: "🏆",
-      label: "Top Performer Yesterday",
+      label: "Top Performer Selected Period",
       name: topYesterday?.name || "No data",
-      meta: topYesterday ? personMeta(topYesterday) : "No performance entry found for yesterday.",
+      meta: topYesterday ? personMeta(topYesterday) : "No performance entry found for selected period.",
       badges: topYesterday ? badgeList(topYesterday) : [],
       type: "gold"
     }));
@@ -204,7 +238,7 @@
 
     setHtml("yesterdayAbsentList", yList.length ? yList.map(function (a) {
       return absentRow(a.name, `${a.department || "-"} • ${a.shift || "-"}`, "1 Day");
-    }).join("") : emptyAbsent("No absent employees found for yesterday."));
+    }).join("") : emptyAbsent("No absent employees found for selected period."));
 
     setHtml("monthAbsentList", mList.length ? mList.map(function (a) {
       return absentRow(
@@ -255,7 +289,7 @@
           </div>
 
           <div class="emp-metrics">
-            ${miniMetric("Yesterday", fmtPct(p.yesterdayProductivityPct))}
+            ${miniMetric("Period Prod", fmtPct(p.yesterdayProductivityPct))}
             ${miniMetric("Month", fmtPct(p.monthProductivityPct))}
             ${miniMetric("OT Hrs", fmtHours(p.overtimeHours))}
             ${miniMetric("Absent", Number(p.absentDays || 0))}
@@ -373,7 +407,7 @@
         yesterdayProductivityPct: 124,
         overtimeHours: 1.5,
         efficiencyPct: 118,
-        badges: ["Yesterday Topper", "Month Top 3"]
+        badges: ["Selected Period Topper", "Month Top 3"]
       },
       topMonth: [
         { name: "Rahul Patil", department: "Electrical", monthProductivityPct: 116, absentDays: 0, badges: ["Month Rank 1"] },
@@ -432,7 +466,7 @@
         { icon: "⚠️", title: "Overtime Dependency", text: "Tubing has high overtime contribution this month. Review load balancing and support manpower." },
         { icon: "📉", title: "Rework Watch", text: "Mechanical rework hours are increasing. Root area analysis is recommended." },
         { icon: "👥", title: "Manpower Gap", text: "Welding/Fitting shows capacity gap against current workload. Cross-support may be needed." },
-        { icon: "🏆", title: "Recognition", text: "Amit Sharma appears as yesterday top performer and also month top performer candidate." }
+        { icon: "🏆", title: "Recognition", text: "Amit Sharma appears as selected period top performer and also month top performer candidate." }
       ]
     };
   }
@@ -441,7 +475,7 @@
     const parts = [];
 
     if (p.department) parts.push(p.department);
-    if (p.yesterdayProductivityPct != null) parts.push("Yesterday " + fmtPct(p.yesterdayProductivityPct));
+    if (p.yesterdayProductivityPct != null) parts.push("Period " + fmtPct(p.yesterdayProductivityPct));
     if (p.monthProductivityPct != null) parts.push("MTD " + fmtPct(p.monthProductivityPct));
     if (p.overtimeHours != null) parts.push("OT " + fmtHours(p.overtimeHours) + " hrs");
     if (p.efficiencyPct != null) parts.push("Efficiency " + fmtPct(p.efficiencyPct));
