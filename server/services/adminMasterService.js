@@ -204,23 +204,27 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
   const bookingMap = buildBookingPointMap(bookingPoints);
   const qualityMap = buildQualityPointMap(qualityPoints);
 
-  const deptNameByCode = new Map(
-    departments.map((x) => [clean(x.department_code), clean(x.department_name)])
+  const activeDeptNameByCode = new Map(
+    departments
+      .filter((x) => normalizeBool(x.active, true))
+      .map((x) => [clean(x.department_code), clean(x.department_name)])
+  );
+
+  const activeTypeCodes = new Set(
+    machineTypes
+      .filter((x) => normalizeBool(x.active, true))
+      .map((x) => clean(x.type_code))
+      .filter(Boolean)
   );
 
   const catalog = {};
 
-  machineTypes
-    .filter((x) => normalizeBool(x.active, true))
-    .forEach((mt) => {
-      const typeCode = clean(mt.type_code);
-      if (!typeCode) return;
-
-      catalog[typeCode] = {
-        mainWorks: [],
-        subWorks: {}
-      };
-    });
+  activeTypeCodes.forEach((typeCode) => {
+    catalog[typeCode] = {
+      mainWorks: [],
+      subWorks: {}
+    };
+  });
 
   subworks
     .filter((x) => normalizeBool(x.active, true))
@@ -230,6 +234,8 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
       const subworkCode = clean(sw.subwork_code);
 
       if (!typeCode || !deptCode || !subworkCode) return;
+      if (!activeTypeCodes.has(typeCode)) return;
+      if (!activeDeptNameByCode.has(deptCode)) return;
 
       if (!catalog[typeCode]) {
         catalog[typeCode] = {
@@ -238,7 +244,7 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
         };
       }
 
-      const deptName = deptNameByCode.get(deptCode) || deptCode;
+      const deptName = activeDeptNameByCode.get(deptCode);
 
       if (!catalog[typeCode].mainWorks.includes(deptName)) {
         catalog[typeCode].mainWorks.push(deptName);
@@ -269,9 +275,19 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
   return catalog;
 }
 
+function buildLinkedMainWorks(workCatalogByType) {
+  const names = new Set();
+
+  Object.values(workCatalogByType || {}).forEach((catalog) => {
+    (catalog.mainWorks || []).forEach((name) => {
+      if (clean(name)) names.add(clean(name));
+    });
+  });
+
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
 function buildLegacySubWorks(workCatalogByType) {
-  // Old frontend still has fallback subWorksMap by department.
-  // Build one combined department map for compatibility.
   const subWorksMap = {};
 
   Object.values(workCatalogByType || {}).forEach((catalog) => {
@@ -323,15 +339,13 @@ async function getAdminMasterData() {
     listAll("loss_reasons"),
     listAll("root_areas")
   ]);
-   
-
 
   const frontendMachineTypes = buildMachineTypes(machineTypes);
   const frontendMachines = buildMachines(machines);
   const frontendEmployees = buildEmployees(employees);
   const frontendShifts = buildShifts(shifts);
-  const mainWorks = buildDepartments(departments);
   const workCatalogByType = buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoints, qualityPoints);
+  const mainWorks = buildLinkedMainWorks(workCatalogByType);
   const subWorks = buildLegacySubWorks(workCatalogByType);
 
   return {
@@ -349,6 +363,7 @@ async function getAdminMasterData() {
     rootAreas: buildRootAreas(rootAreas),
     meta: {
       source: "pocketbase",
+      departmentRule: "active departments only when linked to active subworks by active machine type",
       generatedAt: new Date().toISOString(),
       counts: {
         employees: frontendEmployees.length,
@@ -356,6 +371,7 @@ async function getAdminMasterData() {
         machineTypes: frontendMachineTypes.length,
         machines: frontendMachines.length,
         departments: mainWorks.length,
+        allDepartmentMasterRows: departments.length,
         subworks: subworks.length,
         bookingPoints: bookingPoints.length,
         qualityPoints: qualityPoints.length,
