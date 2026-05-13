@@ -152,14 +152,17 @@ function preferredDepartment(person) {
   return bestDept;
 }
 
-function scorePerson({ productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, availableHours }) {
+function scorePerson({ productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, availableHours, absentDays }) {
   if (availableHours <= 0) return 0;
 
+  // Month score should not reward one high-output OT entry while ignoring reliability.
+  // Productivity / utilization / efficiency are capped, and MTD absence is a direct penalty.
   const score =
-    clamp(productivityPct, 0, 120) * 0.50 +
-    clamp(utilizationPct, 0, 100) * 0.25 +
+    clamp(productivityPct, 0, 120) * 0.45 +
+    clamp(utilizationPct, 0, 100) * 0.20 +
     clamp(efficiencyPct, 0, 120) * 0.15 +
-    clamp(attendancePct, 0, 100) * 0.10 -
+    clamp(attendancePct, 0, 100) * 0.20 -
+    clamp(absentDays, 0, 31) * 3.0 -
     clamp(reworkHours, 0, 999) * 1.0 -
     clamp(otherWorkHours, 0, 999) * 0.3;
 
@@ -185,7 +188,7 @@ function makeOutputPerson(person, monthAbsentMap, selectedWorkingDays) {
     code: person.code,
     name: person.name || person.code || "Unknown",
     department: preferredDepartment(person),
-    score: scorePerson({ productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, availableHours }),
+    score: scorePerson({ productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, availableHours, absentDays }),
     yesterdayProductivityPct: productivityPct,
     monthProductivityPct: productivityPct,
     overtimeHours: hours(person.overtimeActual),
