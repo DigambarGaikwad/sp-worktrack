@@ -6,8 +6,6 @@
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const { getPeopleDashboard: getPeopleDashboardV2 } = require("./peopleDashboardServiceV2");
 
-const GENERAL_SHIFT_FALLBACK_MINUTES = 465;
-
 function clean(value) {
   return String(value ?? "").trim();
 }
@@ -26,6 +24,32 @@ function isActive(value) {
 function isGeneralShift(value) {
   const text = clean(value).toLowerCase();
   return text.includes("general") || text === "g" || text === "gen";
+}
+
+function timeToMinutes(value) {
+  const text = clean(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return h * 60 + m;
+}
+
+function calculateShiftMinutes(shift) {
+  const explicit = num(shift.available_minutes, 0) || num(shift.shift_available, 0);
+  if (explicit > 0) return explicit;
+
+  const start = timeToMinutes(shift.start_time || shift.start);
+  const end = timeToMinutes(shift.end_time || shift.end);
+  const breakMinutes = num(shift.break_minutes ?? shift.breakMinutes, 0);
+
+  if (start == null || end == null) return 0;
+
+  let gross = end - start;
+  if (gross < 0) gross += 24 * 60;
+
+  return Math.max(gross - breakMinutes, 0);
 }
 
 function dateKey(date) {
@@ -66,7 +90,6 @@ function workingDates(range) {
   const end = new Date(ty, tm - 1, td);
 
   while (cursor <= end) {
-    // Sunday excluded from present / absent manpower expectation.
     if (cursor.getDay() !== 0) dates.push(dateKey(cursor));
     cursor = addDays(cursor, 1);
   }
@@ -121,12 +144,8 @@ async function listAll(collectionName, options = {}) {
 
 function getGeneralShiftMinutes(shifts) {
   const general = shifts.find((s) => isGeneralShift(s.shift_name || s.shift_code));
-  if (!general) return GENERAL_SHIFT_FALLBACK_MINUTES;
-
-  const explicit = num(general.available_minutes, 0) || num(general.shift_available, 0);
-  if (explicit > 0) return explicit;
-
-  return GENERAL_SHIFT_FALLBACK_MINUTES;
+  if (!general) return 0;
+  return calculateShiftMinutes(general);
 }
 
 function buildGeneralAttendance(attendance, range) {
@@ -334,6 +353,7 @@ async function getPeopleDashboard(params = {}) {
     sundayExcludedFromAbsent: true,
     departmentSource: "departments master + employees + production_entry_lines",
     generalShiftMinutes,
+    generalShiftSource: "shifts master: available_minutes/shift_available or start-end-break",
     selectedWorkingDates: selectedDates,
     monthWorkingDates: monthDates,
     masterDepartmentCount: masterDepartments.length
