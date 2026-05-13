@@ -11,7 +11,7 @@ const {
 
 const {
   getPeopleDashboard
-} = require("../services/peopleDashboardServiceV3");
+} = require("../services/peopleDashboardServiceV4");
 
 const router = express.Router();
 
@@ -94,7 +94,7 @@ router.get("/people", async (req, res) => {
 
     data.meta = {
       ...(data.meta || {}),
-      service: data.meta?.service || "peopleDashboardServiceV3",
+      service: data.meta?.service || "peopleDashboardServiceV4",
       scoringVersion: "people-score-v2-capped-2026-05-13"
     };
 
