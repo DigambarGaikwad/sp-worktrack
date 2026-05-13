@@ -66,6 +66,7 @@ function workingDates(range) {
   const end = new Date(ty, tm - 1, td);
 
   while (cursor <= end) {
+    // Sunday excluded from present / absent manpower expectation.
     if (cursor.getDay() !== 0) dates.push(dateKey(cursor));
     cursor = addDays(cursor, 1);
   }
@@ -198,6 +199,69 @@ function buildPresenceLists(activeEmployees, presentByDate, dates, deptFilter, e
   return { present, absent };
 }
 
+function masterDepartmentsFromRecords(departmentsRaw, activeEmployees, existingDepartments) {
+  const names = new Set();
+
+  departmentsRaw
+    .filter((d) => isActive(d.active))
+    .forEach((d) => {
+      const name = clean(d.department_name || d.name || d.department_code);
+      if (name) names.add(name);
+    });
+
+  activeEmployees.forEach((e) => {
+    const name = clean(e.department);
+    if (name && name !== "-") names.add(name);
+  });
+
+  (existingDepartments || []).forEach((d) => {
+    const name = clean(d.department);
+    if (name && name !== "-") names.add(name);
+  });
+
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
+function ensureAllDepartments(departments, masterDepartments, deptFilter) {
+  const map = new Map();
+
+  (departments || []).forEach((d) => {
+    const name = clean(d.department);
+    if (!name) return;
+    map.set(name, {
+      department: name,
+      people: num(d.people, 0),
+      productivityPct: num(d.productivityPct, 0),
+      status: clean(d.status || "Stable"),
+      standardHours: num(d.standardHours, 0),
+      actualHours: num(d.actualHours, 0),
+      reworkHours: num(d.reworkHours, 0),
+      otherWorkHours: num(d.otherWorkHours, 0)
+    });
+  });
+
+  masterDepartments.forEach((name) => {
+    if (deptFilter !== "All" && name !== deptFilter) return;
+    if (!map.has(name)) {
+      map.set(name, {
+        department: name,
+        people: 0,
+        productivityPct: 0,
+        status: "No Entry",
+        standardHours: 0,
+        actualHours: 0,
+        reworkHours: 0,
+        otherWorkHours: 0
+      });
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (num(b.actualHours) !== num(a.actualHours)) return num(b.actualHours) - num(a.actualHours);
+    return clean(a.department).localeCompare(clean(b.department));
+  });
+}
+
 async function getPeopleDashboard(params = {}) {
   const baseParams = { ...params, shift: "All" };
   const data = await getPeopleDashboardV2(baseParams);
@@ -211,10 +275,11 @@ async function getPeopleDashboard(params = {}) {
   const selectedDates = workingDates(selectedRange);
   const monthDates = workingDates(monthRange);
 
-  const [employeesRaw, attendanceRaw, shiftsRaw] = await Promise.all([
+  const [employeesRaw, attendanceRaw, shiftsRaw, departmentsRaw] = await Promise.all([
     listAll("employees", { perPage: 1000 }),
     listAll("attendance", { perPage: 5000, sort: "-work_date" }),
-    listAll("shifts", { perPage: 500 })
+    listAll("shifts", { perPage: 500 }),
+    listAll("departments", { perPage: 500, sort: "department_name" })
   ]);
 
   const activeEmployees = employeesRaw
@@ -240,6 +305,13 @@ async function getPeopleDashboard(params = {}) {
   const totalStandardMinutes = num(data.kpis?.standardOutputHours, 0) * 60;
   const totalActualMinutes = num(data.kpis?.utilizedHours, 0) * 60;
 
+  const masterDepartments = masterDepartmentsFromRecords(departmentsRaw, activeEmployees, data.departments);
+  data.departments = ensureAllDepartments(data.departments, masterDepartments, deptFilter);
+  data.filterOptions = {
+    ...(data.filterOptions || {}),
+    departments: masterDepartments
+  };
+
   data.presentList = selectedLists.present;
   data.yesterdayAbsent = selectedLists.absent;
   data.monthAbsent = monthLists.absent;
@@ -259,9 +331,12 @@ async function getPeopleDashboard(params = {}) {
     attendanceRule: "general-shift-only",
     presentDrilldown: true,
     absentDrilldown: true,
+    sundayExcludedFromAbsent: true,
+    departmentSource: "departments master + employees + production_entry_lines",
     generalShiftMinutes,
     selectedWorkingDates: selectedDates,
-    monthWorkingDates: monthDates
+    monthWorkingDates: monthDates,
+    masterDepartmentCount: masterDepartments.length
   };
 
   return data;
