@@ -29,7 +29,7 @@
             <button class="btn green" id="adminLoginBtn">Login</button>
             <button class="btn grey" id="adminCancelBtn">Cancel</button>
           </div>
-          <div class="small-hint">PIN is stored in <b>data/adminOverrides.json</b></div>
+          <div class="small-hint">PIN is loaded from DB master settings in DB mode.</div>
         </div>
 
         <!-- PANEL -->
@@ -152,7 +152,7 @@
           <hr />
 
           <div class="row-between">
-            <div class="small-hint">These changes apply immediately in the app after Save.</div>
+            <div class="small-hint">These changes save directly to PocketBase DB in DB mode.</div>
             <div class="row">
               <button class="btn grey" id="adminLogoutBtn">Logout</button>
               <a class="btn grey" href="../../index.html">Close</a>
@@ -178,5 +178,6 @@
 
 <script src="admin.js"></script>
 <script src="../app.js"></script>
+<script src="adminDb.js"></script>
 </body>
 </html>
