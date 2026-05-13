@@ -1,7 +1,6 @@
 // server/services/adminWriteService.js
 // SP WorkTrack DB Edition - Admin write service
-// Saves admin screen master data into PocketBase using safe upsert logic.
-// It does not delete missing masters automatically.
+// Planned absence helper is tolerant: if collection/schema is not ready, list returns empty and save gives clear error.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
@@ -17,6 +16,7 @@ function bool(value, defaultValue = true) {
 function num(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function isMissingCollectionError(err) { return err?.status === 404 || /missing collection context/i.test(String(err?.message || "")); }
+function isSchemaNotReadyError(err) { return err?.status === 400 || /something went wrong/i.test(String(err?.message || "")); }
 
 async function listAll(collectionName, options = {}) {
   const all = [];
@@ -40,67 +40,26 @@ async function updateRecord(collectionName, id, body) { return pocketBaseRequest
 async function deleteRecord(collectionName, id) { return pocketBaseRequest(`/api/collections/${collectionName}/records/${id}`, { method: "DELETE" }); }
 async function upsertByFilter(collectionName, filter, body) { const existing = await findOne(collectionName, filter); if (existing?.id) return updateRecord(collectionName, existing.id, body); return createRecord(collectionName, body); }
 
-function textField(name) {
-  return { name, type: "text", required: false, options: { min: null, max: null, pattern: "" } };
-}
-
+function textField(name) { return { name, type: "text", required: false, system: false, hidden: false, options: { min: null, max: null, pattern: "" } }; }
 async function ensureBaseCollection(name, fieldNames) {
-  try {
-    await pocketBaseRequest(`/api/collections/${name}`, { method: "GET" });
-    return { existed: true };
-  } catch (err) {
-    if (!isMissingCollectionError(err)) throw err;
+  try { await pocketBaseRequest(`/api/collections/${name}`, { method: "GET" }); return { existed: true }; }
+  catch (err) { if (!isMissingCollectionError(err)) throw err; }
+
+  const payloads = [
+    { name, type: "base", system: false, listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null, fields: fieldNames.map(textField) },
+    { name, type: "base", system: false, listRule: "", viewRule: "", createRule: "", updateRule: "", deleteRule: "", schema: fieldNames.map(textField) }
+  ];
+
+  let lastErr = null;
+  for (const payload of payloads) {
+    try { await pocketBaseRequest("/api/collections", { method: "POST", body: payload }); return { created: true }; }
+    catch (err) { lastErr = err; }
   }
-
-  const schemaPayload = {
-    name,
-    type: "base",
-    system: false,
-    listRule: "",
-    viewRule: "",
-    createRule: "",
-    updateRule: "",
-    deleteRule: "",
-    schema: fieldNames.map(textField)
-  };
-
-  try {
-    await pocketBaseRequest("/api/collections", { method: "POST", body: schemaPayload });
-    return { created: true, format: "schema" };
-  } catch (firstErr) {
-    const fieldsPayload = {
-      name,
-      type: "base",
-      system: false,
-      listRule: "",
-      viewRule: "",
-      createRule: "",
-      updateRule: "",
-      deleteRule: "",
-      fields: fieldNames.map(textField)
-    };
-
-    try {
-      await pocketBaseRequest("/api/collections", { method: "POST", body: fieldsPayload });
-      return { created: true, format: "fields" };
-    } catch (secondErr) {
-      secondErr.message = `${secondErr.message || "Failed to create collection"}. Auto-create failed for ${name}. First attempt: ${firstErr.message || firstErr}`;
-      throw secondErr;
-    }
-  }
+  throw lastErr;
 }
+async function ensurePlannedAbsencesCollection() { return ensureBaseCollection("planned_absences", ["emp_code", "emp_name", "department", "from_date", "to_date", "reason", "remark", "status"]); }
 
-async function ensurePlannedAbsencesCollection() {
-  return ensureBaseCollection("planned_absences", ["emp_code", "emp_name", "department", "from_date", "to_date", "reason", "remark", "status"]);
-}
-
-function normalizeNameList(list) {
-  return (Array.isArray(list) ? list : []).map((x) => {
-    if (typeof x === "string") return clean(x);
-    if (x && typeof x === "object") return clean(x.name || x.reason || x.label || x.value);
-    return "";
-  }).filter(Boolean);
-}
+function normalizeNameList(list) { return (Array.isArray(list) ? list : []).map((x) => typeof x === "string" ? clean(x) : clean(x?.name || x?.reason || x?.label || x?.value)).filter(Boolean); }
 function normalizeMachineTypes(data) { return (Array.isArray(data.machineTypes) ? data.machineTypes : []).map((x) => ({ type_code: clean(x.id || x.type_code || x.code || x.name), type_name: clean(x.name || x.type_name || x.id), active: bool(x.active, true) })).filter((x) => x.type_code && x.type_name); }
 function normalizeMachines(data) { return (Array.isArray(data.machines) ? data.machines : []).map((x) => ({ machine_no: clean(x.name || x.machine_no || x.machineNo), machine_type_code: clean(x.type || x.machine_type_code || x.type_code), status: clean(x.status || (bool(x.active, true) ? "Active" : "Completed")), active: bool(x.active, clean(x.status).toLowerCase() !== "completed") })).filter((x) => x.machine_no); }
 function normalizeEmployees(data) { return (Array.isArray(data.employees) ? data.employees : []).map((x) => ({ emp_code: clean(x.empId || x.emp_code || x.code), full_name: clean(x.name || x.full_name || x.emp_name), department: clean(x.department), designation: clean(x.designation), active: bool(x.active, true) })).filter((x) => x.emp_code && x.full_name); }
@@ -122,8 +81,7 @@ function normalizeSubworksAndPoints(data) {
         const subworkName = clean(sw.name || sw.subwork_name || sw);
         if (!typeCode || !deptName || !subworkName) return;
         const subworkCode = slug(subworkName);
-        const standardTime = num(sw.standardTime ?? sw.standard_time, 0);
-        subworks.push({ machine_type_code: clean(typeCode), department_code: deptCode, subwork_code: subworkCode, subwork_name: subworkName, standard_time: standardTime, sequence_no: swIndex + 1, active: bool(sw.active, true) });
+        subworks.push({ machine_type_code: clean(typeCode), department_code: deptCode, subwork_code: subworkCode, subwork_name: subworkName, standard_time: num(sw.standardTime ?? sw.standard_time, 0), sequence_no: swIndex + 1, active: bool(sw.active, true) });
         (Array.isArray(sw.checkpoints) ? sw.checkpoints : []).forEach((bp, i) => {
           const pointName = clean(bp.name || bp.point_name || bp); if (!pointName) return;
           bookingPoints.push({ machine_type_code: clean(typeCode), department_code: deptCode, subwork_code: subworkCode, point_code: slug(pointName), point_name: pointName, standard_time: num(bp.standardTime ?? bp.standard_time, 0), sequence_no: i + 1, active: bool(bp.active, true) });
@@ -137,7 +95,6 @@ function normalizeSubworksAndPoints(data) {
   });
   return { subworks, bookingPoints, qualityPoints };
 }
-
 async function saveAdminMasterData(rawData = {}) {
   const data = rawData.data || rawData.adminOverrides || rawData;
   const counts = { machineTypes: 0, machines: 0, employees: 0, shifts: 0, departments: 0, subworks: 0, bookingPoints: 0, qualityPoints: 0, lossReasons: 0, rootAreas: 0 };
@@ -154,39 +111,41 @@ async function saveAdminMasterData(rawData = {}) {
   for (const area of normalizeNameList(data.rootAreas)) { await upsertByFilter("root_areas", `area_name="${pbEscape(area)}"`, { area_name: area, active: true }); counts.rootAreas += 1; }
   return { ok: true, mode: "upsert-only", message: "Admin master data saved to PocketBase.", counts };
 }
-
 function normalizePlannedAbsence(body = {}) {
   const status = clean(body.status || "Planned") || "Planned";
   return { emp_code: clean(body.emp_code || body.empCode || body.empId), emp_name: clean(body.emp_name || body.empName || body.employeeName), department: clean(body.department), from_date: clean(body.from_date || body.fromDate), to_date: clean(body.to_date || body.toDate || body.from_date || body.fromDate), reason: clean(body.reason), remark: clean(body.remark || body.remarks), status };
 }
-
 async function listPlannedAbsences(params = {}) {
   const status = clean(params.status || "");
   const filter = status ? `status="${pbEscape(status)}"` : "";
-  try { return await listAll("planned_absences", { perPage: 500, sort: "-from_date", filter }); }
-  catch (err) { if (isMissingCollectionError(err)) return []; throw err; }
+  try { return await listAll("planned_absences", { perPage: 500, filter }); }
+  catch (err) {
+    if (isMissingCollectionError(err) || isSchemaNotReadyError(err)) return [];
+    throw err;
+  }
 }
-
 async function savePlannedAbsence(body = {}) {
   const data = normalizePlannedAbsence(body);
   if (!data.emp_code && !data.emp_name) throw new Error("Employee is required for planned absence.");
   if (!data.from_date) throw new Error("From date is required for planned absence.");
   if (!data.to_date) data.to_date = data.from_date;
   try {
-    if (clean(body.id)) return await updateRecord("planned_absences", clean(body.id), data);
-    return await createRecord("planned_absences", data);
-  } catch (err) {
-    if (!isMissingCollectionError(err)) throw err;
     await ensurePlannedAbsencesCollection();
     if (clean(body.id)) return await updateRecord("planned_absences", clean(body.id), data);
     return await createRecord("planned_absences", data);
+  } catch (err) {
+    if (isSchemaNotReadyError(err)) {
+      const e = new Error("planned_absences collection exists but fields are not correct. Delete it from PocketBase and save again, or add text fields: emp_code, emp_name, department, from_date, to_date, reason, remark, status.");
+      e.status = 400;
+      e.details = err.details || null;
+      throw e;
+    }
+    throw err;
   }
 }
-
 async function deletePlannedAbsence(id) {
   if (!clean(id)) throw new Error("Planned absence ID is required.");
   try { return await deleteRecord("planned_absences", clean(id)); }
-  catch (err) { if (isMissingCollectionError(err)) { await ensurePlannedAbsencesCollection(); return null; } throw err; }
+  catch (err) { if (isMissingCollectionError(err) || isSchemaNotReadyError(err)) return null; throw err; }
 }
-
 module.exports = { saveAdminMasterData, listPlannedAbsences, savePlannedAbsence, deletePlannedAbsence };
