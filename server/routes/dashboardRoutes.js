@@ -11,7 +11,7 @@ const {
 
 const {
   getPeopleDashboard
-} = require("../services/peopleDashboardServiceV2");
+} = require("../services/peopleDashboardServiceV3");
 
 const router = express.Router();
 
@@ -64,13 +64,6 @@ router.get("/machine-detail", async (req, res) => {
 /**
  * GET /api/dashboard/loss-summary
  * Returns Rework / Other / Major Loss summary from PocketBase.
- *
- * Examples:
- * /api/dashboard/loss-summary?range=currentMonth
- * /api/dashboard/loss-summary?range=lastMonth
- * /api/dashboard/loss-summary?range=last6Months
- * /api/dashboard/loss-summary?range=year
- * /api/dashboard/loss-summary?from=2026-05-01&to=2026-05-31
  */
 router.get("/loss-summary", async (req, res) => {
   try {
@@ -94,12 +87,6 @@ router.get("/loss-summary", async (req, res) => {
 /**
  * GET /api/dashboard/people
  * Returns People Performance Dashboard payload from PocketBase.
- *
- * Examples:
- * /api/dashboard/people?period=today
- * /api/dashboard/people?period=yesterday
- * /api/dashboard/people?period=month
- * /api/dashboard/people?period=last7&shift=General&department=Tubing
  */
 router.get("/people", async (req, res) => {
   try {
@@ -107,7 +94,7 @@ router.get("/people", async (req, res) => {
 
     data.meta = {
       ...(data.meta || {}),
-      service: "peopleDashboardServiceV2",
+      service: data.meta?.service || "peopleDashboardServiceV3",
       scoringVersion: "people-score-v2-capped-2026-05-13"
     };
 
