@@ -11,7 +11,7 @@ const {
 
 const {
   getPeopleDashboard
-} = require("../services/peopleDashboardService");
+} = require("../services/peopleDashboardServiceV2");
 
 const router = express.Router();
 
