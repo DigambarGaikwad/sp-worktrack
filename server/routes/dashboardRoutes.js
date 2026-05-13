@@ -9,6 +9,10 @@ const {
   getLossSummary
 } = require("../services/dashboardService");
 
+const {
+  getPeopleDashboard
+} = require("../services/peopleDashboardService");
+
 const router = express.Router();
 
 /**
@@ -82,6 +86,35 @@ router.get("/loss-summary", async (req, res) => {
     res.status(err.status || 500).json({
       ok: false,
       message: err.message || "Failed to load loss summary.",
+      details: err.details || null
+    });
+  }
+});
+
+/**
+ * GET /api/dashboard/people
+ * Returns People Performance Dashboard payload from PocketBase.
+ *
+ * Examples:
+ * /api/dashboard/people?period=today
+ * /api/dashboard/people?period=yesterday
+ * /api/dashboard/people?period=month
+ * /api/dashboard/people?period=last7&shift=General&department=Tubing
+ */
+router.get("/people", async (req, res) => {
+  try {
+    const data = await getPeopleDashboard(req.query);
+
+    res.json({
+      ok: true,
+      data
+    });
+  } catch (err) {
+    console.error("GET /api/dashboard/people failed:", err);
+
+    res.status(err.status || 500).json({
+      ok: false,
+      message: err.message || "Failed to load people dashboard.",
       details: err.details || null
     });
   }
