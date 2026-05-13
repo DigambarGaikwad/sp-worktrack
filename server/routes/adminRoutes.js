@@ -7,46 +7,31 @@ const {
   saveAdminMasterData,
   listPlannedAbsences,
   savePlannedAbsence,
-  deletePlannedAbsence
+  deletePlannedAbsence,
+  listSkillMatrix,
+  saveSkillMatrix,
+  deleteSkillMatrix
 } = require("../services/adminWriteServiceV2");
 
 const router = express.Router();
 
-/**
- * GET /api/admin/master-data
- * Returns PocketBase master data in frontend-compatible adminOverrides format.
- */
 router.get("/master-data", async (req, res) => {
   try {
     const data = await getAdminMasterData();
-
     res.json({ ok: true, data });
   } catch (err) {
     console.error("GET /api/admin/master-data failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to load admin master data",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load admin master data", details: err.details || null });
   }
 });
 
-/**
- * POST /api/admin/save-master-data
- * Saves admin screen master data into PocketBase.
- * Use syncMode="deactivateMissing" to mark removed records inactive.
- */
 router.post("/save-master-data", async (req, res) => {
   try {
     const result = await saveAdminMasterData(req.body || {});
     res.json({ ok: true, data: result });
   } catch (err) {
     console.error("POST /api/admin/save-master-data failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to save admin master data",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save admin master data", details: err.details || null });
   }
 });
 
@@ -56,11 +41,7 @@ router.get("/planned-absences", async (req, res) => {
     res.json({ ok: true, items });
   } catch (err) {
     console.error("GET /api/admin/planned-absences failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to load planned absences",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load planned absences", details: err.details || null });
   }
 });
 
@@ -70,11 +51,7 @@ router.post("/planned-absences", async (req, res) => {
     res.json({ ok: true, item });
   } catch (err) {
     console.error("POST /api/admin/planned-absences failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to save planned absence",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save planned absence", details: err.details || null });
   }
 });
 
@@ -84,11 +61,37 @@ router.delete("/planned-absences/:id", async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/admin/planned-absences failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to delete planned absence",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to delete planned absence", details: err.details || null });
+  }
+});
+
+router.get("/skill-matrix", async (req, res) => {
+  try {
+    const items = await listSkillMatrix(req.query || {});
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error("GET /api/admin/skill-matrix failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load skill matrix", details: err.details || null });
+  }
+});
+
+router.post("/skill-matrix", async (req, res) => {
+  try {
+    const items = await saveSkillMatrix(req.body || {});
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error("POST /api/admin/skill-matrix failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save skill matrix", details: err.details || null });
+  }
+});
+
+router.delete("/skill-matrix/:id", async (req, res) => {
+  try {
+    await deleteSkillMatrix(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/admin/skill-matrix failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to delete skill matrix", details: err.details || null });
   }
 });
 
