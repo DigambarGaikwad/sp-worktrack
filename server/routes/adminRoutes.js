@@ -12,6 +12,11 @@ const {
   saveSkillMatrix,
   deleteSkillMatrix
 } = require("../services/adminWriteServiceV2");
+const {
+  getAdminPin,
+  verifyAdminPin,
+  updateAdminPin
+} = require("../services/adminPinService");
 
 const router = express.Router();
 
@@ -22,6 +27,36 @@ router.get("/master-data", async (req, res) => {
   } catch (err) {
     console.error("GET /api/admin/master-data failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load admin master data", details: err.details || null });
+  }
+});
+
+router.get("/pin/status", async (req, res) => {
+  try {
+    await getAdminPin();
+    res.json({ ok: true, pinConfigured: true });
+  } catch (err) {
+    console.error("GET /api/admin/pin/status failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to read admin PIN status", details: err.details || null });
+  }
+});
+
+router.post("/pin/verify", async (req, res) => {
+  try {
+    const valid = await verifyAdminPin(req.body?.pin || "");
+    res.json({ ok: true, valid });
+  } catch (err) {
+    console.error("POST /api/admin/pin/verify failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to verify admin PIN", details: err.details || null });
+  }
+});
+
+router.post("/pin/update", async (req, res) => {
+  try {
+    const result = await updateAdminPin(req.body?.newPin || req.body?.pin || "");
+    res.json({ ok: true, data: result });
+  } catch (err) {
+    console.error("POST /api/admin/pin/update failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to update admin PIN", details: err.details || null });
   }
 });
 
