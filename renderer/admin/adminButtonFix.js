@@ -1,54 +1,201 @@
 // renderer/admin/adminButtonFix.js
 // Safety patch for the full-page Admin screen.
-// Uses delegated click handling so Add buttons keep working after tab/login re-rendering.
+// Fixes Add Loss Reason / Add Root Area after DB/admin login patches.
 
 (function () {
-  const buttonActionById = {
-    addMachineBtn: "adminAddMachine",
-    addEmployeeBtn: "adminAddEmployee",
-    addShiftBtn: "adminAddShift",
-    addLossReasonBtn: "adminAddLossReason",
-    addRootAreaBtn: "adminAddRootArea",
-    addTypeBtn: "adminAddType",
-    addMainWorkBtn: "adminAddMainWork",
-    addSubWorkBtn: "adminAddSubWork"
-  };
-
   document.addEventListener("DOMContentLoaded", function () {
-    setButtonTypes();
-    setTimeout(setButtonTypes, 1500);
-    setTimeout(setButtonTypes, 3000);
+    setTimeout(wireButtons, 1200);
+    setTimeout(wireButtons, 2500);
+    setTimeout(wireButtons, 4000);
   });
 
-  document.addEventListener("click", function (event) {
-    const btn = event.target && event.target.closest ? event.target.closest("button") : null;
-    if (!btn || !buttonActionById[btn.id]) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    runLegacyAdminAction(buttonActionById[btn.id], btn.id);
-  }, true);
-
-  function setButtonTypes() {
-    Object.keys(buttonActionById).forEach((id) => {
-      const btn = document.getElementById(id);
-      if (btn) btn.type = "button";
-    });
+  function byId(id) {
+    return document.getElementById(id);
   }
 
-  function runLegacyAdminAction(functionName, buttonId) {
+  function getAppVar(name, fallback) {
     try {
-      const fn = window[functionName];
-
-      if (typeof fn !== "function") {
-        throw new Error(`${functionName} is not available on window. app.js may not have exported it.`);
-      }
-
-      fn();
+      // eslint-disable-next-line no-eval
+      const value = eval(name);
+      return value == null ? fallback : value;
     } catch (err) {
-      console.error(`Admin button failed: ${buttonId} -> ${functionName}`, err);
-      alert(`Button action failed: ${functionName}\n\n${err.message || err}`);
+      return fallback;
+    }
+  }
+
+  function getAppFn(name) {
+    try {
+      // eslint-disable-next-line no-eval
+      const fn = eval(name);
+      return typeof fn === "function" ? fn : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function wireButtons() {
+    wireNormalButton("addMachineBtn", "adminAddMachine");
+    wireNormalButton("addEmployeeBtn", "adminAddEmployee");
+    wireNormalButton("addShiftBtn", "adminAddShift");
+    wireNormalButton("addTypeBtn", "adminAddType");
+    wireNormalButton("addMainWorkBtn", "adminAddMainWork");
+    wireNormalButton("addSubWorkBtn", "adminAddSubWork");
+
+    const lossBtn = byId("addLossReasonBtn");
+    if (lossBtn) {
+      lossBtn.type = "button";
+      lossBtn.onclick = addLossReasonDirect;
+    }
+
+    const rootBtn = byId("addRootAreaBtn");
+    if (rootBtn) {
+      rootBtn.type = "button";
+      rootBtn.onclick = addRootAreaDirect;
+    }
+  }
+
+  function wireNormalButton(id, fnName) {
+    const btn = byId(id);
+    const fn = getAppFn(fnName);
+    if (!btn || !fn) return;
+    btn.type = "button";
+    btn.onclick = function (event) {
+      if (event) event.preventDefault();
+      fn();
+    };
+  }
+
+  function adminReady() {
+    const mustAdmin = getAppFn("mustAdmin");
+    if (mustAdmin) return mustAdmin();
+
+    const adminOverrides = getAppVar("adminOverrides", null);
+    if (!adminOverrides) {
+      alert("Admin data not loaded.");
+      return false;
+    }
+    return true;
+  }
+
+  function addLossReasonDirect(event) {
+    if (event) event.preventDefault();
+    if (!adminReady()) return;
+
+    const adminOverrides = getAppVar("adminOverrides", null);
+    if (!adminOverrides) return;
+
+    adminOverrides.lossReasons = Array.isArray(adminOverrides.lossReasons) ? adminOverrides.lossReasons : [];
+    adminOverrides.lossReasons.push("New Loss Reason");
+
+    renderLossReasonsDirect(adminOverrides);
+  }
+
+  function addRootAreaDirect(event) {
+    if (event) event.preventDefault();
+    if (!adminReady()) return;
+
+    const adminOverrides = getAppVar("adminOverrides", null);
+    if (!adminOverrides) return;
+
+    adminOverrides.rootAreas = Array.isArray(adminOverrides.rootAreas) ? adminOverrides.rootAreas : [];
+    adminOverrides.rootAreas.push("New Root Area");
+
+    renderRootAreasDirect(adminOverrides);
+  }
+
+  function renderLossReasonsDirect(adminOverrides) {
+    const host = byId("lossReasonsList");
+    if (!host) return;
+
+    host.innerHTML = `
+      <table class="admin-table">
+        <thead>
+          <tr><th>Loss Reason</th><th style="width:160px;">Action</th></tr>
+        </thead>
+        <tbody>
+          ${adminOverrides.lossReasons.map((r, idx) => `
+            <tr>
+              <td><input class="admin-input" data-loss-idx="${idx}" value="${escapeHtml(r)}" placeholder="Loss Reason" /></td>
+              <td><button type="button" class="btn grey" data-loss-del="${idx}">Delete</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="small-hint">Only define loss reason here. Operator enters loss time during entry.</div>
+    `;
+
+    host.querySelectorAll("[data-loss-idx]").forEach((input) => {
+      input.oninput = function () {
+        const idx = Number(input.getAttribute("data-loss-idx"));
+        adminOverrides.lossReasons[idx] = input.value.trim();
+      };
+    });
+
+    host.querySelectorAll("[data-loss-del]").forEach((btn) => {
+      btn.onclick = function () {
+        const idx = Number(btn.getAttribute("data-loss-del"));
+        adminOverrides.lossReasons.splice(idx, 1);
+        renderLossReasonsDirect(adminOverrides);
+      };
+    });
+
+    const inputs = host.querySelectorAll("[data-loss-idx]");
+    const last = inputs[inputs.length - 1];
+    if (last) {
+      last.focus();
+      last.select();
+    }
+  }
+
+  function renderRootAreasDirect(adminOverrides) {
+    const host = byId("rootAreasList");
+    if (!host) return;
+
+    host.innerHTML = `
+      <table class="admin-table">
+        <thead>
+          <tr><th>Root Area</th><th style="width:160px;">Action</th></tr>
+        </thead>
+        <tbody>
+          ${adminOverrides.rootAreas.map((r, idx) => `
+            <tr>
+              <td><input class="admin-input" data-root-idx="${idx}" value="${escapeHtml(r)}" placeholder="Root Area" /></td>
+              <td><button type="button" class="btn grey" data-root-del="${idx}">Delete</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+
+    host.querySelectorAll("[data-root-idx]").forEach((input) => {
+      input.oninput = function () {
+        const idx = Number(input.getAttribute("data-root-idx"));
+        adminOverrides.rootAreas[idx] = input.value.trim();
+      };
+    });
+
+    host.querySelectorAll("[data-root-del]").forEach((btn) => {
+      btn.onclick = function () {
+        const idx = Number(btn.getAttribute("data-root-del"));
+        adminOverrides.rootAreas.splice(idx, 1);
+        renderRootAreasDirect(adminOverrides);
+      };
+    });
+
+    const inputs = host.querySelectorAll("[data-root-idx]");
+    const last = inputs[inputs.length - 1];
+    if (last) {
+      last.focus();
+      last.select();
     }
   }
 })();
