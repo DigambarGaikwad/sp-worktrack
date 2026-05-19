@@ -89,9 +89,47 @@
     }
   }
 
+  function readInputList(selector) {
+    return Array.from(document.querySelectorAll(selector))
+      .map((input) => String(input.value || "").trim())
+      .filter(Boolean);
+  }
+
+  function readLossReasonsFromScreen(fallback) {
+    const values = readInputList("#lossReasonsList [data-loss-idx]");
+    return values.length ? values : fallback;
+  }
+
+  function readRootAreasFromScreen(fallback) {
+    const values = readInputList("#rootAreasList [data-root-idx]");
+    return values.length ? values : fallback;
+  }
+
+  function syncVisibleListsToGlobals(payload) {
+    const lossReasonsFromScreen = readLossReasonsFromScreen(payload.lossReasons || []);
+    const rootAreasFromScreen = readRootAreasFromScreen(payload.rootAreas || []);
+
+    payload.lossReasons = lossReasonsFromScreen;
+    payload.rootAreas = rootAreasFromScreen;
+
+    try {
+      // Keep app.js globals updated so entry dropdowns refresh correctly after reload/open.
+      // eslint-disable-next-line no-eval
+      eval("lossReasons = " + JSON.stringify(lossReasonsFromScreen));
+      // eslint-disable-next-line no-eval
+      eval("rootAreas = " + JSON.stringify(rootAreasFromScreen));
+      // eslint-disable-next-line no-eval
+      eval("if (adminOverrides) { adminOverrides.lossReasons = " + JSON.stringify(lossReasonsFromScreen) + "; adminOverrides.rootAreas = " + JSON.stringify(rootAreasFromScreen) + "; }");
+    } catch (err) {
+      console.warn("Could not sync visible admin lists to globals", err);
+    }
+
+    return payload;
+  }
+
   function buildPayload() {
     const adminOverrides = getGlobalValue("adminOverrides", {}) || {};
-    return {
+    const payload = {
       ...adminOverrides,
       machines: getGlobalValue("machines", adminOverrides.machines || []) || [],
       employees: getGlobalValue("employees", adminOverrides.employees || []) || [],
@@ -103,6 +141,8 @@
       lossReasons: getGlobalValue("lossReasons", adminOverrides.lossReasons || []) || [],
       rootAreas: getGlobalValue("rootAreas", adminOverrides.rootAreas || []) || []
     };
+
+    return syncVisibleListsToGlobals(payload);
   }
 
   async function saveCurrentAdminStateToDb() {
