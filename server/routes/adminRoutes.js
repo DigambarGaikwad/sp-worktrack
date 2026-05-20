@@ -17,8 +17,22 @@ const {
   verifyAdminPin,
   updateAdminPin
 } = require("../services/adminPinService");
+const {
+  listAccessUsers,
+  upsertAccessUsers,
+  loginAdminAccess,
+  requirePermission
+} = require("../services/adminAccessService");
 
 const router = express.Router();
+
+function getAccessToken(req) {
+  return req.headers["x-spwt-admin-token"] || req.body?.adminToken || req.query?.adminToken || "";
+}
+
+function requireAdminPermission(req, permission) {
+  return requirePermission(getAccessToken(req), permission);
+}
 
 router.get("/master-data", async (req, res) => {
   try {
@@ -57,6 +71,39 @@ router.post("/pin/update", async (req, res) => {
   } catch (err) {
     console.error("POST /api/admin/pin/update failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to update admin PIN", details: err.details || null });
+  }
+});
+
+router.post("/access/login", async (req, res) => {
+  try {
+    const result = await loginAdminAccess(req.body || {});
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("POST /api/admin/access/login failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to login", details: err.details || null });
+  }
+});
+
+router.get("/access/users", async (req, res) => {
+  try {
+    requireAdminPermission(req, "userAccess");
+    const data = await listAccessUsers();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/admin/access/users failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load access users", details: err.details || null });
+  }
+});
+
+router.post("/access/users", async (req, res) => {
+  try {
+    requireAdminPermission(req, "userAccess");
+    const users = Array.isArray(req.body?.users) ? req.body.users : [];
+    const data = await upsertAccessUsers(users);
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/admin/access/users failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save access users", details: err.details || null });
   }
 });
 
