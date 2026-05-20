@@ -19,6 +19,15 @@ function normalizeBool(value, defaultValue = true) {
 
   return defaultValue;
 }
+
+function isDeletedMachine(record) {
+  return clean(record.status).toLowerCase() === "deleted";
+}
+
+function isDeletedEmployee(record) {
+  return clean(record.designation) === "__DELETED__";
+}
+
 async function listAll(collectionName) {
   const all = [];
   let page = 1;
@@ -66,6 +75,7 @@ function buildMachineTypes(records) {
 
 function buildMachines(records) {
   return sortByText(records, "machine_no")
+    .filter((x) => !isDeletedMachine(x))
     .map((x) => ({
       id: x.id,
       name: clean(x.machine_no),
@@ -78,6 +88,7 @@ function buildMachines(records) {
 
 function buildEmployees(records) {
   return sortByText(records, "emp_code")
+    .filter((x) => !isDeletedEmployee(x))
     .map((x) => ({
       id: x.id,
       empId: clean(x.emp_code),
