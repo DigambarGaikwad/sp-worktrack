@@ -105,6 +105,14 @@
     return values.length ? values : fallback;
   }
 
+  function safeClone(value, fallback) {
+    try {
+      return JSON.parse(JSON.stringify(value == null ? fallback : value));
+    } catch (err) {
+      return fallback;
+    }
+  }
+
   function syncVisibleListsToGlobals(payload) {
     const lossReasonsFromScreen = readLossReasonsFromScreen(payload.lossReasons || []);
     const rootAreasFromScreen = readRootAreasFromScreen(payload.rootAreas || []);
@@ -129,17 +137,20 @@
 
   function buildPayload() {
     const adminOverrides = getGlobalValue("adminOverrides", {}) || {};
+
+    // Important: Admin screen edits are applied to adminOverrides, not always to runtime globals.
+    // So save adminOverrides first. Runtime globals are only fallback for older screens.
     const payload = {
-      ...adminOverrides,
-      machines: getGlobalValue("machines", adminOverrides.machines || []) || [],
-      employees: getGlobalValue("employees", adminOverrides.employees || []) || [],
-      shifts: getGlobalValue("shifts", adminOverrides.shifts || []) || [],
-      machineTypes: getGlobalValue("machineTypes", adminOverrides.machineTypes || []) || [],
-      workCatalogByType: getGlobalValue("workCatalogByType", adminOverrides.workCatalogByType || {}) || {},
-      mainWorks: getGlobalValue("mainWorks", adminOverrides.mainWorks || []) || [],
-      subWorks: getGlobalValue("subWorksMap", adminOverrides.subWorks || {}) || {},
-      lossReasons: getGlobalValue("lossReasons", adminOverrides.lossReasons || []) || [],
-      rootAreas: getGlobalValue("rootAreas", adminOverrides.rootAreas || []) || []
+      ...safeClone(adminOverrides, {}),
+      machines: safeClone(adminOverrides.machines || getGlobalValue("machines", []), []),
+      employees: safeClone(adminOverrides.employees || getGlobalValue("employees", []), []),
+      shifts: safeClone(adminOverrides.shifts || getGlobalValue("shifts", []), []),
+      machineTypes: safeClone(adminOverrides.machineTypes || getGlobalValue("machineTypes", []), []),
+      workCatalogByType: safeClone(adminOverrides.workCatalogByType || getGlobalValue("workCatalogByType", {}), {}),
+      mainWorks: safeClone(adminOverrides.mainWorks || getGlobalValue("mainWorks", []), []),
+      subWorks: safeClone(adminOverrides.subWorks || getGlobalValue("subWorksMap", {}), {}),
+      lossReasons: safeClone(adminOverrides.lossReasons || getGlobalValue("lossReasons", []), []),
+      rootAreas: safeClone(adminOverrides.rootAreas || getGlobalValue("rootAreas", []), [])
     };
 
     return syncVisibleListsToGlobals(payload);
