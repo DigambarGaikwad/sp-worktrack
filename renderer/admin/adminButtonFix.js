@@ -1,6 +1,6 @@
 // renderer/admin/adminButtonFix.js
 // Safety patch for the full-page Admin screen.
-// Fixes Add Loss Reason / Add Root Area after DB/admin login patches.
+// Fixes DB-mode Admin add buttons that are missing or unstable on separate admin.html page.
 
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
@@ -20,6 +20,17 @@
       return value == null ? fallback : value;
     } catch (err) {
       return fallback;
+    }
+  }
+
+  function setAppVar(name, value) {
+    try {
+      window.__spwtAdminButtonFixValue = value;
+      // eslint-disable-next-line no-new-func
+      Function(`${name} = window.__spwtAdminButtonFixValue`)();
+      delete window.__spwtAdminButtonFixValue;
+    } catch (err) {
+      console.warn(`Could not set app variable ${name}`, err);
     }
   }
 
@@ -47,8 +58,13 @@
     wireNormalButton("addEmployeeBtn", "adminAddEmployee");
     wireNormalButton("addShiftBtn", "adminAddShift");
     wireNormalButton("addTypeBtn", "adminAddType");
-    wireNormalButton("addMainWorkBtn", "adminAddMainWork");
     wireNormalButton("addSubWorkBtn", "adminAddSubWork");
+
+    const mainWorkBtn = byId("addMainWorkBtn");
+    if (mainWorkBtn) {
+      mainWorkBtn.type = "button";
+      mainWorkBtn.onclick = addMainWorkDirect;
+    }
 
     const lossBtn = byId("addLossReasonBtn");
     if (lossBtn) {
@@ -84,6 +100,74 @@
       return false;
     }
     return true;
+  }
+
+  function getSelectedType() {
+    const fromSelect = byId("workTypeSelect")?.value || "";
+    return fromSelect || getAppVar("selectedTypeForWorkEdit", "") || "";
+  }
+
+  function renderWorkScreen() {
+    const renderAdminWorkSub = getAppFn("renderAdminWorkSub");
+    if (renderAdminWorkSub) renderAdminWorkSub();
+  }
+
+  function addMainWorkDirect(event) {
+    if (event) event.preventDefault();
+    if (!adminReady()) return;
+
+    const adminOverrides = getAppVar("adminOverrides", null);
+    if (!adminOverrides) return;
+
+    adminOverrides.machineTypes = Array.isArray(adminOverrides.machineTypes) ? adminOverrides.machineTypes : [];
+    adminOverrides.workCatalogByType = adminOverrides.workCatalogByType && typeof adminOverrides.workCatalogByType === "object"
+      ? adminOverrides.workCatalogByType
+      : {};
+
+    const selectedType = getSelectedType() || adminOverrides.machineTypes[0]?.id || "";
+    if (!selectedType) {
+      alert("Select or create a Machine Category first.");
+      return;
+    }
+
+    if (!adminOverrides.workCatalogByType[selectedType]) {
+      adminOverrides.workCatalogByType[selectedType] = { mainWorks: [], subWorks: {} };
+    }
+
+    const catalog = adminOverrides.workCatalogByType[selectedType];
+    catalog.mainWorks = Array.isArray(catalog.mainWorks) ? catalog.mainWorks : [];
+    catalog.subWorks = catalog.subWorks && typeof catalog.subWorks === "object" ? catalog.subWorks : {};
+
+    let base = "New Main Work";
+    let name = base;
+    let n = 1;
+    while (catalog.mainWorks.some((x) => String(x).trim().toLowerCase() === name.toLowerCase())) {
+      n += 1;
+      name = `${base} ${n}`;
+    }
+
+    catalog.mainWorks.push(name);
+    catalog.subWorks[name] = Array.isArray(catalog.subWorks[name]) ? catalog.subWorks[name] : [];
+
+    const globalMainWorks = Array.isArray(adminOverrides.mainWorks) ? adminOverrides.mainWorks : [];
+    if (!globalMainWorks.includes(name)) globalMainWorks.push(name);
+    adminOverrides.mainWorks = globalMainWorks;
+    adminOverrides.subWorks = adminOverrides.subWorks && typeof adminOverrides.subWorks === "object" ? adminOverrides.subWorks : {};
+    adminOverrides.subWorks[name] = Array.isArray(adminOverrides.subWorks[name]) ? adminOverrides.subWorks[name] : [];
+
+    setAppVar("selectedTypeForWorkEdit", selectedType);
+    setAppVar("selectedDeptForTypeEdit", name);
+
+    renderWorkScreen();
+
+    setTimeout(function () {
+      const inputs = Array.from(document.querySelectorAll("#mainWorkList [data-tmw-idx]"));
+      const target = inputs.find((input) => String(input.value || "").trim() === name) || inputs[inputs.length - 1];
+      if (target) {
+        target.focus();
+        target.select();
+      }
+    }, 50);
   }
 
   function addLossReasonDirect(event) {
