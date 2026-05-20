@@ -6,6 +6,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const employeesRoutes = require("./routes/employeesRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const adminRecoveryRoutes = require("./routes/adminRecoveryRoutes");
 const productionRoutes = require("./routes/productionRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const emailRoutes = require("./routes/emailRoutes");
@@ -24,6 +25,7 @@ app.use(express.json({ limit: "10mb" }));
 
 app.use("/api/employees", employeesRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/pin", adminRecoveryRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/email", emailRoutes);
