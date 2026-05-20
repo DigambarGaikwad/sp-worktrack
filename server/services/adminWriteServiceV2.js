@@ -1,6 +1,8 @@
 // server/services/adminWriteServiceV2.js
 // Faster DB admin save with sync mode.
-// If syncMode = "deactivateMissing", records removed from admin screen are marked inactive.
+// DB admin rule:
+// - Active/Completed/Inactive records may still be visible in Admin.
+// - Records removed with Delete are marked as Deleted and hidden from Admin master load.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const planned = require("./plannedAbsenceService");
@@ -39,7 +41,7 @@ async function updateRecord(collectionName, id, body) { return pocketBaseRequest
 async function deleteRecord(collectionName, id) { return pocketBaseRequest(`/api/collections/${collectionName}/records/${id}`, { method: "DELETE" }); }
 
 function makeMap(records, keyFn) { const map = new Map(); records.forEach((r) => { const key = keyFn(r); if (key) map.set(key, r); }); return map; }
-async function syncCollection({ collection, records, keyFn, deactivateMissing = false, deactivateBody = { active: false } }) {
+async function syncCollection({ collection, records, keyFn, deactivateMissing = false, deactivateBody = { active: false }, shouldDeactivate = null }) {
   const existing = await listAll(collection, { perPage: 1000 });
   const existingMap = makeMap(existing, keyFn);
   const incomingKeys = new Set();
@@ -53,7 +55,8 @@ async function syncCollection({ collection, records, keyFn, deactivateMissing = 
   }
   if (deactivateMissing) {
     for (const [key, old] of existingMap.entries()) {
-      if (!incomingKeys.has(key) && old?.id && old.active !== false) { await updateRecord(collection, old.id, deactivateBody); counts.deactivated += 1; }
+      const allowed = typeof shouldDeactivate === "function" ? shouldDeactivate(old) : old.active !== false;
+      if (!incomingKeys.has(key) && old?.id && allowed) { await updateRecord(collection, old.id, deactivateBody); counts.deactivated += 1; }
     }
   }
   return counts;
@@ -103,19 +106,10 @@ function normalizeSubworksAndPoints(data) {
 }
 
 function normalizeLossReasons(data) {
-  return normalizeNameList(data.lossReasons).map((reason_name) => ({
-    reason_code: slug(reason_name),
-    reason_name,
-    active: true
-  })).filter((x) => x.reason_code && x.reason_name);
+  return normalizeNameList(data.lossReasons).map((reason_name) => ({ reason_code: slug(reason_name), reason_name, active: true })).filter((x) => x.reason_code && x.reason_name);
 }
-
 function normalizeRootAreas(data) {
-  return normalizeNameList(data.rootAreas).map((area_name) => ({
-    area_code: slug(area_name),
-    area_name,
-    active: true
-  })).filter((x) => x.area_code && x.area_name);
+  return normalizeNameList(data.rootAreas).map((area_name) => ({ area_code: slug(area_name), area_name, active: true })).filter((x) => x.area_code && x.area_name);
 }
 
 async function saveAdminMasterData(rawData = {}) {
@@ -127,8 +121,8 @@ async function saveAdminMasterData(rawData = {}) {
   const rootAreas = normalizeRootAreas(data);
   const results = {};
   results.machineTypes = await syncCollection({ collection: "machine_types", records: machineTypes, keyFn: (x) => clean(x.type_code), deactivateMissing });
-  results.machines = await syncCollection({ collection: "machines", records: machines, keyFn: (x) => clean(x.machine_no), deactivateMissing, deactivateBody: { active: false, status: "Completed" } });
-  results.employees = await syncCollection({ collection: "employees", records: employees, keyFn: (x) => clean(x.emp_code), deactivateMissing });
+  results.machines = await syncCollection({ collection: "machines", records: machines, keyFn: (x) => clean(x.machine_no), deactivateMissing, deactivateBody: { active: false, status: "Deleted" }, shouldDeactivate: (old) => clean(old.status).toLowerCase() !== "deleted" });
+  results.employees = await syncCollection({ collection: "employees", records: employees, keyFn: (x) => clean(x.emp_code), deactivateMissing, deactivateBody: { active: false, designation: "__DELETED__" }, shouldDeactivate: (old) => clean(old.designation) !== "__DELETED__" });
   results.shifts = await syncCollection({ collection: "shifts", records: shifts, keyFn: (x) => clean(x.shift_code), deactivateMissing });
   results.departments = await syncCollection({ collection: "departments", records: departments, keyFn: (x) => clean(x.department_code), deactivateMissing });
   results.subworks = await syncCollection({ collection: "subworks", records: subworks, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}`, deactivateMissing });
@@ -136,7 +130,7 @@ async function saveAdminMasterData(rawData = {}) {
   results.qualityPoints = await syncCollection({ collection: "quality_points", records: qualityPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
   results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_code || x.reason_name), deactivateMissing });
   results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_code || x.area_name), deactivateMissing });
-  return { ok: true, mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only", message: deactivateMissing ? "Admin master data saved. Missing records marked inactive." : "Admin master data saved to PocketBase.", results };
+  return { ok: true, mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only", message: deactivateMissing ? "Admin master data saved. Deleted records hidden from Admin." : "Admin master data saved to PocketBase.", results };
 }
 
 function missingSkillCollectionError() { const err = new Error("PocketBase collection skill_matrix is missing. Create it before saving skill matrix."); err.status = 400; err.details = { reasonCode: "SKILL_MATRIX_COLLECTION_MISSING", collection: "skill_matrix" }; return err; }
