@@ -7,7 +7,7 @@ const {
   getMachineSummary,
   getMachineDetail,
   getLossSummary
-} = require("../services/dashboardService");
+} = require("../services/dashboardServiceV2");
 
 const {
   getPeopleDashboard
