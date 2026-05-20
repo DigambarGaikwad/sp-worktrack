@@ -62,7 +62,7 @@ async function syncCollection({ collection, records, keyFn, deactivateMissing = 
 function normalizeNameList(list) {
   return (Array.isArray(list) ? list : []).map((x) => {
     if (typeof x === "string") return clean(x);
-    if (x && typeof x === "object") return clean(x.name || x.reason || x.label || x.value);
+    if (x && typeof x === "object") return clean(x.name || x.reason || x.label || x.value || x.reason_name || x.area_name);
     return "";
   }).filter(Boolean);
 }
@@ -102,13 +102,29 @@ function normalizeSubworksAndPoints(data) {
   return { subworks, bookingPoints, qualityPoints };
 }
 
+function normalizeLossReasons(data) {
+  return normalizeNameList(data.lossReasons).map((reason_name) => ({
+    reason_code: slug(reason_name),
+    reason_name,
+    active: true
+  })).filter((x) => x.reason_code && x.reason_name);
+}
+
+function normalizeRootAreas(data) {
+  return normalizeNameList(data.rootAreas).map((area_name) => ({
+    area_code: slug(area_name),
+    area_name,
+    active: true
+  })).filter((x) => x.area_code && x.area_name);
+}
+
 async function saveAdminMasterData(rawData = {}) {
   const data = rawData.data || rawData.adminOverrides || rawData;
   const deactivateMissing = clean(rawData.syncMode || data.syncMode).toLowerCase() === "deactivatemissing";
   const machineTypes = normalizeMachineTypes(data), machines = normalizeMachines(data), employees = normalizeEmployees(data), shifts = normalizeShifts(data), departments = normalizeDepartments(data);
   const { subworks, bookingPoints, qualityPoints } = normalizeSubworksAndPoints(data);
-  const lossReasons = normalizeNameList(data.lossReasons).map((reason_name) => ({ reason_name, active: true }));
-  const rootAreas = normalizeNameList(data.rootAreas).map((area_name) => ({ area_name, active: true }));
+  const lossReasons = normalizeLossReasons(data);
+  const rootAreas = normalizeRootAreas(data);
   const results = {};
   results.machineTypes = await syncCollection({ collection: "machine_types", records: machineTypes, keyFn: (x) => clean(x.type_code), deactivateMissing });
   results.machines = await syncCollection({ collection: "machines", records: machines, keyFn: (x) => clean(x.machine_no), deactivateMissing, deactivateBody: { active: false, status: "Completed" } });
@@ -118,8 +134,8 @@ async function saveAdminMasterData(rawData = {}) {
   results.subworks = await syncCollection({ collection: "subworks", records: subworks, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}`, deactivateMissing });
   results.bookingPoints = await syncCollection({ collection: "booking_points", records: bookingPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
   results.qualityPoints = await syncCollection({ collection: "quality_points", records: qualityPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
-  results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_name), deactivateMissing });
-  results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_name), deactivateMissing });
+  results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_code || x.reason_name), deactivateMissing });
+  results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_code || x.area_name), deactivateMissing });
   return { ok: true, mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only", message: deactivateMissing ? "Admin master data saved. Missing records marked inactive." : "Admin master data saved to PocketBase.", results };
 }
 
