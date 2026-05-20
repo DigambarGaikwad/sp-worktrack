@@ -4,7 +4,7 @@
 
 const crypto = require("crypto");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
-const { verifyAdminPin } = require("./adminPinService");
+const { verifyAdminPin, getAdminPin } = require("./adminPinService");
 
 const COLLECTION = "admin_settings";
 const ACCESS_KEY = "admin_access_users_json";
@@ -185,6 +185,19 @@ function createSession(user) {
   return { token, user: sessionUser };
 }
 
+async function isSuperAdminPinValid(enteredPin) {
+  const pin = clean(enteredPin);
+  if (!pin) return false;
+
+  // Primary DB verification path.
+  if (await verifyAdminPin(pin)) return true;
+
+  // Backward-compatible direct compare against existing admin PIN value.
+  // This protects old installations where /pin/verify and RBAC login load timing differs.
+  const savedPin = clean(await getAdminPin());
+  return pin === savedPin;
+}
+
 async function loginAdminAccess({ username = "", pin = "" } = {}) {
   const uname = normalizeUsername(username || "admin");
   const enteredPin = clean(pin);
@@ -197,8 +210,8 @@ async function loginAdminAccess({ username = "", pin = "" } = {}) {
 
   // Existing admin PIN remains the super-admin login.
   if (!uname || uname === "admin" || uname === "superadmin" || uname === "super_admin") {
-    const valid = await verifyAdminPin(enteredPin);
-    if (!valid) return { valid: false };
+    const valid = await isSuperAdminPinValid(enteredPin);
+    if (!valid) return { valid: false, reason: "SUPER_ADMIN_PIN_NOT_MATCHED" };
     return {
       valid: true,
       ...createSession({
@@ -213,10 +226,10 @@ async function loginAdminAccess({ username = "", pin = "" } = {}) {
 
   const users = await getStoredUsers();
   const user = users.find((u) => normalizeUsername(u.username) === uname && u.active !== false);
-  if (!user?.pinHash || !user?.salt) return { valid: false };
+  if (!user?.pinHash || !user?.salt) return { valid: false, reason: "USER_NOT_FOUND" };
 
   const valid = hashPin(enteredPin, user.salt) === user.pinHash;
-  if (!valid) return { valid: false };
+  if (!valid) return { valid: false, reason: "USER_PIN_NOT_MATCHED" };
 
   return {
     valid: true,
