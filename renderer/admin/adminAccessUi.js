@@ -163,7 +163,6 @@
         accessState.token = payload.token || "";
         accessState.user = payload.user || null;
 
-        // Keep original app.js admin state alive.
         if (typeof adminOverrides !== "undefined" && adminOverrides) {
           adminOverrides.admin = adminOverrides.admin || {};
           adminOverrides.admin.pin = pin;
@@ -199,10 +198,20 @@
   }
 
   function patchSaveButtonWithToken() {
-    // adminDbPatch.js owns actual save button. Here we only expose token through window.
     window.SPWT_ADMIN_TOKEN_HEADER = function () {
       return accessState.token ? { "X-SPWT-Admin-Token": accessState.token } : {};
     };
+  }
+
+  function showAdminTab(tabId) {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelector(`.tab[data-tab="${tabId}"]`)?.classList.add("active");
+
+    document.querySelectorAll(".tab-page").forEach(p => p.classList.add("hidden"));
+    $(tabId)?.classList.remove("hidden");
+
+    if (tabId === "tabUsersAccess") renderAccessUsers();
+    else if (typeof switchAdminTab === "function") switchAdminTab(tabId);
   }
 
   function patchTabPermissionGate() {
@@ -215,11 +224,18 @@
       if (permission && accessState.user && !hasPermission(permission)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         alert(`No permission: ${PERMISSION_LABELS[permission] || permission}`);
+        return;
       }
 
-      if (tabId === "tabUsersAccess" && hasPermission("userAccess")) {
-        setTimeout(renderAccessUsers, 50);
+      // This tab is added dynamically and old app.js switchAdminTab does not know it.
+      if (tabId === "tabUsersAccess") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        showAdminTab("tabUsersAccess");
+        return;
       }
     }, true);
   }
@@ -243,9 +259,7 @@
   function switchToFirstAllowedTab() {
     const first = Object.entries(TAB_PERMISSION).find(([, permission]) => hasPermission(permission));
     const tabId = first?.[0] || "tabMachines";
-
-    if (typeof switchAdminTab === "function") switchAdminTab(tabId);
-    if (tabId === "tabUsersAccess") renderAccessUsers();
+    showAdminTab(tabId);
   }
 
   async function loadAccessUsersIfAllowed() {
@@ -279,7 +293,7 @@
     const host = $("accessUsersList");
     if (!host) return;
 
-    const permissions = accessState.permissions || Object.keys(PERMISSION_LABELS);
+    const permissions = accessState.permissions.length ? accessState.permissions : Object.keys(PERMISSION_LABELS);
     const users = accessState.users || [];
 
     host.innerHTML = `
