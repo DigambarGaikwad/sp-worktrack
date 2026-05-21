@@ -41,6 +41,7 @@
             <button class="tab" data-tab="tabLossReasons">Loss Reasons</button>
             <button class="tab" data-tab="tabRootAreas">Root Areas</button>
             <button class="tab" data-tab="tabWork">Work &amp; Sub Work</button>
+            <button class="tab" data-tab="tabControls">Admin Controls</button>
             <button class="tab" data-tab="tabPin">Change PIN</button>
           </div>
 
@@ -133,6 +134,43 @@
             </div>
           </div>
 
+          <!-- Admin Controls -->
+          <div class="tab-page hidden" id="tabControls">
+            <div class="section-title">Admin Controls</div>
+            <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
+
+            <div class="card" style="margin-top:12px; box-shadow:none; border:1px solid #e5e7eb;">
+              <div class="grid-2">
+                <div class="field">
+                  <label class="quality-recheck-line">
+                    <input type="checkbox" id="overrunReasonEnabled" />
+                    Enable overrun reason rule
+                  </label>
+                  <div class="small-hint">If enabled, reason is required when Actual Time crosses configured percentage of Standard Time.</div>
+                </div>
+
+                <div class="field">
+                  <label>Overrun Limit (%)</label>
+                  <input id="overrunReasonLimitPct" class="admin-input" type="number" min="100" max="300" step="1" placeholder="120" />
+                  <div class="small-hint">Example: 120 means Actual Time &gt; 120% of Standard Time requires reason.</div>
+                </div>
+
+                <div class="field">
+                  <label class="quality-recheck-line">
+                    <input type="checkbox" id="bookingExtraReasonEnabled" />
+                    Enable booking extra time reason
+                  </label>
+                  <div class="small-hint">If enabled, reason is required when booking point time is more than remaining standard time.</div>
+                </div>
+              </div>
+
+              <div class="row" style="margin-top:12px;">
+                <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
+                <span class="small-hint" id="adminControlsStatus"></span>
+              </div>
+            </div>
+          </div>
+
           <!-- PIN -->
           <div class="tab-page hidden" id="tabPin">
             <div class="section-title">Change Admin PIN</div>
@@ -183,5 +221,6 @@
 <script src="adminPinDb.js"></script>
 <script src="adminButtonFix.js"></script>
 <script src="adminAccessUi.js"></script>
+<script src="../adminControlsPatch.js"></script>
 </body>
 </html>
