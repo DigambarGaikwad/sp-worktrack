@@ -9,6 +9,8 @@
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
   let resetToken = "";
   let maskedEmail = "";
+  let otpTimer = null;
+  let otpSecondsLeft = 0;
 
   document.addEventListener("DOMContentLoaded", function () {
     setTimeout(initRecoveryUi, 1200);
@@ -53,11 +55,79 @@
   }
 
   function initRecoveryUi() {
+    addRecoveryStyles();
     addForgotPinButton();
     addRecoveryModal();
     addRecoveryEmailField();
     loadRecoveryPublicHint();
     loadRecoveryEmailForAdmin();
+  }
+
+  function addRecoveryStyles() {
+    if ($("spwtRecoveryStyles")) return;
+    const style = document.createElement("style");
+    style.id = "spwtRecoveryStyles";
+    style.textContent = `
+      #pinRecoveryOverlay {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .18s ease;
+      }
+      #pinRecoveryOverlay.show {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .pin-recovery-card {
+        transform: translateY(8px) scale(.98);
+        transition: transform .18s ease;
+      }
+      #pinRecoveryOverlay.show .pin-recovery-card {
+        transform: translateY(0) scale(1);
+      }
+      .pin-recovery-input-wrap {
+        position: relative;
+      }
+      .pin-recovery-eye {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: #eef2f7;
+        color: #334155;
+        border-radius: 10px;
+        padding: 6px 9px;
+        cursor: pointer;
+        font-weight: 800;
+      }
+      .pin-recovery-input-wrap input {
+        padding-right: 54px !important;
+      }
+      .pin-recovery-success {
+        color: #0f7a3b;
+        background: #eafaf0;
+        border: 1px solid #bdeccf;
+        border-radius: 14px;
+        padding: 10px 12px;
+        font-weight: 800;
+      }
+      .pin-recovery-divider {
+        height: 1px;
+        background: #e5edf7;
+        margin: 16px 0;
+      }
+      .pin-recovery-countdown {
+        color: #7c2d12;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-weight: 800;
+        display: inline-block;
+        margin-top: 8px;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   function addForgotPinButton() {
@@ -83,42 +153,55 @@
     overlay.className = "hidden";
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;";
     overlay.innerHTML = `
-      <div class="card admin-page-card" style="width:min(580px,96vw);max-height:92vh;overflow:auto;margin:0;box-shadow:0 24px 70px rgba(15,23,42,.25);">
-        <div class="row-between" style="border-bottom:1px solid #e5edf7;padding-bottom:14px;margin-bottom:18px;">
-          <div>
-            <div class="card-title">Forgot Admin PIN</div>
-            <div id="pinRecoveryHint" class="small-hint">Recovery email status loading...</div>
-          </div>
-          <button type="button" class="btn grey" id="closePinRecoveryBtn">Close</button>
-        </div>
-
-        <div id="pinRecoveryStep1">
-          <div class="small-hint">A 6-digit OTP will be sent to the configured recovery email.</div>
-          <div class="row" style="margin-top:14px;">
-            <button type="button" class="btn green" id="sendRecoveryOtpBtn">Send OTP</button>
-          </div>
-        </div>
-
-        <div id="pinRecoveryStep2" class="hidden" style="margin-top:18px;">
-          <div class="grid-2">
-            <div class="field">
-              <label>OTP</label>
-              <input class="admin-input" id="recoveryOtpInput" placeholder="6 digit OTP" maxlength="6" inputmode="numeric" />
-            </div>
-            <div class="field">
-              <label>New Admin PIN</label>
-              <input class="admin-input" id="recoveryNewPinInput" type="password" placeholder="New PIN" />
+      <div class="card admin-page-card pin-recovery-card" style="width:min(540px,96vw);max-height:90vh;overflow:auto;margin:0;box-shadow:0 24px 70px rgba(15,23,42,.25);padding:0;">
+        <div class="row-between" style="border-bottom:1px solid #e5edf7;padding:16px 18px;margin:0;">
+          <div style="display:flex;gap:12px;align-items:center;">
+            <div style="width:42px;height:42px;border-radius:14px;background:#eafaf0;display:flex;align-items:center;justify-content:center;font-size:22px;">🔐</div>
+            <div>
+              <div class="card-title" style="font-size:24px;line-height:1.1;">Forgot Admin PIN</div>
+              <div id="pinRecoveryHint" class="small-hint" style="margin-top:4px;">Recovery email status loading...</div>
             </div>
           </div>
-          <div class="field">
-            <label>Confirm New PIN</label>
-            <input class="admin-input" id="recoveryConfirmPinInput" type="password" placeholder="Confirm New PIN" />
+          <button type="button" class="btn grey" id="closePinRecoveryBtn" style="padding:10px 16px;">Close</button>
+        </div>
+
+        <div style="padding:18px;">
+          <div id="pinRecoveryStep1" style="text-align:center;">
+            <div class="small-hint">A 6-digit OTP will be sent to the configured recovery email.</div>
+            <div class="row" style="margin-top:14px;justify-content:center;">
+              <button type="button" class="btn green" id="sendRecoveryOtpBtn" style="min-width:130px;">Send OTP</button>
+            </div>
           </div>
-          <div class="row" style="margin-top:12px;">
-            <button type="button" class="btn green" id="resetPinWithOtpBtn">Reset PIN</button>
-            <button type="button" class="btn grey" id="resendRecoveryOtpBtn">Resend OTP</button>
+
+          <div id="pinRecoveryStep2" class="hidden">
+            <div class="pin-recovery-divider"></div>
+            <div class="grid-2">
+              <div class="field">
+                <label>OTP</label>
+                <input class="admin-input" id="recoveryOtpInput" placeholder="6 digit OTP" maxlength="6" inputmode="numeric" />
+              </div>
+              <div class="field">
+                <label>New Admin PIN</label>
+                <div class="pin-recovery-input-wrap">
+                  <input class="admin-input" id="recoveryNewPinInput" type="password" placeholder="New PIN" />
+                  <button type="button" class="pin-recovery-eye" data-toggle-pin="recoveryNewPinInput">👁</button>
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Confirm New PIN</label>
+              <div class="pin-recovery-input-wrap">
+                <input class="admin-input" id="recoveryConfirmPinInput" type="password" placeholder="Confirm New PIN" />
+                <button type="button" class="pin-recovery-eye" data-toggle-pin="recoveryConfirmPinInput">👁</button>
+              </div>
+            </div>
+            <div class="row" style="margin-top:12px;justify-content:flex-start;">
+              <button type="button" class="btn green" id="resetPinWithOtpBtn" style="min-width:125px;">Reset PIN</button>
+              <button type="button" class="btn grey" id="resendRecoveryOtpBtn" style="min-width:120px;">Resend OTP</button>
+            </div>
+            <div id="otpCountdown" class="pin-recovery-countdown hidden"></div>
+            <div id="pinRecoveryMessage" class="small-hint" style="margin-top:10px;"></div>
           </div>
-          <div id="pinRecoveryMessage" class="small-hint" style="margin-top:10px;"></div>
         </div>
       </div>
     `;
@@ -129,6 +212,15 @@
     $("sendRecoveryOtpBtn").onclick = requestOtp;
     $("resendRecoveryOtpBtn").onclick = requestOtp;
     $("resetPinWithOtpBtn").onclick = resetPinWithOtp;
+
+    overlay.querySelectorAll("[data-toggle-pin]").forEach((btn) => {
+      btn.onclick = function () {
+        const input = $(btn.getAttribute("data-toggle-pin"));
+        if (!input) return;
+        input.type = input.type === "password" ? "text" : "password";
+        btn.textContent = input.type === "password" ? "👁" : "🙈";
+      };
+    });
   }
 
   function addRecoveryEmailField() {
@@ -207,15 +299,46 @@
   }
 
   function openRecoveryModal() {
-    $("pinRecoveryOverlay")?.classList.remove("hidden");
+    const overlay = $("pinRecoveryOverlay");
+    overlay?.classList.remove("hidden");
+    requestAnimationFrame(() => overlay?.classList.add("show"));
     $("pinRecoveryStep1")?.classList.remove("hidden");
     $("pinRecoveryStep2")?.classList.add("hidden");
     $("pinRecoveryMessage").textContent = "";
+    stopCountdown();
     loadRecoveryPublicHint();
   }
 
   function closeRecoveryModal() {
-    $("pinRecoveryOverlay")?.classList.add("hidden");
+    const overlay = $("pinRecoveryOverlay");
+    overlay?.classList.remove("show");
+    setTimeout(() => overlay?.classList.add("hidden"), 180);
+    stopCountdown();
+  }
+
+  function startCountdown(minutes) {
+    stopCountdown();
+    otpSecondsLeft = Math.max(1, Number(minutes || 10) * 60);
+    const el = $("otpCountdown");
+    if (el) el.classList.remove("hidden");
+
+    function tick() {
+      const m = String(Math.floor(otpSecondsLeft / 60)).padStart(2, "0");
+      const s = String(otpSecondsLeft % 60).padStart(2, "0");
+      if (el) el.textContent = `OTP expires in ${m}:${s}`;
+      otpSecondsLeft -= 1;
+      if (otpSecondsLeft < 0) stopCountdown();
+    }
+
+    tick();
+    otpTimer = setInterval(tick, 1000);
+  }
+
+  function stopCountdown() {
+    if (otpTimer) clearInterval(otpTimer);
+    otpTimer = null;
+    const el = $("otpCountdown");
+    if (el) el.classList.add("hidden");
   }
 
   async function requestOtp() {
@@ -225,8 +348,12 @@
       resetToken = payload.data?.resetToken || "";
       maskedEmail = payload.data?.maskedEmail || maskedEmail;
       $("pinRecoveryStep2")?.classList.remove("hidden");
-      if (msg) msg.textContent = `OTP sent to ${maskedEmail}. Valid for ${payload.data?.expiresInMinutes || 10} minutes.`;
-      alert(`OTP sent to ${maskedEmail}`);
+      if (msg) {
+        msg.className = "pin-recovery-success";
+        msg.textContent = `✓ OTP sent to ${maskedEmail}.`;
+      }
+      startCountdown(payload.data?.expiresInMinutes || 10);
+      setTimeout(() => $("recoveryOtpInput")?.focus(), 120);
     } catch (err) {
       alert("OTP send failed:\n\n" + (err.message || err));
     }
