@@ -1,6 +1,7 @@
 // renderer/adminControlsPatch.js
-// Lightweight patch for Admin Controls tab.
-// Injects tab/page if missing and wires rule-control UI.
+// Lightweight patch for Admin Controls tab and entry-screen rule sync.
+// Reason: renderer/app.js still has legacy 120% frontend checks, so this patch
+// keeps frontend behavior aligned with DB Admin Controls without disturbing stable app.js.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -8,6 +9,8 @@
     overrunReasonLimitPct: 120,
     bookingExtraReasonEnabled: true
   };
+
+  const AUTO_REASON = "Not required - disabled by Admin Control";
 
   let adminControls = { ...DEFAULT_CONTROLS };
   let controlsLoaded = false;
@@ -106,11 +109,13 @@
       adminControls = normalizeControls(payload.data);
       controlsLoaded = true;
       window.SPWT_ADMIN_CONTROLS = adminControls;
+      applyEntryControlsToScreen();
       return adminControls;
     } catch (err) {
       console.warn("Admin controls load failed. Using defaults.", err);
       adminControls = { ...DEFAULT_CONTROLS };
       window.SPWT_ADMIN_CONTROLS = adminControls;
+      applyEntryControlsToScreen();
       return adminControls;
     }
   }
@@ -176,6 +181,7 @@
       controlsLoaded = true;
       window.SPWT_ADMIN_CONTROLS = adminControls;
       fillControlsForm();
+      applyEntryControlsToScreen();
       status("Saved. Overrun limit is now " + adminControls.overrunReasonLimitPct + "%", "success");
     } catch (err) {
       console.error("Admin controls save failed:", err);
@@ -218,11 +224,107 @@
     }
   }
 
-  function patchStatic120Texts() {
-    const pct = Number(adminControls.overrunReasonLimitPct || 120);
-    document.querySelectorAll(".efficiencyReasonField label").forEach((label) => {
+  function getOverrunLimitPct() {
+    return Number(adminControls.overrunReasonLimitPct || 120);
+  }
+
+  function isOverrunReasonEnabled() {
+    return adminControls.overrunReasonEnabled !== false;
+  }
+
+  function isBookingExtraReasonEnabled() {
+    return adminControls.bookingExtraReasonEnabled !== false;
+  }
+
+  function cardNeedsEfficiencyReason(card) {
+    const standard = Number(card.querySelector(".standardTime")?.value || 0);
+    const actual = Number(card.querySelector(".actualTime")?.value || 0);
+    const workNature = card.querySelector(".typeSelect")?.value || "Normal";
+    const limitPct = getOverrunLimitPct();
+    return isOverrunReasonEnabled() && workNature === "Normal" && standard > 0 && actual > standard * (limitPct / 100);
+  }
+
+  function applyEfficiencyControlsToCard(card, forSubmit = false) {
+    const field = card.querySelector(".efficiencyReasonField");
+    const input = card.querySelector(".efficiencyReasonInput");
+    const label = field?.querySelector("label");
+    const pct = getOverrunLimitPct();
+
+    if (label) {
       label.textContent = `Reason for Low Efficiency (Required when Actual Time > ${pct}% of Standard Time)`;
+    }
+
+    if (!isOverrunReasonEnabled()) {
+      if (field) field.style.display = "none";
+
+      // Legacy app.js validation still checks 120%. Before submit, keep a hidden safe value
+      // so frontend validation does not block when Admin has disabled this rule.
+      if (input) {
+        if (forSubmit) input.value = AUTO_REASON;
+        else if (input.value === AUTO_REASON) input.value = "";
+      }
+      return;
+    }
+
+    const needs = cardNeedsEfficiencyReason(card);
+    if (field) field.style.display = needs ? "flex" : "none";
+    if (!needs && input && input.value === AUTO_REASON) input.value = "";
+  }
+
+  function applyBookingExtraControlsToCard(card, forSubmit = false) {
+    const enabled = isBookingExtraReasonEnabled();
+
+    card.querySelectorAll(".booking-point-row").forEach((row) => {
+      const check = row.querySelector(".bpCheck");
+      const book = row.querySelector(".bpBookTime");
+      const reasonBox = row.querySelector(".bpOverReasonBox");
+      const reasonInput = row.querySelector(".bpOverReason");
+      const reasonHint = row.querySelector(".bpOverHint");
+      if (!check || !book) return;
+
+      const max = Number(book.dataset.max || check.dataset.remaining || check.dataset.time || 0);
+      const val = Number(book.value || 0);
+      const extra = Math.max(0, val - max);
+
+      if (!enabled) {
+        if (reasonBox) reasonBox.style.display = "none";
+        if (reasonHint) reasonHint.textContent = "";
+        if (reasonInput) {
+          if (forSubmit && extra > 0) reasonInput.value = AUTO_REASON;
+          else if (reasonInput.value === AUTO_REASON) reasonInput.value = "";
+        }
+        row.classList.remove("entry-error");
+        return;
+      }
+
+      if (reasonBox) reasonBox.style.display = extra > 0 ? "block" : "none";
+      if (reasonHint) {
+        reasonHint.textContent = extra > 0
+          ? `Extra ${extra} min beyond remaining ${max} min. Reason required.`
+          : "";
+      }
+      if (extra <= 0 && reasonInput?.value === AUTO_REASON) reasonInput.value = "";
     });
+  }
+
+  function applyEntryControlsToScreen(forSubmit = false) {
+    document.querySelectorAll(".work-card").forEach((card) => {
+      applyEfficiencyControlsToCard(card, forSubmit);
+      applyBookingExtraControlsToCard(card, forSubmit);
+    });
+  }
+
+  function beforeSubmitPatch() {
+    // Capture phase runs before app.js onclick submit handler.
+    applyEntryControlsToScreen(true);
+  }
+
+  function initSubmitGuard() {
+    const submitBtn = document.getElementById("submitBtn");
+    if (submitBtn && !submitBtn.__spwtControlsSubmitGuard) {
+      submitBtn.__spwtControlsSubmitGuard = true;
+      submitBtn.addEventListener("click", beforeSubmitPatch, true);
+    }
   }
 
   async function init() {
@@ -230,6 +332,8 @@
     await loadAdminControls(false);
     patchSwitchAdminTab();
     wireControlsButton();
+    initSubmitGuard();
+    applyEntryControlsToScreen();
 
     document.addEventListener("click", (e) => {
       if (e.target?.closest?.('[data-tab="tabControls"]')) {
@@ -238,16 +342,21 @@
         setTimeout(showControlsTabDirectly, 0);
       }
       setTimeout(wireControlsButton, 0);
+      setTimeout(initSubmitGuard, 0);
+      setTimeout(() => applyEntryControlsToScreen(), 0);
     }, true);
 
-    document.addEventListener("input", () => patchStatic120Texts(), true);
-    document.addEventListener("change", () => patchStatic120Texts(), true);
-    patchStatic120Texts();
+    document.addEventListener("input", () => applyEntryControlsToScreen(), true);
+    document.addEventListener("change", () => applyEntryControlsToScreen(), true);
+
+    // Booking point rendering is async and may run after card changes.
+    setInterval(() => applyEntryControlsToScreen(), 1000);
   }
 
   window.SPWT_ADMIN_CONTROLS = adminControls;
   window.SPWT_LOAD_ADMIN_CONTROLS = loadAdminControls;
   window.SPWT_RENDER_ADMIN_CONTROLS = renderAdminControls;
+  window.SPWT_APPLY_ENTRY_CONTROLS = applyEntryControlsToScreen;
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
