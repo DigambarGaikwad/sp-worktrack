@@ -7,6 +7,7 @@
   if ((CONFIG.DATA_SOURCE || "local") !== "db") return;
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
+  const HIDDEN_LEGACY_PERMISSIONS = new Set(["workStandards"]);
 
   const PERMISSION_LABELS = {
     machines: "Machines",
@@ -14,6 +15,9 @@
     shifts: "Shifts",
     lossReasons: "Loss Reasons",
     rootAreas: "Root Areas",
+    workCatalog: "Work & Sub Work",
+    standardTime: "Standard Time",
+    adminControls: "Admin Controls",
     workStandards: "Work & Sub Work / Standards",
     plannedAbsence: "Planned Absence",
     skillMatrix: "Skill Matrix",
@@ -27,7 +31,8 @@
     tabShifts: "shifts",
     tabLossReasons: "lossReasons",
     tabRootAreas: "rootAreas",
-    tabWork: "workStandards",
+    tabWork: "workCatalog",
+    tabControls: "adminControls",
     tabPin: "pin",
     tabUsersAccess: "userAccess"
   };
@@ -44,9 +49,7 @@
     setTimeout(initAccessUi, 800);
   });
 
-  function $(id) {
-    return document.getElementById(id);
-  }
+  function $(id) { return document.getElementById(id); }
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -57,11 +60,38 @@
       .replaceAll("'", "&#039;");
   }
 
+  function expandLegacyPermissions(perms) {
+    const set = new Set(Array.isArray(perms) ? perms : []);
+    if (set.has("workStandards")) {
+      set.add("workCatalog");
+      set.add("standardTime");
+    }
+    return Array.from(set);
+  }
+
+  function visiblePermissions(list) {
+    const expanded = expandLegacyPermissions(Array.isArray(list) ? list : []);
+    const set = new Set(expanded);
+
+    // Do not show old combined backend key anymore.
+    HIDDEN_LEGACY_PERMISSIONS.forEach((p) => set.delete(p));
+
+    // If backend is older and only sends workStandards, still force the two clean checkboxes.
+    if (expanded.includes("workStandards")) {
+      set.add("workCatalog");
+      set.add("standardTime");
+    }
+
+    return Array.from(set).filter((p) => PERMISSION_LABELS[p]);
+  }
+
   function hasPermission(permission) {
     const user = accessState.user || {};
     if (user.role === "super_admin") return true;
     if (Array.isArray(user.permissions) && user.permissions.includes("all")) return true;
-    return Array.isArray(user.permissions) && user.permissions.includes(permission);
+
+    const perms = expandLegacyPermissions(user.permissions);
+    return perms.includes(permission);
   }
 
   function initAccessUi() {
@@ -97,9 +127,7 @@
     pinInput.closest(".field")?.before(userField);
 
     const hint = loginBox.querySelector(".small-hint");
-    if (hint) {
-      hint.textContent = "Login with username + PIN. Default super admin username is admin.";
-    }
+    if (hint) hint.textContent = "Login with username + PIN. Default super admin username is admin.";
   }
 
   function ensureUsersAccessTab() {
@@ -147,29 +175,21 @@
     loginBtn.onclick = async function () {
       const username = ($("adminUserInput")?.value || "admin").trim() || "admin";
       const pin = ($("adminPinInput")?.value || "").trim();
-
-      if (!pin) {
-        alert("Enter PIN.");
-        return;
-      }
+      if (!pin) return alert("Enter PIN.");
 
       try {
         const payload = await postJson("/api/admin/access/login", { username, pin });
-        if (!payload.valid) {
-          alert("Wrong username or PIN.");
-          return;
-        }
+        if (!payload.valid) return alert("Wrong username or PIN.");
 
         accessState.token = payload.token || "";
         accessState.user = payload.user || null;
+        if (accessState.user) accessState.user.permissions = expandLegacyPermissions(accessState.user.permissions);
 
         if (typeof adminOverrides !== "undefined" && adminOverrides) {
           adminOverrides.admin = adminOverrides.admin || {};
           adminOverrides.admin.pin = pin;
         }
-        if (typeof isAdminLoggedIn !== "undefined") {
-          isAdminLoggedIn = true;
-        }
+        if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = true;
 
         $("adminLoginBox")?.classList.add("hidden");
         $("adminPanel")?.classList.remove("hidden");
@@ -229,13 +249,11 @@
         return;
       }
 
-      // This tab is added dynamically and old app.js switchAdminTab does not know it.
       if (tabId === "tabUsersAccess") {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         showAdminTab("tabUsersAccess");
-        return;
       }
     }, true);
   }
@@ -245,44 +263,40 @@
       const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
       const page = $(tabId);
       const allowed = hasPermission(permission);
-
       if (tab) tab.style.display = allowed ? "" : "none";
       if (page && !allowed) page.classList.add("hidden");
     });
 
     const saveBtn = $("adminSaveBtn");
-    if (saveBtn) {
-      saveBtn.title = "Save allowed admin changes to DB";
-    }
+    if (saveBtn) saveBtn.title = "Save allowed admin changes to DB";
   }
 
   function switchToFirstAllowedTab() {
     const first = Object.entries(TAB_PERMISSION).find(([, permission]) => hasPermission(permission));
-    const tabId = first?.[0] || "tabMachines";
-    showAdminTab(tabId);
+    showAdminTab(first?.[0] || "tabMachines");
   }
 
   async function loadAccessUsersIfAllowed() {
     if (!hasPermission("userAccess")) return;
 
     const payload = await fetchJson("/api/admin/access/users");
-    accessState.permissions = payload.data?.permissions || [];
+    accessState.permissions = visiblePermissions(payload.data?.permissions || []);
     accessState.roleTemplates = payload.data?.roleTemplates || {};
-    accessState.users = payload.data?.users || [];
+    accessState.users = (payload.data?.users || []).map((u) => ({
+      ...u,
+      permissions: expandLegacyPermissions(u.permissions)
+    }));
     renderAccessUsers();
   }
 
   function addAccessUser() {
-    if (!hasPermission("userAccess")) {
-      alert("No permission: Users & Access");
-      return;
-    }
+    if (!hasPermission("userAccess")) return alert("No permission: Users & Access");
 
     accessState.users.push({
       username: "newuser",
       displayName: "New User",
       role: "supervisor",
-      permissions: accessState.roleTemplates?.supervisor || ["machines", "employees"],
+      permissions: expandLegacyPermissions(accessState.roleTemplates?.supervisor || ["machines", "employees", "workCatalog"]),
       active: true,
       pin: ""
     });
@@ -293,7 +307,7 @@
     const host = $("accessUsersList");
     if (!host) return;
 
-    const permissions = accessState.permissions.length ? accessState.permissions : Object.keys(PERMISSION_LABELS);
+    const permissions = accessState.permissions.length ? accessState.permissions : visiblePermissions(Object.keys(PERMISSION_LABELS));
     const users = accessState.users || [];
 
     host.innerHTML = `
@@ -327,8 +341,9 @@
       `<option value="${r}" ${r === role ? "selected" : ""}>${r}</option>`
     ).join("");
 
+    const userPerms = expandLegacyPermissions(user.permissions);
     const permissionChecks = permissions.map((p) => {
-      const checked = Array.isArray(user.permissions) && user.permissions.includes(p) ? "checked" : "";
+      const checked = userPerms.includes(p) ? "checked" : "";
       return `
         <label style="display:inline-flex; align-items:center; gap:4px; margin:3px 10px 3px 0; white-space:nowrap;">
           <input type="checkbox" data-au-idx="${idx}" data-au-perm="${escapeHtml(p)}" ${checked} />
@@ -367,7 +382,7 @@
         else if (field === "role") {
           user.role = el.value;
           if (!Array.isArray(user.permissions) || user.permissions.length === 0) {
-            user.permissions = accessState.roleTemplates?.[el.value] || [];
+            user.permissions = expandLegacyPermissions(accessState.roleTemplates?.[el.value] || []);
             renderAccessUsers();
           }
         } else {
@@ -383,9 +398,9 @@
         const user = accessState.users[idx];
         if (!user) return;
 
-        user.permissions = Array.isArray(user.permissions) ? user.permissions : [];
+        user.permissions = expandLegacyPermissions(user.permissions);
         if (el.checked && !user.permissions.includes(perm)) user.permissions.push(perm);
-        if (!el.checked) user.permissions = user.permissions.filter((p) => p !== perm);
+        if (!el.checked) user.permissions = user.permissions.filter((p) => p !== perm && p !== "workStandards");
       };
     });
 
@@ -399,23 +414,23 @@
   }
 
   async function saveAccessUsers() {
-    if (!hasPermission("userAccess")) {
-      alert("No permission: Users & Access");
-      return;
-    }
+    if (!hasPermission("userAccess")) return alert("No permission: Users & Access");
 
     try {
       const users = (accessState.users || []).map((u) => ({
         username: (u.username || "").trim(),
         displayName: (u.displayName || "").trim(),
         role: u.role || "supervisor",
-        permissions: Array.isArray(u.permissions) ? u.permissions : [],
+        permissions: expandLegacyPermissions(u.permissions).filter((p) => !HIDDEN_LEGACY_PERMISSIONS.has(p)),
         active: u.active !== false,
         pin: (u.pin || "").trim()
       })).filter((u) => u.username);
 
       const payload = await postJson("/api/admin/access/users", { users });
-      accessState.users = payload.data || [];
+      accessState.users = (payload.data || []).map((u) => ({
+        ...u,
+        permissions: expandLegacyPermissions(u.permissions)
+      }));
       renderAccessUsers();
       alert("Users & Access saved.");
     } catch (err) {
@@ -427,11 +442,8 @@
   async function fetchJson(path) {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       method: "GET",
-      headers: {
-        ...(accessState.token ? { "X-SPWT-Admin-Token": accessState.token } : {})
-      }
+      headers: { ...(accessState.token ? { "X-SPWT-Admin-Token": accessState.token } : {}) }
     });
-
     const payload = await res.json().catch(() => null);
     if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Request failed ${res.status}`);
     return payload;
@@ -446,7 +458,6 @@
       },
       body: JSON.stringify(body || {})
     });
-
     const payload = await res.json().catch(() => null);
     if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Request failed ${res.status}`);
     return payload;
