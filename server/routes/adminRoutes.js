@@ -21,8 +21,14 @@ const {
   listAccessUsers,
   upsertAccessUsers,
   loginAdminAccess,
-  requirePermission
+  requirePermission,
+  getSessionUser,
+  userCan
 } = require("../services/adminAccessService");
+const {
+  getAdminControls,
+  saveAdminControls
+} = require("../services/adminControlService");
 
 const router = express.Router();
 
@@ -34,6 +40,10 @@ function requireAdminPermission(req, permission) {
   return requirePermission(getAccessToken(req), permission);
 }
 
+function getOptionalAdminUser(req) {
+  return getSessionUser(getAccessToken(req));
+}
+
 router.get("/master-data", async (req, res) => {
   try {
     const data = await getAdminMasterData();
@@ -41,6 +51,27 @@ router.get("/master-data", async (req, res) => {
   } catch (err) {
     console.error("GET /api/admin/master-data failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load admin master data", details: err.details || null });
+  }
+});
+
+router.get("/controls", async (req, res) => {
+  try {
+    const data = await getAdminControls();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/admin/controls failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load admin controls", details: err.details || null });
+  }
+});
+
+router.post("/controls", async (req, res) => {
+  try {
+    requireAdminPermission(req, "adminControls");
+    const data = await saveAdminControls(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/admin/controls failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save admin controls", details: err.details || null });
   }
 });
 
@@ -109,7 +140,21 @@ router.post("/access/users", async (req, res) => {
 
 router.post("/save-master-data", async (req, res) => {
   try {
-    const result = await saveAdminMasterData(req.body || {});
+    const user = getOptionalAdminUser(req);
+    const hasWorkCatalogPermission = !user || userCan(user, "workCatalog");
+    const hasStandardTimePermission = !user || userCan(user, "standardTime");
+
+    if (!hasWorkCatalogPermission) {
+      const err = new Error("Permission required: workCatalog");
+      err.status = 403;
+      throw err;
+    }
+
+    const result = await saveAdminMasterData(req.body || {}, {
+      user,
+      canEditWorkCatalog: hasWorkCatalogPermission,
+      canEditStandardTime: hasStandardTimePermission
+    });
     res.json({ ok: true, data: result });
   } catch (err) {
     console.error("POST /api/admin/save-master-data failed:", err);
