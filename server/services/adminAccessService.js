@@ -10,12 +10,20 @@ const COLLECTION = "admin_settings";
 const ACCESS_KEY = "admin_access_users_json";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
+// Permission split:
+// - workCatalog = machine category / department / sub work / booking point / quality point structure
+// - standardTime = base standard time and booking point standard time confirmation
+// - adminControls = configurable rules like overrun reason limit
+// NOTE: workStandards is kept for backward compatibility with older saved users.
 const ALL_PERMISSIONS = [
   "machines",
   "employees",
   "shifts",
   "lossReasons",
   "rootAreas",
+  "workCatalog",
+  "standardTime",
+  "adminControls",
   "workStandards",
   "plannedAbsence",
   "skillMatrix",
@@ -25,8 +33,8 @@ const ALL_PERMISSIONS = [
 
 const ROLE_TEMPLATES = {
   admin: ALL_PERMISSIONS,
-  supervisor: ["machines", "employees", "plannedAbsence", "skillMatrix"],
-  engineer: ["lossReasons", "rootAreas", "workStandards", "skillMatrix"]
+  supervisor: ["machines", "employees", "workCatalog", "plannedAbsence", "skillMatrix"],
+  engineer: ["lossReasons", "rootAreas", "workCatalog", "standardTime", "workStandards", "skillMatrix"]
 };
 
 const sessions = new Map();
@@ -78,6 +86,23 @@ async function getStoredUsers() {
   return Array.isArray(users) ? users : [];
 }
 
+function expandBackwardCompatiblePermissions(list) {
+  const set = new Set((Array.isArray(list) ? list : []).map(clean).filter(Boolean));
+
+  // Old permission should automatically give both new permissions until old users are edited.
+  if (set.has("workStandards")) {
+    set.add("workCatalog");
+    set.add("standardTime");
+  }
+
+  return Array.from(set);
+}
+
+function normalizePermissions(permissions) {
+  const expanded = expandBackwardCompatiblePermissions(permissions);
+  return Array.from(new Set(expanded.filter((p) => ALL_PERMISSIONS.includes(p))));
+}
+
 function publicUser(user) {
   return {
     username: normalizeUsername(user.username),
@@ -88,16 +113,19 @@ function publicUser(user) {
   };
 }
 
-function normalizePermissions(permissions) {
-  const list = Array.isArray(permissions) ? permissions : [];
-  return Array.from(new Set(list.map(clean).filter((p) => ALL_PERMISSIONS.includes(p))));
-}
-
 function userCan(user, permission) {
   if (!user) return false;
   if (user.role === "super_admin") return true;
   if (Array.isArray(user.permissions) && user.permissions.includes("all")) return true;
-  return Array.isArray(user.permissions) && user.permissions.includes(permission);
+
+  const permissions = normalizePermissions(user.permissions || []);
+
+  // Backward compatibility: old workStandards permission can still satisfy both new checks.
+  if ((permission === "workCatalog" || permission === "standardTime") && permissions.includes("workStandards")) {
+    return true;
+  }
+
+  return permissions.includes(permission);
 }
 
 async function saveStoredUsers(users) {
@@ -173,7 +201,7 @@ function createSession(user) {
     username: user.username,
     displayName: user.displayName,
     role: user.role,
-    permissions: user.permissions,
+    permissions: normalizePermissions(user.permissions),
     active: user.active !== false
   };
 
