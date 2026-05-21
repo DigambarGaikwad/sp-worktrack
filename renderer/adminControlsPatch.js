@@ -1,6 +1,6 @@
 // renderer/adminControlsPatch.js
 // Lightweight patch for Admin Controls tab.
-// Keeps renderer/app.js stable and only wires rule-control UI.
+// Injects tab/page if missing and wires rule-control UI.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -33,16 +33,75 @@
     el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "";
   }
 
+  function ensureAdminControlsTab() {
+    const panel = document.getElementById("adminPanel");
+    const tabs = panel?.querySelector(".tabs");
+    if (!panel || !tabs) return;
+
+    if (!tabs.querySelector('[data-tab="tabControls"]')) {
+      const btn = document.createElement("button");
+      btn.className = "tab";
+      btn.setAttribute("data-tab", "tabControls");
+      btn.textContent = "Admin Controls";
+
+      const pinTab = tabs.querySelector('[data-tab="tabPin"]');
+      if (pinTab) tabs.insertBefore(btn, pinTab);
+      else tabs.appendChild(btn);
+    }
+
+    if (!document.getElementById("tabControls")) {
+      const page = document.createElement("div");
+      page.className = "tab-page hidden";
+      page.id = "tabControls";
+      page.innerHTML = `
+        <div class="section-title">Admin Controls</div>
+        <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
+
+        <div class="card" style="margin-top:12px; box-shadow:none; border:1px solid #e5e7eb;">
+          <div class="grid-2">
+            <div class="field">
+              <label class="quality-recheck-line">
+                <input type="checkbox" id="overrunReasonEnabled" />
+                Enable overrun reason rule
+              </label>
+              <div class="small-hint">If enabled, reason is required when Actual Time crosses configured percentage of Standard Time.</div>
+            </div>
+
+            <div class="field">
+              <label>Overrun Limit (%)</label>
+              <input id="overrunReasonLimitPct" class="admin-input" type="number" min="100" max="300" step="1" placeholder="120" />
+              <div class="small-hint">Example: 120 means Actual Time &gt; 120% of Standard Time requires reason.</div>
+            </div>
+
+            <div class="field">
+              <label class="quality-recheck-line">
+                <input type="checkbox" id="bookingExtraReasonEnabled" />
+                Enable booking extra time reason
+              </label>
+              <div class="small-hint">If enabled, reason is required when booking point time is more than remaining standard time.</div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
+            <span class="small-hint" id="adminControlsStatus"></span>
+          </div>
+        </div>
+      `;
+
+      const hr = panel.querySelector("hr");
+      if (hr) panel.insertBefore(page, hr);
+      else panel.appendChild(page);
+    }
+  }
+
   async function loadAdminControls(force = false) {
     if (controlsLoaded && !force) return adminControls;
 
     try {
       const res = await fetch(`${apiBaseUrl()}/api/admin/controls`);
       const payload = await res.json().catch(() => null);
-
-      if (!res.ok || !payload?.ok) {
-        throw new Error(payload?.message || `API error ${res.status}`);
-      }
+      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
 
       adminControls = normalizeControls(payload.data);
       controlsLoaded = true;
@@ -67,6 +126,7 @@
   }
 
   async function renderAdminControls() {
+    ensureAdminControlsTab();
     status("Loading controls...");
     await loadAdminControls(true);
     fillControlsForm();
@@ -86,8 +146,7 @@
   }
 
   function getAdminToken() {
-    // This will be used when frontend RBAC login is connected.
-    // Current super-admin/local PIN flow can still save until strict frontend login is added.
+    if (window.SPWT_ADMIN_ACCESS?.getToken) return window.SPWT_ADMIN_ACCESS.getToken() || "";
     return window.SPWT_ADMIN_TOKEN || localStorage.getItem("spwt_admin_token") || "";
   }
 
@@ -97,10 +156,7 @@
 
     const btn = document.getElementById("saveAdminControlsBtn");
     try {
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "Saving...";
-      }
+      if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
       status("Saving...");
 
       const body = readControlsForm();
@@ -114,10 +170,7 @@
         body: JSON.stringify(body)
       });
       const payload = await res.json().catch(() => null);
-
-      if (!res.ok || !payload?.ok) {
-        throw new Error(payload?.message || `API error ${res.status}`);
-      }
+      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
 
       adminControls = normalizeControls(payload.data);
       controlsLoaded = true;
@@ -130,11 +183,16 @@
       alert("Admin Controls save failed: " + (err?.message || err));
     } finally {
       controlsSaving = false;
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = "Save Admin Controls";
-      }
+      if (btn) { btn.disabled = false; btn.textContent = "Save Admin Controls"; }
     }
+  }
+
+  function showControlsTabDirectly() {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelector('[data-tab="tabControls"]')?.classList.add("active");
+    document.querySelectorAll(".tab-page").forEach(p => p.classList.add("hidden"));
+    document.getElementById("tabControls")?.classList.remove("hidden");
+    renderAdminControls();
   }
 
   function patchSwitchAdminTab() {
@@ -142,17 +200,25 @@
     if (typeof original !== "function" || original.__spwtControlsPatched) return;
 
     const patched = function (tabId) {
-      const result = original.apply(this, arguments);
-      if (tabId === "tabControls") renderAdminControls();
-      return result;
+      if (tabId === "tabControls") {
+        showControlsTabDirectly();
+        return;
+      }
+      return original.apply(this, arguments);
     };
     patched.__spwtControlsPatched = true;
     window.switchAdminTab = patched;
   }
 
+  function wireControlsButton() {
+    const saveBtn = document.getElementById("saveAdminControlsBtn");
+    if (saveBtn && !saveBtn.__spwtWired) {
+      saveBtn.__spwtWired = true;
+      saveBtn.onclick = saveAdminControls;
+    }
+  }
+
   function patchStatic120Texts() {
-    // Frontend validation still shows 120 in a few messages until full RBAC/front-end refactor.
-    // This keeps visible label updated for user guidance.
     const pct = Number(adminControls.overrunReasonLimitPct || 120);
     document.querySelectorAll(".efficiencyReasonField label").forEach((label) => {
       label.textContent = `Reason for Low Efficiency (Required when Actual Time > ${pct}% of Standard Time)`;
@@ -160,20 +226,19 @@
   }
 
   async function init() {
+    ensureAdminControlsTab();
     await loadAdminControls(false);
     patchSwitchAdminTab();
-
-    const saveBtn = document.getElementById("saveAdminControlsBtn");
-    if (saveBtn && !saveBtn.__spwtWired) {
-      saveBtn.__spwtWired = true;
-      saveBtn.onclick = saveAdminControls;
-    }
+    wireControlsButton();
 
     document.addEventListener("click", (e) => {
       if (e.target?.closest?.('[data-tab="tabControls"]')) {
-        setTimeout(renderAdminControls, 0);
+        e.preventDefault();
+        e.stopPropagation();
+        setTimeout(showControlsTabDirectly, 0);
       }
-    });
+      setTimeout(wireControlsButton, 0);
+    }, true);
 
     document.addEventListener("input", () => patchStatic120Texts(), true);
     document.addEventListener("change", () => patchStatic120Texts(), true);
@@ -184,9 +249,6 @@
   window.SPWT_LOAD_ADMIN_CONTROLS = loadAdminControls;
   window.SPWT_RENDER_ADMIN_CONTROLS = renderAdminControls;
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 })();
