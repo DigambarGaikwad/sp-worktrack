@@ -71,12 +71,6 @@
 
       <!-- SECTION 2 -->
       <div class="card">
-        <!-- Additinal add work button on the top of work card -->
-        <!-- <div class="card-head row-between">
-          <div class="card-title">Work Entries</div>
-          <button class="btn orange" id="addWorkBtn">+ Add Work</button>
-        </div> -->
-
         <div id="workContainer" class="work-list"></div>
 
         <div class="work-actions-bottom">
@@ -119,23 +113,7 @@
         <button class="btn grey" id="saveBtn">Save</button>
         <button class="btn green" id="submitBtn">Submit</button>
       </div>
-<!-- app footer space beetween -->
-<!-- <div class="app-footer">
-    <div class="footer-left">
-    <span class="footer-brand">SP WorkTrack v1.0</span>
-    <span class="footer-dot">•</span>
-    <span class="footer-tag">Production Management System</span>
-    
-  </div>
 
-   <div class="footer-right">
-      <span class="footer-muted">Developed In-House by</span>
-      <span class="footer-name">Digambar Gaikwad</span>
-      <span class="footer-dot">•</span>
-       <span class="footer-muted">© 2026 Sopan Process Technologies</span>
-   </div>
-</div> -->
-<!-- app footers left -->
  <div class="app-footer">
   <div class="footer-top">
     <span class="footer-title">SP WorkTrack v1.0</span>
@@ -186,6 +164,7 @@
             <button class="tab" data-tab="tabLossReasons">Loss Reasons</button>
             <button class="tab" data-tab="tabRootAreas">Root Areas</button>
             <button class="tab" data-tab="tabWork">Work &amp; Sub Work</button>
+            <button class="tab" data-tab="tabControls">Admin Controls</button>
             <button class="tab" data-tab="tabPin">Change PIN</button>
           </div>
 
@@ -275,6 +254,43 @@
               <button class="btn grey" id="addTypeBtn">+ Add Machine Category</button>
               <button class="btn grey" id="addMainWorkBtn">+ Add Main Work</button>
               <button class="btn orange" id="addSubWorkBtn">+ Add Sub Work</button>
+            </div>
+          </div>
+
+          <!-- Admin Controls -->
+          <div class="tab-page hidden" id="tabControls">
+            <div class="section-title">Admin Controls</div>
+            <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
+
+            <div class="card" style="margin-top:12px; box-shadow:none; border:1px solid #e5e7eb;">
+              <div class="grid-2">
+                <div class="field">
+                  <label class="quality-recheck-line">
+                    <input type="checkbox" id="overrunReasonEnabled" />
+                    Enable overrun reason rule
+                  </label>
+                  <div class="small-hint">If enabled, reason is required when Actual Time crosses the configured percentage of Standard Time.</div>
+                </div>
+
+                <div class="field">
+                  <label>Overrun Limit (%)</label>
+                  <input id="overrunReasonLimitPct" class="admin-input" type="number" min="100" max="300" step="1" placeholder="120" />
+                  <div class="small-hint">Example: 120 means Actual Time &gt; 120% of Standard Time requires reason.</div>
+                </div>
+
+                <div class="field">
+                  <label class="quality-recheck-line">
+                    <input type="checkbox" id="bookingExtraReasonEnabled" />
+                    Enable booking extra time reason
+                  </label>
+                  <div class="small-hint">If enabled, reason is required when booking point time is more than remaining standard time.</div>
+                </div>
+              </div>
+
+              <div class="row" style="margin-top:12px;">
+                <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
+                <span class="small-hint" id="adminControlsStatus"></span>
+              </div>
             </div>
           </div>
 
