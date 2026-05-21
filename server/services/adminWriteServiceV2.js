@@ -3,6 +3,8 @@
 // DB admin rule:
 // - Active/Completed/Inactive records may still be visible in Admin.
 // - Records removed with Delete are marked as Deleted and hidden from Admin master load.
+// - Users with workCatalog but without standardTime can save Work/Sub Work structure,
+//   but existing standard times are preserved and new standard times are saved as 0.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const planned = require("./plannedAbsenceService");
@@ -105,6 +107,45 @@ function normalizeSubworksAndPoints(data) {
   return { subworks, bookingPoints, qualityPoints };
 }
 
+function subworkKey(x) { return `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}`; }
+function bookingPointKey(x) { return `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`; }
+
+async function protectStandardTimesIfRequired(subworks, bookingPoints, canEditStandardTime) {
+  if (canEditStandardTime !== false) {
+    return { subworks, bookingPoints, protected: false };
+  }
+
+  const [existingSubworks, existingBookingPoints] = await Promise.all([
+    listAll("subworks", { perPage: 1000 }),
+    listAll("booking_points", { perPage: 1000 })
+  ]);
+
+  const oldSubworkMap = makeMap(existingSubworks, subworkKey);
+  const oldBookingPointMap = makeMap(existingBookingPoints, bookingPointKey);
+
+  const protectedSubworks = subworks.map((x) => {
+    const old = oldSubworkMap.get(subworkKey(x));
+    return {
+      ...x,
+      standard_time: old ? num(old.standard_time, 0) : 0
+    };
+  });
+
+  const protectedBookingPoints = bookingPoints.map((x) => {
+    const old = oldBookingPointMap.get(bookingPointKey(x));
+    return {
+      ...x,
+      standard_time: old ? num(old.standard_time, 0) : 0
+    };
+  });
+
+  return {
+    subworks: protectedSubworks,
+    bookingPoints: protectedBookingPoints,
+    protected: true
+  };
+}
+
 function normalizeLossReasons(data) {
   return normalizeNameList(data.lossReasons).map((reason_name) => ({ reason_code: slug(reason_name), reason_name, active: true })).filter((x) => x.reason_code && x.reason_name);
 }
@@ -112,11 +153,15 @@ function normalizeRootAreas(data) {
   return normalizeNameList(data.rootAreas).map((area_name) => ({ area_code: slug(area_name), area_name, active: true })).filter((x) => x.area_code && x.area_name);
 }
 
-async function saveAdminMasterData(rawData = {}) {
+async function saveAdminMasterData(rawData = {}, options = {}) {
   const data = rawData.data || rawData.adminOverrides || rawData;
   const deactivateMissing = clean(rawData.syncMode || data.syncMode).toLowerCase() === "deactivatemissing";
   const machineTypes = normalizeMachineTypes(data), machines = normalizeMachines(data), employees = normalizeEmployees(data), shifts = normalizeShifts(data), departments = normalizeDepartments(data);
-  const { subworks, bookingPoints, qualityPoints } = normalizeSubworksAndPoints(data);
+  const normalized = normalizeSubworksAndPoints(data);
+  const protectedWork = await protectStandardTimesIfRequired(normalized.subworks, normalized.bookingPoints, options.canEditStandardTime);
+  const subworks = protectedWork.subworks;
+  const bookingPoints = protectedWork.bookingPoints;
+  const qualityPoints = normalized.qualityPoints;
   const lossReasons = normalizeLossReasons(data);
   const rootAreas = normalizeRootAreas(data);
   const results = {};
@@ -125,12 +170,20 @@ async function saveAdminMasterData(rawData = {}) {
   results.employees = await syncCollection({ collection: "employees", records: employees, keyFn: (x) => clean(x.emp_code), deactivateMissing, deactivateBody: { active: false, designation: "__DELETED__" }, shouldDeactivate: (old) => clean(old.designation) !== "__DELETED__" });
   results.shifts = await syncCollection({ collection: "shifts", records: shifts, keyFn: (x) => clean(x.shift_code), deactivateMissing });
   results.departments = await syncCollection({ collection: "departments", records: departments, keyFn: (x) => clean(x.department_code), deactivateMissing });
-  results.subworks = await syncCollection({ collection: "subworks", records: subworks, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}`, deactivateMissing });
-  results.bookingPoints = await syncCollection({ collection: "booking_points", records: bookingPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
+  results.subworks = await syncCollection({ collection: "subworks", records: subworks, keyFn: subworkKey, deactivateMissing });
+  results.bookingPoints = await syncCollection({ collection: "booking_points", records: bookingPoints, keyFn: bookingPointKey, deactivateMissing });
   results.qualityPoints = await syncCollection({ collection: "quality_points", records: qualityPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
   results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_code || x.reason_name), deactivateMissing });
   results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_code || x.area_name), deactivateMissing });
-  return { ok: true, mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only", message: deactivateMissing ? "Admin master data saved. Deleted records hidden from Admin." : "Admin master data saved to PocketBase.", results };
+  return {
+    ok: true,
+    mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only",
+    standardTimeProtected: protectedWork.protected,
+    message: protectedWork.protected
+      ? "Admin master data saved. Work/Sub Work updated; standard times preserved for confirmation by authorized user."
+      : (deactivateMissing ? "Admin master data saved. Deleted records hidden from Admin." : "Admin master data saved to PocketBase."),
+    results
+  };
 }
 
 function missingSkillCollectionError() { const err = new Error("PocketBase collection skill_matrix is missing. Create it before saving skill matrix."); err.status = 400; err.details = { reasonCode: "SKILL_MATRIX_COLLECTION_MISSING", collection: "skill_matrix" }; return err; }
