@@ -1,7 +1,6 @@
 // renderer/adminControlsPatch.js
-// Lightweight patch for Admin Controls tab and entry-screen rule sync.
-// Reason: renderer/app.js still has legacy 120% frontend checks, so this patch
-// keeps frontend behavior aligned with DB Admin Controls without disturbing stable app.js.
+// Admin Controls tab + entry-screen rule sync.
+// Keeps frontend validation aligned with DB Admin Controls without disturbing stable app.js.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -29,11 +28,39 @@
     };
   }
 
+  function getOverrunLimitPct() {
+    return Number(adminControls.overrunReasonLimitPct || 120);
+  }
+
+  function isOverrunReasonEnabled() {
+    return adminControls.overrunReasonEnabled !== false;
+  }
+
+  function isBookingExtraReasonEnabled() {
+    return adminControls.bookingExtraReasonEnabled !== false;
+  }
+
   function status(message, type = "") {
     const el = document.getElementById("adminControlsStatus");
     if (!el) return;
     el.textContent = message || "";
     el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "";
+  }
+
+  function injectEntryControlStyle() {
+    if (document.getElementById("spwtAdminControlEntryStyle")) return;
+    const style = document.createElement("style");
+    style.id = "spwtAdminControlEntryStyle";
+    style.textContent = `
+      body.spwt-overrun-disabled .efficiencyReasonField {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function updateBodyClasses() {
+    document.body.classList.toggle("spwt-overrun-disabled", !isOverrunReasonEnabled());
   }
 
   function ensureAdminControlsTab() {
@@ -109,12 +136,14 @@
       adminControls = normalizeControls(payload.data);
       controlsLoaded = true;
       window.SPWT_ADMIN_CONTROLS = adminControls;
+      updateBodyClasses();
       applyEntryControlsToScreen();
       return adminControls;
     } catch (err) {
       console.warn("Admin controls load failed. Using defaults.", err);
       adminControls = { ...DEFAULT_CONTROLS };
       window.SPWT_ADMIN_CONTROLS = adminControls;
+      updateBodyClasses();
       applyEntryControlsToScreen();
       return adminControls;
     }
@@ -181,6 +210,7 @@
       controlsLoaded = true;
       window.SPWT_ADMIN_CONTROLS = adminControls;
       fillControlsForm();
+      updateBodyClasses();
       applyEntryControlsToScreen();
       status("Saved. Overrun limit is now " + adminControls.overrunReasonLimitPct + "%", "success");
     } catch (err) {
@@ -224,18 +254,6 @@
     }
   }
 
-  function getOverrunLimitPct() {
-    return Number(adminControls.overrunReasonLimitPct || 120);
-  }
-
-  function isOverrunReasonEnabled() {
-    return adminControls.overrunReasonEnabled !== false;
-  }
-
-  function isBookingExtraReasonEnabled() {
-    return adminControls.bookingExtraReasonEnabled !== false;
-  }
-
   function cardNeedsEfficiencyReason(card) {
     const standard = Number(card.querySelector(".standardTime")?.value || 0);
     const actual = Number(card.querySelector(".actualTime")?.value || 0);
@@ -256,9 +274,6 @@
 
     if (!isOverrunReasonEnabled()) {
       if (field) field.style.display = "none";
-
-      // Legacy app.js validation still checks 120%. Before submit, keep a hidden safe value
-      // so frontend validation does not block when Admin has disabled this rule.
       if (input) {
         if (forSubmit) input.value = AUTO_REASON;
         else if (input.value === AUTO_REASON) input.value = "";
@@ -308,14 +323,150 @@
   }
 
   function applyEntryControlsToScreen(forSubmit = false) {
+    updateBodyClasses();
     document.querySelectorAll(".work-card").forEach((card) => {
       applyEfficiencyControlsToCard(card, forSubmit);
       applyBookingExtraControlsToCard(card, forSubmit);
     });
   }
 
+  function getDuplicateWorkKeysLocal(works) {
+    const seen = new Map();
+    const duplicates = [];
+    (works || []).forEach((w, idx) => {
+      const key = [
+        String(w.machine || "").trim().toLowerCase(),
+        String(w.department || "").trim().toLowerCase(),
+        String(w.subWork || "").trim().toLowerCase(),
+        String(w.type || "Normal").trim().toLowerCase(),
+        String(w.description || "").trim().toLowerCase(),
+        String(w.rootArea || "").trim().toLowerCase()
+      ].join("|");
+
+      if (!String(w.machine || "").trim() && !String(w.department || "").trim() && !String(w.subWork || "").trim()) return;
+      if (seen.has(key)) duplicates.push({ first: seen.get(key) + 1, second: idx + 1 });
+      else seen.set(key, idx);
+    });
+    return duplicates;
+  }
+
+  function validateEntryPayloadWithAdminControls(payload) {
+    const errs = [];
+    const warnings = [];
+    const pct = getOverrunLimitPct();
+    const overrunEnabled = isOverrunReasonEnabled();
+
+    if (!payload.workDate) errs.push("Work Date is required");
+    if (!payload.shiftId) errs.push("Shift is required");
+    if (!payload.teamMemberId) errs.push("Team Member is required");
+
+    try {
+      // shifts is a global lexical variable from app.js; readable here in normal browser script mode.
+      // eslint-disable-next-line no-undef
+      const sh = (shifts || []).find(s => String(s.id ?? s.name) === String(payload.shiftId));
+      if (sh?.flexible === true && (!payload.flexibleShiftMinutes || Number(payload.flexibleShiftMinutes) <= 0)) {
+        errs.push("Flexible Shift Minutes is required for flexible shift");
+      }
+    } catch (err) {
+      // ignore; app.js/backend will still protect shift logic
+    }
+
+    if (!payload.works || payload.works.length === 0) errs.push("Add at least 1 work entry");
+
+    (payload.works || []).forEach((w, idx) => {
+      const i = idx + 1;
+      if (!w.machine) errs.push(`Work ${i}: Machine is required`);
+      if (!w.department) errs.push(`Work ${i}: Department is required`);
+      if (!w.subWork) errs.push(`Work ${i}: Sub Work is required`);
+      if (!w.actualTime || Number(w.actualTime) <= 0) errs.push(`Work ${i}: Actual Time must be > 0`);
+
+      const type = String(w.type || "Normal").toLowerCase();
+      const standard = Number(w.standardTime || 0);
+      const actual = Number(w.actualTime || 0);
+      const reason = String(w.efficiencyReason || "").trim();
+      const overLimit = type === "normal" && standard > 0 && actual > standard * (pct / 100);
+
+      if (overrunEnabled && overLimit && !reason) {
+        errs.push(`Work ${i}: Reason for low efficiency is required because Actual Time is more than ${pct}% of Standard Time`);
+      }
+
+      if ((type === "other" || type === "rework") && !String(w.description || "").trim()) {
+        errs.push(`Work ${i}: Description required for Other/Rework`);
+      }
+      if (type === "rework" && !String(w.rootArea || "").trim()) {
+        errs.push(`Work ${i}: Root Area is required for Rework`);
+      }
+    });
+
+    if (overrunEnabled) {
+      (payload.works || []).forEach((w, idx) => {
+        const type = String(w.type || "Normal").toLowerCase();
+        if (type === "normal" && Number(w.standardTime || 0) > 0 && Number(w.actualTime || 0) > Number(w.standardTime || 0) * (pct / 100)) {
+          warnings.push(`Work ${idx + 1}: Actual Time is more than ${pct}% of Standard Time; reason will be saved in DB`);
+        }
+      });
+    }
+
+    getDuplicateWorkKeysLocal(payload.works).forEach(d => {
+      warnings.push(`Duplicate-looking entry: Work ${d.second} looks same as Work ${d.first}`);
+    });
+
+    if (payload.summary?.shiftAvailable > 0 && payload.summary?.utilized > payload.summary?.shiftAvailable) {
+      warnings.push(`Utilized time (${payload.summary.utilized} min) is more than shift available time (${payload.summary.shiftAvailable} min)`);
+    }
+
+    return { errs, warnings };
+  }
+
+  function focusFirstEntryErrorWithAdminControls() {
+    const pct = getOverrunLimitPct();
+    const overrunEnabled = isOverrunReasonEnabled();
+
+    if (overrunEnabled) {
+      const cards = Array.from(document.querySelectorAll(".work-card"));
+      for (const card of cards) {
+        const std = Number(card.querySelector(".standardTime")?.value || 0);
+        const act = Number(card.querySelector(".actualTime")?.value || 0);
+        const type = card.querySelector(".typeSelect")?.value || "Normal";
+        const reasonField = card.querySelector(".efficiencyReasonField");
+        const reasonInput = card.querySelector(".efficiencyReasonInput");
+        if (type === "Normal" && std > 0 && act > std * (pct / 100) && reasonInput && !reasonInput.value.trim()) {
+          if (reasonField) reasonField.style.display = "flex";
+          reasonInput.focus();
+          reasonInput.scrollIntoView({ behavior: "smooth", block: "center" });
+          return true;
+        }
+      }
+    }
+
+    const firstInvalid = document.querySelector(".entry-error input, .entry-error select, .work-card input:invalid, .work-card select:invalid");
+    if (firstInvalid) {
+      firstInvalid.focus();
+      firstInvalid.scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    }
+    return false;
+  }
+
+  function patchEntryValidationFunctions() {
+    try {
+      // Replace app.js global validation so Submit warnings/errors use Admin Controls.
+      // eslint-disable-next-line no-global-assign
+      validateEntryPayload = validateEntryPayloadWithAdminControls;
+    } catch (err) {
+      window.validateEntryPayload = validateEntryPayloadWithAdminControls;
+    }
+
+    try {
+      // eslint-disable-next-line no-global-assign
+      focusFirstEntryError = focusFirstEntryErrorWithAdminControls;
+    } catch (err) {
+      window.focusFirstEntryError = focusFirstEntryErrorWithAdminControls;
+    }
+  }
+
   function beforeSubmitPatch() {
-    // Capture phase runs before app.js onclick submit handler.
+    patchEntryValidationFunctions();
     applyEntryControlsToScreen(true);
   }
 
@@ -328,9 +479,11 @@
   }
 
   async function init() {
+    injectEntryControlStyle();
     ensureAdminControlsTab();
     await loadAdminControls(false);
     patchSwitchAdminTab();
+    patchEntryValidationFunctions();
     wireControlsButton();
     initSubmitGuard();
     applyEntryControlsToScreen();
@@ -343,14 +496,19 @@
       }
       setTimeout(wireControlsButton, 0);
       setTimeout(initSubmitGuard, 0);
+      setTimeout(patchEntryValidationFunctions, 0);
       setTimeout(() => applyEntryControlsToScreen(), 0);
     }, true);
 
-    document.addEventListener("input", () => applyEntryControlsToScreen(), true);
-    document.addEventListener("change", () => applyEntryControlsToScreen(), true);
+    // Run after app.js own input/change handlers, so old 120% field display is corrected immediately.
+    document.addEventListener("input", () => setTimeout(() => applyEntryControlsToScreen(), 0), false);
+    document.addEventListener("change", () => setTimeout(() => applyEntryControlsToScreen(), 0), false);
 
     // Booking point rendering is async and may run after card changes.
-    setInterval(() => applyEntryControlsToScreen(), 1000);
+    setInterval(() => {
+      patchEntryValidationFunctions();
+      applyEntryControlsToScreen();
+    }, 700);
   }
 
   window.SPWT_ADMIN_CONTROLS = adminControls;
