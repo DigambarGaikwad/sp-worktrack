@@ -1,6 +1,6 @@
 // renderer/admin/adminDbPatch.js
-// DB admin save patch: saves current admin master data to PocketBase with login token.
-// Cleanup: timeout-protected requests, simpler payload build, safer button wiring.
+// DB admin master-data save patch.
+// Saves current admin master data to PocketBase with login token and deactivateMissing sync mode.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -8,30 +8,20 @@
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
   const REQUEST_TIMEOUT_MS = 15000;
+  const MAX_INIT_ATTEMPTS = 12;
+  const INIT_RETRY_MS = 250;
   const $ = (id) => document.getElementById(id);
 
-  let dbEmployees = [];
   let initAttempts = 0;
 
-  document.addEventListener("DOMContentLoaded", function () {
-    scheduleInit();
-  });
+  document.addEventListener("DOMContentLoaded", scheduleInit);
 
   function scheduleInit() {
     initAttempts += 1;
-    initAdminDbPatch();
-
-    // Admin page loads app.js + several patches. Retry briefly until button/page exists.
-    if (!$("adminSaveBtn") && initAttempts < 12) {
-      setTimeout(scheduleInit, 250);
+    const wired = patchSaveButton();
+    if (!wired && initAttempts < MAX_INIT_ATTEMPTS) {
+      setTimeout(scheduleInit, INIT_RETRY_MS);
     }
-  }
-
-  async function initAdminDbPatch() {
-    patchSaveButton();
-    patchPlannedAbsentTabClick();
-    await loadEmployeesFromDb();
-    populatePlannedAbsentEmployeeSelectFromDb();
   }
 
   async function requestJson(path, options = {}) {
@@ -54,60 +44,17 @@
     }
   }
 
-  async function loadEmployeesFromDb() {
-    try {
-      const body = await requestJson("/api/admin/master-data", { method: "GET" });
-      dbEmployees = Array.isArray(body.data?.employees) ? body.data.employees : [];
-    } catch (err) {
-      console.warn("DB employee load for planned absent failed:", err);
-      dbEmployees = [];
-    }
-  }
-
-  function populatePlannedAbsentEmployeeSelectFromDb() {
-    const select = $("plannedAbsentEmployee");
-    if (!select) return;
-
-    const current = select.value;
-    const employees = dbEmployees
-      .filter((e) => e && e.active !== false)
-      .map((e) => ({
-        empCode: String(e.empId || e.emp_code || e.code || "").trim(),
-        empName: String(e.name || e.full_name || e.emp_name || "").trim(),
-        department: String(e.department || "").trim()
-      }))
-      .filter((e) => e.empCode || e.empName)
-      .sort((a, b) => (a.empName || a.empCode).localeCompare(b.empName || b.empCode));
-
-    select.innerHTML = `<option value="">Select Employee</option>` + employees.map((e) => {
-      const value = `${escapeAttr(e.empCode)}|${escapeAttr(e.empName)}|${escapeAttr(e.department)}`;
-      const label = `${e.empCode ? e.empCode + " - " : ""}${e.empName || "Unknown"}${e.department ? " (" + e.department + ")" : ""}`;
-      return `<option value="${value}">${escapeHtml(label)}</option>`;
-    }).join("");
-
-    if (current) select.value = current;
-  }
-
-  function patchPlannedAbsentTabClick() {
-    const tab = document.querySelector('[data-tab="tabPlannedAbsent"]');
-    if (!tab || tab.__spwtDbPatchWired) return;
-    tab.__spwtDbPatchWired = true;
-
-    tab.addEventListener("click", async function () {
-      await loadEmployeesFromDb();
-      populatePlannedAbsentEmployeeSelectFromDb();
-    });
-  }
-
   function patchSaveButton() {
     const btn = $("adminSaveBtn");
-    if (!btn || btn.__spwtDbSaveWired) return;
+    if (!btn) return false;
+    if (btn.__spwtDbSaveWired) return true;
 
     btn.__spwtDbSaveWired = true;
     btn.type = "button";
     btn.textContent = "Save to DB";
     btn.title = "Save current admin masters to DB and mark deleted items inactive";
     btn.onclick = saveCurrentAdminStateToDb;
+    return true;
   }
 
   function getGlobalValue(name, fallback) {
@@ -229,9 +176,6 @@
 
       showToast(msg, "success");
       console.log("Admin DB sync result:", body.data);
-
-      await loadEmployeesFromDb();
-      populatePlannedAbsentEmployeeSelectFromDb();
     } catch (err) {
       console.error(err);
       showToast(err.message || String(err), "error");
@@ -256,18 +200,5 @@
     toast.className = `admin-db-toast show ${type || ""}`;
     clearTimeout(toast._timer);
     toast._timer = setTimeout(() => toast.classList.remove("show"), 3500);
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function escapeAttr(value) {
-    return escapeHtml(value).replaceAll("`", "&#096;");
   }
 })();
