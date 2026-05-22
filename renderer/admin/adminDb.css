@@ -1,5 +1,5 @@
 /* renderer/admin/adminDb.css */
-/* Planned Absent + DB toast styles for Admin page. */
+/* Planned Absent + DB toast + admin status styles for Admin page. */
 
 .admin-db-head-row {
   align-items: flex-start;
@@ -15,8 +15,25 @@
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
 }
 
-.admin-db-actions {
+.admin-db-actions,
+.admin-controls-actions {
   margin-top: 12px;
+}
+
+.admin-controls-card {
+  margin-top: 12px;
+  box-shadow: none;
+  border: 1px solid #e5e7eb;
+}
+
+.spwt-status-error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.spwt-status-success {
+  color: #166534;
+  font-weight: 700;
 }
 
 .admin-db-pill {
