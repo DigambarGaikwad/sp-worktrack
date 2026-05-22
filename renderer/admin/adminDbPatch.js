@@ -89,6 +89,14 @@
     }
   }
 
+  function getAdminHeaders() {
+    const tokenHeaders = window.SPWT_ADMIN_TOKEN_HEADER ? window.SPWT_ADMIN_TOKEN_HEADER() : {};
+    return {
+      "Content-Type": "application/json",
+      ...tokenHeaders
+    };
+  }
+
   function readInputList(selector) {
     return Array.from(document.querySelectorAll(selector))
       .map((input) => String(input.value || "").trim())
@@ -166,10 +174,15 @@
         btn.textContent = "Syncing DB...";
       }
 
+      const headers = getAdminHeaders();
+      if (!headers["X-SPWT-Admin-Token"]) {
+        throw new Error("Login session required. Please logout and login again.");
+      }
+
       const payload = buildPayload();
       const res = await fetch(`${API_BASE_URL}/api/admin/save-master-data`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           syncMode: "deactivateMissing",
           data: payload
@@ -179,7 +192,11 @@
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.ok) throw new Error(body?.message || `Admin DB save failed ${res.status}`);
 
-      showToast(`Saved to DB ✅ Mode: ${body.data?.mode || "sync"}`, "success");
+      const msg = body.data?.standardTimeProtected
+        ? "Saved to DB ✅ Standard times protected (no Standard Time permission)."
+        : `Saved to DB ✅ Mode: ${body.data?.mode || "sync"}`;
+
+      showToast(msg, "success");
       console.log("Admin DB sync result:", body.data);
 
       await loadEmployeesFromDb();
@@ -220,6 +237,6 @@
   }
 
   function escapeAttr(value) {
-    return escapeHtml(value);
+    return escapeHtml(value).replaceAll("`", "&#096;");
   }
 })();
