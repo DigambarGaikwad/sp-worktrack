@@ -40,8 +40,14 @@ function requireAdminPermission(req, permission) {
   return requirePermission(getAccessToken(req), permission);
 }
 
-function getOptionalAdminUser(req) {
-  return getSessionUser(getAccessToken(req));
+function requireAdminSession(req) {
+  const user = getSessionUser(getAccessToken(req));
+  if (!user) {
+    const err = new Error("Login session required.");
+    err.status = 401;
+    throw err;
+  }
+  return user;
 }
 
 router.get("/master-data", async (req, res) => {
@@ -140,9 +146,9 @@ router.post("/access/users", async (req, res) => {
 
 router.post("/save-master-data", async (req, res) => {
   try {
-    const user = getOptionalAdminUser(req);
-    const hasWorkCatalogPermission = !user || userCan(user, "workCatalog");
-    const hasStandardTimePermission = !user || userCan(user, "standardTime");
+    const user = requireAdminSession(req);
+    const hasWorkCatalogPermission = userCan(user, "workCatalog");
+    const hasStandardTimePermission = userCan(user, "standardTime");
 
     if (!hasWorkCatalogPermission) {
       const err = new Error("Permission required: workCatalog");
