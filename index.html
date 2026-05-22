@@ -5,6 +5,7 @@
   <title>SP WorkTrack</title>
   <link rel="stylesheet" href="renderer/style.css" />
   <link rel="stylesheet" href="renderer/shared/appShell.css" />
+  <link rel="stylesheet" href="renderer/entryUi.css" />
 </head>
 
 <body>
@@ -79,28 +80,24 @@
         </div>
       </div>
 
-      <!-- SECTION 3 -->
+      <!-- SECTION 3 SUMMARY -->
       <div class="card">
         <div class="card-head">
-          <div class="card-title">Summary</div>
+          <div class="card-title">Shift Summary</div>
         </div>
-
         <div class="summary">
           <div class="metric">
             <div class="metric-label">Shift Available</div>
             <div class="metric-value" id="availableMin">0 min</div>
           </div>
-
           <div class="metric">
-            <div class="metric-label">Utilized</div>
+            <div class="metric-label">Utilized Time</div>
             <div class="metric-value" id="utilizedMin">0 min</div>
           </div>
-
           <div class="metric">
-            <div class="metric-label">Remaining</div>
+            <div class="metric-label">Remaining Time</div>
             <div class="metric-value" id="remainingMin">0 min</div>
           </div>
-
           <div class="metric">
             <div class="metric-label">Productivity</div>
             <div class="metric-value" id="productivityPct">0%</div>
@@ -108,27 +105,23 @@
         </div>
       </div>
 
-      <!-- BOTTOM ACTIONS -->
       <div class="bottom-actions">
-        <button class="btn grey" id="saveBtn">Save</button>
         <button class="btn green" id="submitBtn">Submit</button>
+        <button class="btn grey" id="saveBtn">Save Local</button>
       </div>
 
- <div class="app-footer">
-  <div class="footer-top">
-    <span class="footer-title">SP WorkTrack v1.0</span>
-    <span class="footer-separator">|</span>
-    <span class="footer-subtitle"></span>
-  </div>
-
-  <div class="footer-bottom">
-    <span class="footer-developed">Developed by Digambar Gaikwad</span>
-    <span class="footer-separator">|</span>
-    <span class="footer-copyright">© 2026 Sopan Process Technologies</span>
-  </div>
-</div>
-
-
+      <footer class="app-footer">
+        <div class="footer-top">
+          <span class="footer-title">SP WorkTrack</span>
+          <span class="footer-separator">|</span>
+          <span class="footer-subtitle">Production Management System</span>
+        </div>
+        <div class="footer-bottom">
+          <span class="footer-developed">Developed by Digambar Gaikwad</span>
+          <span class="footer-separator">|</span>
+          <span class="footer-copyright">© 2026 Sopan Process Technologies</span>
+        </div>
+      </footer>
     </div>
   </div>
 
@@ -139,7 +132,6 @@
         <div class="modal-title">Admin Settings</div>
         <button class="icon-btn" id="adminCloseBtn">✕</button>
       </div>
-
       <div class="modal-body">
 
         <!-- LOGIN -->
@@ -152,7 +144,7 @@
             <button class="btn green" id="adminLoginBtn">Login</button>
             <button class="btn grey" id="adminCancelBtn">Cancel</button>
           </div>
-          <div class="small-hint">PIN is stored in <b>data/adminOverrides.json</b></div>
+          <div class="small-hint">Default PIN: 1234 (change it after first use)</div>
         </div>
 
         <!-- PANEL -->
@@ -262,14 +254,14 @@
             <div class="section-title">Admin Controls</div>
             <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
 
-            <div class="card" style="margin-top:12px; box-shadow:none; border:1px solid #e5e7eb;">
+            <div class="card admin-controls-card">
               <div class="grid-2">
                 <div class="field">
                   <label class="quality-recheck-line">
                     <input type="checkbox" id="overrunReasonEnabled" />
                     Enable overrun reason rule
                   </label>
-                  <div class="small-hint">If enabled, reason is required when Actual Time crosses the configured percentage of Standard Time.</div>
+                  <div class="small-hint">If enabled, reason is required when Actual Time crosses configured percentage of Standard Time.</div>
                 </div>
 
                 <div class="field">
@@ -287,7 +279,7 @@
                 </div>
               </div>
 
-              <div class="row" style="margin-top:12px;">
+              <div class="row admin-controls-actions">
                 <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
                 <span class="small-hint" id="adminControlsStatus"></span>
               </div>
@@ -378,10 +370,12 @@
         <strong>SP WorkTrack v1.0</strong><br/>
         Production Management System<br/><br/>
 
-        <strong>Released:</strong> 19 Feb 2026<br/><br/>
+        <strong>Purpose:</strong><br/>
+        To digitally capture and monitor daily production work in a simple and structured way.
 
-        <strong>Core Features:</strong>
-        <ul style="margin-top:6px;">
+        <br/><br/>
+        <strong>Key Features:</strong>
+        <ul style="margin-top:6px; padding-left:20px;">
           <li>Production Entry Tracking</li>
           <li>Machine Category Mapping</li>
           <li>Department & Sub Work Control</li>
