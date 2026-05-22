@@ -13,9 +13,7 @@
   let applyTimer = null;
   let initAttempts = 0;
 
-  document.addEventListener("DOMContentLoaded", function () {
-    scheduleInit();
-  });
+  document.addEventListener("DOMContentLoaded", scheduleInit);
 
   function getAccess() {
     return window.SPWT_ADMIN_ACCESS || null;
@@ -100,26 +98,6 @@
     hint.style.display = "block";
   }
 
-  function injectStyle() {
-    if (document.getElementById("spwtStandardTimeLockStyle")) return;
-
-    const style = document.createElement("style");
-    style.id = "spwtStandardTimeLockStyle";
-    style.textContent = `
-      .spwt-standard-time-locked {
-        background: #f3f4f6;
-        color: #6b7280;
-        cursor: not-allowed;
-      }
-      .spwt-standard-time-lock-hint {
-        margin: 8px 0;
-        color: #b45309;
-        font-weight: 600;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
   function startObserver() {
     if (observerStarted) return true;
 
@@ -153,12 +131,9 @@
   }
 
   function initStandardTimeUiLock() {
-    injectStyle();
     wireEventsOnce();
-
     const observerReady = startObserver();
     scheduleApply(0);
-
     return observerReady || !!document.getElementById("adminPanel");
   }
 
