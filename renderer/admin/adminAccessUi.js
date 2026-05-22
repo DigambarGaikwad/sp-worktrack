@@ -51,6 +51,7 @@
   let loginBusy = false;
   let savingUsers = false;
   let initAttempts = 0;
+  let loginGuardWired = false;
 
   document.addEventListener("DOMContentLoaded", scheduleInit);
 
@@ -110,11 +111,12 @@
     enhanceLoginBox();
     ensureUsersAccessTab();
     wireAdminLogin();
+    wireAdminLoginGuard();
     wireAdminLogout();
     wireTokenHeaderProvider();
     wireTabPermissionGate();
     exposeAccessState();
-    setLoginBusy(false);
+    forceLoginUnlocked();
     return true;
   }
 
@@ -144,6 +146,24 @@
     if (type === "success") box.classList.add("spwt-login-success");
   }
 
+  function forceLoginUnlocked() {
+    loginBusy = false;
+
+    const userInput = $("adminUserInput");
+    const pinInput = $("adminPinInput");
+    const loginBtn = $("adminLoginBtn");
+    const cancelBtn = $("adminCancelBtn");
+
+    if (userInput) userInput.disabled = false;
+    if (pinInput) pinInput.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Login";
+      loginBtn.type = "button";
+    }
+  }
+
   function setLoginBusy(isBusy) {
     loginBusy = !!isBusy;
     const userInput = $("adminUserInput");
@@ -157,6 +177,7 @@
     if (loginBtn) {
       loginBtn.disabled = loginBusy;
       loginBtn.textContent = loginBusy ? "Checking..." : "Login";
+      loginBtn.type = "button";
     }
   }
 
@@ -165,20 +186,22 @@
     accessState.user = null;
     if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = false;
 
-    setLoginBusy(false);
     setLoginStatus(message || "Wrong username or PIN.", "error");
-
     const pinInput = $("adminPinInput");
-    if (pinInput) {
-      pinInput.value = "";
-      setTimeout(() => {
-        pinInput.disabled = false;
-        pinInput.focus();
-      }, 0);
-    }
+    if (pinInput) pinInput.value = "";
 
-    const userInput = $("adminUserInput");
-    if (userInput) userInput.disabled = false;
+    // Strong unlock: immediate + delayed, because legacy app.js can still re-touch these fields.
+    forceLoginUnlocked();
+    setTimeout(forceLoginUnlocked, 0);
+    setTimeout(forceLoginUnlocked, 150);
+
+    setTimeout(() => {
+      const input = $("adminPinInput");
+      if (input) {
+        input.disabled = false;
+        input.focus();
+      }
+    }, 180);
   }
 
   function enhanceLoginBox() {
@@ -214,9 +237,10 @@
       input.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
           event.preventDefault();
+          event.stopPropagation();
           doAdminLogin();
         }
-      });
+      }, true);
     });
   }
 
@@ -273,10 +297,27 @@
 
   function wireAdminLogin() {
     const loginBtn = $("adminLoginBtn");
-    if (!loginBtn || loginBtn.__spwtAccessLoginWired) return;
+    if (!loginBtn) return;
+
     loginBtn.__spwtAccessLoginWired = true;
     loginBtn.type = "button";
     loginBtn.onclick = doAdminLogin;
+  }
+
+  function wireAdminLoginGuard() {
+    if (loginGuardWired) return;
+    loginGuardWired = true;
+
+    document.addEventListener("click", function (event) {
+      const loginBtn = event.target?.closest?.("#adminLoginBtn");
+      if (!loginBtn) return;
+
+      // Capture phase: stop legacy app.js login handler from overwriting DB login behavior.
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      doAdminLogin();
+    }, true);
   }
 
   async function doAdminLogin() {
@@ -286,6 +327,7 @@
     const pin = ($("adminPinInput")?.value || "").trim();
 
     if (!pin) {
+      forceLoginUnlocked();
       setLoginStatus("Enter PIN.", "error");
       $("adminPinInput")?.focus();
       return;
@@ -316,7 +358,7 @@
       $("adminLoginBox")?.classList.add("hidden");
       $("adminPanel")?.classList.remove("hidden");
 
-      setLoginBusy(false);
+      forceLoginUnlocked();
       applyPermissionUi();
       await loadAccessUsersIfAllowed();
       switchToFirstAllowedTab();
@@ -338,7 +380,7 @@
       if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = false;
       $("adminPanel")?.classList.add("hidden");
       $("adminLoginBox")?.classList.remove("hidden");
-      setLoginBusy(false);
+      forceLoginUnlocked();
       setLoginStatus("Logged out.", "");
       notifyPermissionUiChanged();
 
