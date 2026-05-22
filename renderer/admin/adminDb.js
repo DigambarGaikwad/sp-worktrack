@@ -1,22 +1,40 @@
 // renderer/admin/adminDb.js
-// SP WorkTrack DB Edition - Admin screen DB helper
-// Keeps existing admin UI logic, then overrides DB save + adds Planned Absent tab.
+// SP WorkTrack DB Edition - Admin page helper.
+// Scope: Planned Absent tab only. Master-data DB save is handled by adminDbPatch.js.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
   const DATA_SOURCE = CONFIG.DATA_SOURCE || "local";
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
+  const REQUEST_TIMEOUT_MS = 12000;
 
   const $ = (id) => document.getElementById(id);
 
   document.addEventListener("DOMContentLoaded", function () {
     if (DATA_SOURCE !== "db") return;
-
-    injectAdminDbStyles();
     addPlannedAbsentTab();
-    wireDbSaveButton();
     loadPlannedAbsences();
   });
+
+  async function requestJson(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        signal: controller.signal
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok) throw new Error(body?.message || `Request failed ${res.status}`);
+      return body;
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("Request timeout. Check server is running.");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   function getGlobalValue(name, fallback) {
     try {
@@ -29,82 +47,6 @@
     }
   }
 
-  function buildAdminPayloadFromCurrentState() {
-    const adminOverrides = getGlobalValue("adminOverrides", {}) || {};
-    const machines = getGlobalValue("machines", []) || [];
-    const employees = getGlobalValue("employees", []) || [];
-    const shifts = getGlobalValue("shifts", []) || [];
-    const machineTypes = getGlobalValue("machineTypes", []) || [];
-    const workCatalogByType = getGlobalValue("workCatalogByType", {}) || {};
-    const mainWorks = getGlobalValue("mainWorks", []) || [];
-    const subWorksMap = getGlobalValue("subWorksMap", {}) || {};
-    const lossReasons = getGlobalValue("lossReasons", []) || [];
-    const rootAreas = getGlobalValue("rootAreas", []) || [];
-
-    return {
-      ...adminOverrides,
-      machines,
-      employees,
-      shifts,
-      machineTypes,
-      workCatalogByType,
-      mainWorks,
-      subWorks: subWorksMap,
-      lossReasons,
-      rootAreas
-    };
-  }
-
-  function wireDbSaveButton() {
-    const saveBtn = $("adminSaveBtn");
-    if (!saveBtn) return;
-
-    saveBtn.onclick = async function () {
-      await saveAdminMasterDataToDb();
-    };
-
-    saveBtn.textContent = "Save to DB";
-    saveBtn.title = "Save admin master changes directly to PocketBase DB";
-  }
-
-  async function saveAdminMasterDataToDb() {
-    const saveBtn = $("adminSaveBtn");
-    const oldText = saveBtn?.textContent || "Save to DB";
-
-    try {
-      if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.textContent = "Saving to DB...";
-      }
-
-      const payload = buildAdminPayloadFromCurrentState();
-
-      const res = await fetch(`${API_BASE_URL}/api/admin/save-master-data`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: payload })
-      });
-
-      const body = await res.json().catch(() => null);
-
-      if (!res.ok || !body?.ok) {
-        throw new Error(body?.message || `Admin DB save failed with status ${res.status}`);
-      }
-
-      showAdminDbToast("Admin master data saved to DB ✅", "success");
-      console.log("Admin DB save result:", body.data);
-    } catch (err) {
-      console.error(err);
-      showAdminDbToast(err.message || String(err), "error");
-      alert("Admin DB save failed:\n\n" + (err.message || err));
-    } finally {
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = oldText;
-      }
-    }
-  }
-
   function addPlannedAbsentTab() {
     const tabs = document.querySelector(".admin-panel .tabs");
     const panel = $("adminPanel");
@@ -112,6 +54,7 @@
 
     const btn = document.createElement("button");
     btn.className = "tab";
+    btn.type = "button";
     btn.dataset.tab = "tabPlannedAbsent";
     btn.textContent = "Planned Absent";
     tabs.insertBefore(btn, tabs.querySelector('[data-tab="tabPin"]') || null);
@@ -125,7 +68,7 @@
           <div class="section-title">Planned Absent</div>
           <div class="small-hint">Plan approved leave/absence so People Dashboard can separate planned and unplanned absence later.</div>
         </div>
-        <button class="btn grey" id="refreshPlannedAbsentBtn">Refresh</button>
+        <button class="btn grey" id="refreshPlannedAbsentBtn" type="button">Refresh</button>
       </div>
 
       <div class="admin-db-card">
@@ -157,15 +100,15 @@
         </div>
 
         <div class="row admin-db-actions">
-          <button class="btn green" id="savePlannedAbsentBtn">+ Save Planned Absent</button>
-          <button class="btn grey" id="clearPlannedAbsentBtn">Clear</button>
+          <button class="btn green" id="savePlannedAbsentBtn" type="button">+ Save Planned Absent</button>
+          <button class="btn grey" id="clearPlannedAbsentBtn" type="button">Clear</button>
         </div>
       </div>
 
       <div class="admin-db-card">
         <div class="row-between">
           <div>
-            <div class="section-title" style="margin-bottom:4px;">Planned Absent List</div>
+            <div class="section-title planned-list-title">Planned Absent List</div>
             <div class="small-hint">Records are stored in PocketBase collection <b>planned_absences</b>.</div>
           </div>
           <div class="admin-db-pill" id="plannedAbsentCount">0 Records</div>
@@ -237,13 +180,7 @@
     list.innerHTML = `<div class="small-hint">Loading planned absences...</div>`;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/planned-absences`);
-      const body = await res.json().catch(() => null);
-
-      if (!res.ok || !body?.ok) {
-        throw new Error(body?.message || `Planned absence load failed with status ${res.status}`);
-      }
-
+      const body = await requestJson("/api/admin/planned-absences", { method: "GET" });
       const items = Array.isArray(body.items) ? body.items : [];
       if (count) count.textContent = `${items.length} Record${items.length === 1 ? "" : "s"}`;
 
@@ -280,7 +217,7 @@
         </div>
         <div class="planned-row-actions">
           <span class="planned-status">${escapeHtml(item.status || "Planned")}</span>
-          <button class="btn red delete-planned-absent-btn" data-id="${escapeAttr(item.id || "")}">Delete</button>
+          <button class="btn red delete-planned-absent-btn" type="button" data-id="${escapeAttr(item.id || "")}">Delete</button>
         </div>
       </div>
     `;
@@ -297,7 +234,7 @@
       if (!selected.empCode && !selected.empName) throw new Error("Select employee.");
       if (!fromDate) throw new Error("Select From Date.");
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/planned-absences`, {
+      await requestJson("/api/admin/planned-absences", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -311,12 +248,6 @@
           status: "Planned"
         })
       });
-
-      const body = await res.json().catch(() => null);
-
-      if (!res.ok || !body?.ok) {
-        throw new Error(body?.message || `Planned absence save failed with status ${res.status}`);
-      }
 
       showAdminDbToast("Planned absent saved ✅", "success");
       clearPlannedAbsentForm();
@@ -333,16 +264,7 @@
     if (!confirm("Delete this planned absent record?")) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/planned-absences/${encodeURIComponent(id)}`, {
-        method: "DELETE"
-      });
-
-      const body = await res.json().catch(() => null);
-
-      if (!res.ok || !body?.ok) {
-        throw new Error(body?.message || `Delete failed with status ${res.status}`);
-      }
-
+      await requestJson(`/api/admin/planned-absences/${encodeURIComponent(id)}`, { method: "DELETE" });
       showAdminDbToast("Planned absent deleted ✅", "success");
       await loadPlannedAbsences();
     } catch (err) {
@@ -379,38 +301,6 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text || "-";
     const [y, m, d] = text.split("-");
     return `${d}-${m}-${y}`;
-  }
-
-  function injectAdminDbStyles() {
-    if ($("adminDbStyles")) return;
-
-    const style = document.createElement("style");
-    style.id = "adminDbStyles";
-    style.textContent = `
-      .admin-db-head-row { align-items:flex-start; gap:16px; }
-      .admin-db-card { background:#fff; border:1px solid #e2e8f0; border-radius:22px; padding:18px; margin:16px 0; box-shadow:0 10px 26px rgba(15,23,42,.06); }
-      .admin-db-actions { margin-top:12px; }
-      .admin-db-pill { background:#eef2ff; color:#3730a3; border-radius:999px; padding:8px 14px; font-weight:900; }
-      .planned-absent-list { margin-top:14px; display:flex; flex-direction:column; gap:10px; }
-      .planned-row { display:flex; justify-content:space-between; gap:14px; align-items:center; border:1px solid #e2e8f0; border-radius:18px; padding:14px; background:linear-gradient(135deg,#ffffff,#f8fafc); }
-      .planned-name { font-size:16px; color:#0f172a; font-weight:1000; }
-      .planned-meta { margin-top:4px; color:#475569; font-size:13px; font-weight:800; }
-      .planned-reason { margin-top:6px; color:#64748b; font-size:13px; font-weight:700; }
-      .planned-row-actions { display:flex; gap:10px; align-items:center; }
-      .planned-status { background:#dcfce7; color:#166534; border-radius:999px; padding:7px 12px; font-weight:1000; }
-      .planned-empty { text-align:center; border:1px dashed #cbd5e1; border-radius:18px; padding:22px; color:#475569; font-weight:900; }
-      .planned-empty-icon { font-size:28px; margin-bottom:8px; }
-      .planned-error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:16px; padding:14px; font-weight:900; }
-      .admin-db-toast { position:fixed; right:24px; bottom:24px; z-index:99999; background:#0f172a; color:#fff; border-radius:18px; padding:14px 18px; font-weight:1000; box-shadow:0 18px 40px rgba(15,23,42,.28); opacity:0; transform:translateY(14px); pointer-events:none; transition:.18s ease; }
-      .admin-db-toast.show { opacity:1; transform:translateY(0); }
-      .admin-db-toast.success { background:#166534; }
-      .admin-db-toast.error { background:#991b1b; }
-      .btn, .tab, .planned-row { transition:transform .15s ease, box-shadow .15s ease, filter .15s ease; }
-      .btn:hover, .tab:hover { transform:translateY(-1px); filter:brightness(1.02); }
-      .btn:active, .tab:active { transform:translateY(1px) scale(.98); }
-      @media (max-width: 800px) { .planned-row { flex-direction:column; align-items:flex-start; } }
-    `;
-    document.head.appendChild(style);
   }
 
   function escapeHtml(value) {
