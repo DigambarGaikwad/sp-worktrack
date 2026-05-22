@@ -1,6 +1,6 @@
 // renderer/adminControlsPatch.js
 // Admin Controls tab + entry-screen rule sync.
-// Keeps frontend validation aligned with DB Admin Controls without disturbing stable app.js.
+// File 1 cleanup: removed continuous timer and CSS override; uses debounced DOM/event updates.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -14,6 +14,8 @@
   let adminControls = { ...DEFAULT_CONTROLS };
   let controlsLoaded = false;
   let controlsSaving = false;
+  let applyTimer = null;
+  let observerStarted = false;
 
   function apiBaseUrl() {
     return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
@@ -47,20 +49,9 @@
     el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "";
   }
 
-  function injectEntryControlStyle() {
-    if (document.getElementById("spwtAdminControlEntryStyle")) return;
-    const style = document.createElement("style");
-    style.id = "spwtAdminControlEntryStyle";
-    style.textContent = `
-      body.spwt-overrun-disabled .efficiencyReasonField {
-        display: none !important;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function updateBodyClasses() {
-    document.body.classList.toggle("spwt-overrun-disabled", !isOverrunReasonEnabled());
+  function scheduleEntryControlApply(forSubmit = false) {
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => applyEntryControlsToScreen(forSubmit), forSubmit ? 0 : 60);
   }
 
   function ensureAdminControlsTab() {
@@ -132,21 +123,16 @@
       const res = await fetch(`${apiBaseUrl()}/api/admin/controls`);
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
-
       adminControls = normalizeControls(payload.data);
-      controlsLoaded = true;
-      window.SPWT_ADMIN_CONTROLS = adminControls;
-      updateBodyClasses();
-      applyEntryControlsToScreen();
-      return adminControls;
     } catch (err) {
       console.warn("Admin controls load failed. Using defaults.", err);
       adminControls = { ...DEFAULT_CONTROLS };
-      window.SPWT_ADMIN_CONTROLS = adminControls;
-      updateBodyClasses();
-      applyEntryControlsToScreen();
-      return adminControls;
     }
+
+    controlsLoaded = true;
+    window.SPWT_ADMIN_CONTROLS = adminControls;
+    scheduleEntryControlApply();
+    return adminControls;
   }
 
   function fillControlsForm() {
@@ -210,8 +196,7 @@
       controlsLoaded = true;
       window.SPWT_ADMIN_CONTROLS = adminControls;
       fillControlsForm();
-      updateBodyClasses();
-      applyEntryControlsToScreen();
+      scheduleEntryControlApply();
       status("Saved. Overrun limit is now " + adminControls.overrunReasonLimitPct + "%", "success");
     } catch (err) {
       console.error("Admin controls save failed:", err);
@@ -323,7 +308,6 @@
   }
 
   function applyEntryControlsToScreen(forSubmit = false) {
-    updateBodyClasses();
     document.querySelectorAll(".work-card").forEach((card) => {
       applyEfficiencyControlsToCard(card, forSubmit);
       applyBookingExtraControlsToCard(card, forSubmit);
@@ -361,14 +345,13 @@
     if (!payload.teamMemberId) errs.push("Team Member is required");
 
     try {
-      // shifts is a global lexical variable from app.js; readable here in normal browser script mode.
       // eslint-disable-next-line no-undef
       const sh = (shifts || []).find(s => String(s.id ?? s.name) === String(payload.shiftId));
       if (sh?.flexible === true && (!payload.flexibleShiftMinutes || Number(payload.flexibleShiftMinutes) <= 0)) {
         errs.push("Flexible Shift Minutes is required for flexible shift");
       }
     } catch (err) {
-      // ignore; app.js/backend will still protect shift logic
+      // app.js/backend still protect shift logic
     }
 
     if (!payload.works || payload.works.length === 0) errs.push("Add at least 1 work entry");
@@ -401,9 +384,8 @@
     if (overrunEnabled) {
       (payload.works || []).forEach((w, idx) => {
         const type = String(w.type || "Normal").toLowerCase();
-        if (type === "normal" && Number(w.standardTime || 0) > 0 && Number(w.actualTime || 0) > Number(w.standardTime || 0) * (pct / 100)) {
-          warnings.push(`Work ${idx + 1}: Actual Time is more than ${pct}% of Standard Time; reason will be saved in DB`);
-        }
+        const overLimit = type === "normal" && Number(w.standardTime || 0) > 0 && Number(w.actualTime || 0) > Number(w.standardTime || 0) * (pct / 100);
+        if (overLimit) warnings.push(`Work ${idx + 1}: Actual Time is more than ${pct}% of Standard Time; reason will be saved in DB`);
       });
     }
 
@@ -420,11 +402,9 @@
 
   function focusFirstEntryErrorWithAdminControls() {
     const pct = getOverrunLimitPct();
-    const overrunEnabled = isOverrunReasonEnabled();
 
-    if (overrunEnabled) {
-      const cards = Array.from(document.querySelectorAll(".work-card"));
-      for (const card of cards) {
+    if (isOverrunReasonEnabled()) {
+      for (const card of Array.from(document.querySelectorAll(".work-card"))) {
         const std = Number(card.querySelector(".standardTime")?.value || 0);
         const act = Number(card.querySelector(".actualTime")?.value || 0);
         const type = card.querySelector(".typeSelect")?.value || "Normal";
@@ -449,20 +429,8 @@
   }
 
   function patchEntryValidationFunctions() {
-    try {
-      // Replace app.js global validation so Submit warnings/errors use Admin Controls.
-      // eslint-disable-next-line no-global-assign
-      validateEntryPayload = validateEntryPayloadWithAdminControls;
-    } catch (err) {
-      window.validateEntryPayload = validateEntryPayloadWithAdminControls;
-    }
-
-    try {
-      // eslint-disable-next-line no-global-assign
-      focusFirstEntryError = focusFirstEntryErrorWithAdminControls;
-    } catch (err) {
-      window.focusFirstEntryError = focusFirstEntryErrorWithAdminControls;
-    }
+    try { validateEntryPayload = validateEntryPayloadWithAdminControls; } catch (err) { window.validateEntryPayload = validateEntryPayloadWithAdminControls; }
+    try { focusFirstEntryError = focusFirstEntryErrorWithAdminControls; } catch (err) { window.focusFirstEntryError = focusFirstEntryErrorWithAdminControls; }
   }
 
   function beforeSubmitPatch() {
@@ -478,15 +446,28 @@
     }
   }
 
+  function startWorkContainerObserver() {
+    if (observerStarted) return;
+    const host = document.getElementById("workContainer");
+    if (!host) return;
+
+    observerStarted = true;
+    const observer = new MutationObserver(() => scheduleEntryControlApply());
+    observer.observe(host, {
+      childList: true,
+      subtree: true
+    });
+  }
+
   async function init() {
-    injectEntryControlStyle();
     ensureAdminControlsTab();
     await loadAdminControls(false);
     patchSwitchAdminTab();
     patchEntryValidationFunctions();
     wireControlsButton();
     initSubmitGuard();
-    applyEntryControlsToScreen();
+    startWorkContainerObserver();
+    scheduleEntryControlApply();
 
     document.addEventListener("click", (e) => {
       if (e.target?.closest?.('[data-tab="tabControls"]')) {
@@ -497,18 +478,11 @@
       setTimeout(wireControlsButton, 0);
       setTimeout(initSubmitGuard, 0);
       setTimeout(patchEntryValidationFunctions, 0);
-      setTimeout(() => applyEntryControlsToScreen(), 0);
+      scheduleEntryControlApply();
     }, true);
 
-    // Run after app.js own input/change handlers, so old 120% field display is corrected immediately.
-    document.addEventListener("input", () => setTimeout(() => applyEntryControlsToScreen(), 0), false);
-    document.addEventListener("change", () => setTimeout(() => applyEntryControlsToScreen(), 0), false);
-
-    // Booking point rendering is async and may run after card changes.
-    setInterval(() => {
-      patchEntryValidationFunctions();
-      applyEntryControlsToScreen();
-    }, 700);
+    document.addEventListener("input", () => scheduleEntryControlApply(), false);
+    document.addEventListener("change", () => scheduleEntryControlApply(), false);
   }
 
   window.SPWT_ADMIN_CONTROLS = adminControls;
