@@ -1,6 +1,6 @@
 // renderer/adminControlsPatch.js
 // Admin Controls tab + entry-screen rule sync.
-// File 1 cleanup: removed continuous timer and CSS override; uses debounced DOM/event updates.
+// Cleaned: no timer loop, no CSS override. Uses debounced DOM/event updates.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -334,6 +334,30 @@
     return duplicates;
   }
 
+  function validateBookingExtraForWork(work, workIndex) {
+    const errs = [];
+    const warnings = [];
+    if (!Array.isArray(work.workCheckpoints) || work.workCheckpoints.length === 0) return { errs, warnings };
+
+    work.workCheckpoints.forEach((bp) => {
+      const point = String(bp.name || bp.point || "Booking Point").trim();
+      const extra = Number(bp.extraMinutes || 0);
+      const reason = String(bp.overbookingReason || bp.extraReason || bp.reason || "").trim();
+
+      if (extra <= 0) return;
+
+      if (!isBookingExtraReasonEnabled()) return;
+
+      if (!reason) {
+        errs.push(`Work ${workIndex}: ${point} has ${extra} min extra booking. Reason is required.`);
+      } else {
+        warnings.push(`Work ${workIndex}: ${point} has ${extra} min extra booking; reason will be saved in DB`);
+      }
+    });
+
+    return { errs, warnings };
+  }
+
   function validateEntryPayloadWithAdminControls(payload) {
     const errs = [];
     const warnings = [];
@@ -379,6 +403,10 @@
       if (type === "rework" && !String(w.rootArea || "").trim()) {
         errs.push(`Work ${i}: Root Area is required for Rework`);
       }
+
+      const bookingCheck = validateBookingExtraForWork(w, i);
+      errs.push(...bookingCheck.errs);
+      warnings.push(...bookingCheck.warnings);
     });
 
     if (overrunEnabled) {
@@ -400,8 +428,35 @@
     return { errs, warnings };
   }
 
+  function focusBookingExtraReason() {
+    if (!isBookingExtraReasonEnabled()) return false;
+
+    for (const row of Array.from(document.querySelectorAll(".booking-point-row"))) {
+      const check = row.querySelector(".bpCheck");
+      const book = row.querySelector(".bpBookTime");
+      const reasonBox = row.querySelector(".bpOverReasonBox");
+      const reasonInput = row.querySelector(".bpOverReason");
+      if (!check?.checked || !book || !reasonInput) continue;
+
+      const max = Number(book.dataset.max || check.dataset.remaining || check.dataset.time || 0);
+      const val = Number(book.value || 0);
+      const extra = Math.max(0, val - max);
+      if (extra > 0 && !reasonInput.value.trim()) {
+        if (reasonBox) reasonBox.style.display = "block";
+        row.classList.add("entry-error");
+        reasonInput.focus();
+        reasonInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function focusFirstEntryErrorWithAdminControls() {
     const pct = getOverrunLimitPct();
+
+    if (focusBookingExtraReason()) return true;
 
     if (isOverrunReasonEnabled()) {
       for (const card of Array.from(document.querySelectorAll(".work-card"))) {
@@ -453,10 +508,7 @@
 
     observerStarted = true;
     const observer = new MutationObserver(() => scheduleEntryControlApply());
-    observer.observe(host, {
-      childList: true,
-      subtree: true
-    });
+    observer.observe(host, { childList: true, subtree: true });
   }
 
   async function init() {
