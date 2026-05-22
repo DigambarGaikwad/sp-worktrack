@@ -1,12 +1,13 @@
 // renderer/admin/adminAccessUi.js
-// Frontend RBAC layer for Admin page.
-// Adds username + PIN login, Users & Access tab, role presets, permission checklist.
+// DB-mode Admin RBAC UI.
+// File cleanup: stable login state, no field lock after wrong PIN, timeout-protected API calls.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
   if ((CONFIG.DATA_SOURCE || "local") !== "db") return;
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
+  const REQUEST_TIMEOUT_MS = 12000;
   const HIDDEN_LEGACY_PERMISSIONS = new Set(["workStandards"]);
 
   const PERMISSION_LABELS = {
@@ -45,11 +46,15 @@
     users: []
   };
 
+  let loginBusy = false;
+
   document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(initAccessUi, 800);
+    setTimeout(initAccessUi, 500);
   });
 
-  function $(id) { return document.getElementById(id); }
+  function $(id) {
+    return document.getElementById(id);
+  }
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -72,16 +77,11 @@
   function visiblePermissions(list) {
     const expanded = expandLegacyPermissions(Array.isArray(list) ? list : []);
     const set = new Set(expanded);
-
-    // Do not show old combined backend key anymore.
     HIDDEN_LEGACY_PERMISSIONS.forEach((p) => set.delete(p));
-
-    // If backend is older and only sends workStandards, still force the two clean checkboxes.
     if (expanded.includes("workStandards")) {
       set.add("workCatalog");
       set.add("standardTime");
     }
-
     return Array.from(set).filter((p) => PERMISSION_LABELS[p]);
   }
 
@@ -89,19 +89,18 @@
     const user = accessState.user || {};
     if (user.role === "super_admin") return true;
     if (Array.isArray(user.permissions) && user.permissions.includes("all")) return true;
-
-    const perms = expandLegacyPermissions(user.permissions);
-    return perms.includes(permission);
+    return expandLegacyPermissions(user.permissions).includes(permission);
   }
 
   function initAccessUi() {
     enhanceLoginBox();
     ensureUsersAccessTab();
-    patchAdminLogin();
-    patchAdminLogout();
-    patchSaveButtonWithToken();
-    patchTabPermissionGate();
+    wireAdminLogin();
+    wireAdminLogout();
+    wireTokenHeaderProvider();
+    wireTabPermissionGate();
     exposeAccessState();
+    setLoginBusy(false);
   }
 
   function exposeAccessState() {
@@ -112,28 +111,95 @@
     };
   }
 
+  function setLoginStatus(message, type = "") {
+    const box = $("adminLoginStatus");
+    if (!box) return;
+    box.textContent = message || "";
+    box.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "#64748b";
+  }
+
+  function setLoginBusy(isBusy) {
+    loginBusy = !!isBusy;
+    const userInput = $("adminUserInput");
+    const pinInput = $("adminPinInput");
+    const loginBtn = $("adminLoginBtn");
+    const cancelBtn = $("adminCancelBtn");
+
+    if (userInput) userInput.disabled = loginBusy;
+    if (pinInput) pinInput.disabled = loginBusy;
+    if (cancelBtn) cancelBtn.disabled = loginBusy;
+    if (loginBtn) {
+      loginBtn.disabled = loginBusy;
+      loginBtn.textContent = loginBusy ? "Checking..." : "Login";
+    }
+  }
+
+  function resetLoginAfterFailure(message) {
+    accessState.token = "";
+    accessState.user = null;
+    if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = false;
+
+    setLoginBusy(false);
+    setLoginStatus(message || "Wrong username or PIN.", "error");
+
+    const pinInput = $("adminPinInput");
+    if (pinInput) {
+      pinInput.value = "";
+      setTimeout(() => {
+        pinInput.disabled = false;
+        pinInput.focus();
+      }, 0);
+    }
+
+    const userInput = $("adminUserInput");
+    if (userInput) userInput.disabled = false;
+  }
+
   function enhanceLoginBox() {
     const loginBox = $("adminLoginBox");
     const pinInput = $("adminPinInput");
-    if (!loginBox || !pinInput || $("adminUserInput")) return;
+    if (!loginBox || !pinInput) return;
 
-    const userField = document.createElement("div");
-    userField.className = "field";
-    userField.innerHTML = `
-      <label>User Name</label>
-      <input id="adminUserInput" type="text" placeholder="admin / supervisor / engineer" value="admin" />
-    `;
+    if (!$("adminUserInput")) {
+      const userField = document.createElement("div");
+      userField.className = "field";
+      userField.innerHTML = `
+        <label>User Name</label>
+        <input id="adminUserInput" type="text" placeholder="admin / supervisor / engineer" value="admin" autocomplete="username" />
+      `;
+      pinInput.closest(".field")?.before(userField);
+    }
 
-    pinInput.closest(".field")?.before(userField);
+    pinInput.setAttribute("autocomplete", "current-password");
 
-    const hint = loginBox.querySelector(".small-hint");
+    if (!$("adminLoginStatus")) {
+      const statusBox = document.createElement("div");
+      statusBox.id = "adminLoginStatus";
+      statusBox.className = "small-hint";
+      statusBox.style.marginTop = "8px";
+      loginBox.appendChild(statusBox);
+    }
+
+    const hint = loginBox.querySelector(".small-hint:not(#adminLoginStatus)");
     if (hint) hint.textContent = "Login with username + PIN. Default super admin username is admin.";
+
+    [$("adminUserInput"), pinInput].forEach((input) => {
+      if (!input || input.__spwtEnterLoginWired) return;
+      input.__spwtEnterLoginWired = true;
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          doAdminLogin();
+        }
+      });
+    });
   }
 
   function ensureUsersAccessTab() {
     const tabs = document.querySelector("#adminPanel .tabs");
     if (tabs && !document.querySelector('[data-tab="tabUsersAccess"]')) {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.className = "tab";
       btn.setAttribute("data-tab", "tabUsersAccess");
       btn.textContent = "Users & Access";
@@ -158,7 +224,6 @@
           <button type="button" class="btn green" id="saveAccessUsersBtn">Save Users & Access</button>
         </div>
       `;
-
       const hr = panel.querySelector("hr");
       if (hr) panel.insertBefore(page, hr);
       else panel.appendChild(page);
@@ -168,56 +233,83 @@
     $("saveAccessUsersBtn")?.addEventListener("click", saveAccessUsers);
   }
 
-  function patchAdminLogin() {
+  function wireAdminLogin() {
     const loginBtn = $("adminLoginBtn");
-    if (!loginBtn) return;
-
-    loginBtn.onclick = async function () {
-      const username = ($("adminUserInput")?.value || "admin").trim() || "admin";
-      const pin = ($("adminPinInput")?.value || "").trim();
-      if (!pin) return alert("Enter PIN.");
-
-      try {
-        const payload = await postJson("/api/admin/access/login", { username, pin });
-        if (!payload.valid) return alert("Wrong username or PIN.");
-
-        accessState.token = payload.token || "";
-        accessState.user = payload.user || null;
-        if (accessState.user) accessState.user.permissions = expandLegacyPermissions(accessState.user.permissions);
-
-        if (typeof adminOverrides !== "undefined" && adminOverrides) {
-          adminOverrides.admin = adminOverrides.admin || {};
-          adminOverrides.admin.pin = pin;
-        }
-        if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = true;
-
-        $("adminLoginBox")?.classList.add("hidden");
-        $("adminPanel")?.classList.remove("hidden");
-
-        applyPermissionUi();
-        await loadAccessUsersIfAllowed();
-        switchToFirstAllowedTab();
-      } catch (err) {
-        console.error(err);
-        alert("Login failed:\n\n" + (err.message || err));
-      }
-    };
+    if (!loginBtn || loginBtn.__spwtAccessLoginWired) return;
+    loginBtn.__spwtAccessLoginWired = true;
+    loginBtn.type = "button";
+    loginBtn.onclick = doAdminLogin;
   }
 
-  function patchAdminLogout() {
-    const logoutBtn = $("adminLogoutBtn");
-    if (!logoutBtn) return;
+  async function doAdminLogin() {
+    if (loginBusy) return;
 
+    const username = ($("adminUserInput")?.value || "admin").trim() || "admin";
+    const pin = ($("adminPinInput")?.value || "").trim();
+
+    if (!pin) {
+      setLoginStatus("Enter PIN.", "error");
+      $("adminPinInput")?.focus();
+      return;
+    }
+
+    setLoginBusy(true);
+    setLoginStatus("Checking login...", "");
+
+    try {
+      const payload = await postJson("/api/admin/access/login", { username, pin });
+
+      if (!payload.valid) {
+        resetLoginAfterFailure("Wrong username or PIN.");
+        return;
+      }
+
+      accessState.token = payload.token || "";
+      accessState.user = payload.user || null;
+      if (accessState.user) accessState.user.permissions = expandLegacyPermissions(accessState.user.permissions);
+
+      if (typeof adminOverrides !== "undefined" && adminOverrides) {
+        adminOverrides.admin = adminOverrides.admin || {};
+        adminOverrides.admin.pin = pin;
+      }
+      if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = true;
+
+      setLoginStatus("Login successful.", "success");
+      $("adminLoginBox")?.classList.add("hidden");
+      $("adminPanel")?.classList.remove("hidden");
+
+      setLoginBusy(false);
+      applyPermissionUi();
+      await loadAccessUsersIfAllowed();
+      switchToFirstAllowedTab();
+    } catch (err) {
+      console.error(err);
+      resetLoginAfterFailure("Login failed: " + (err.message || err));
+    }
+  }
+
+  function wireAdminLogout() {
+    const logoutBtn = $("adminLogoutBtn");
+    if (!logoutBtn || logoutBtn.__spwtAccessLogoutWired) return;
+    logoutBtn.__spwtAccessLogoutWired = true;
+    logoutBtn.type = "button";
     logoutBtn.onclick = function () {
       accessState.token = "";
       accessState.user = null;
       if (typeof isAdminLoggedIn !== "undefined") isAdminLoggedIn = false;
       $("adminPanel")?.classList.add("hidden");
       $("adminLoginBox")?.classList.remove("hidden");
+      setLoginBusy(false);
+      setLoginStatus("Logged out.", "");
+      const pinInput = $("adminPinInput");
+      if (pinInput) {
+        pinInput.value = "";
+        pinInput.focus();
+      }
     };
   }
 
-  function patchSaveButtonWithToken() {
+  function wireTokenHeaderProvider() {
     window.SPWT_ADMIN_TOKEN_HEADER = function () {
       return accessState.token ? { "X-SPWT-Admin-Token": accessState.token } : {};
     };
@@ -226,7 +318,6 @@
   function showAdminTab(tabId) {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.querySelector(`.tab[data-tab="${tabId}"]`)?.classList.add("active");
-
     document.querySelectorAll(".tab-page").forEach(p => p.classList.add("hidden"));
     $(tabId)?.classList.remove("hidden");
 
@@ -234,7 +325,10 @@
     else if (typeof switchAdminTab === "function") switchAdminTab(tabId);
   }
 
-  function patchTabPermissionGate() {
+  function wireTabPermissionGate() {
+    if (document.__spwtAdminAccessTabGateWired) return;
+    document.__spwtAdminAccessTabGateWired = true;
+
     document.addEventListener("click", function (event) {
       const tab = event.target?.closest?.(".tab[data-tab]");
       if (!tab) return;
@@ -278,7 +372,6 @@
 
   async function loadAccessUsersIfAllowed() {
     if (!hasPermission("userAccess")) return;
-
     const payload = await fetchJson("/api/admin/access/users");
     accessState.permissions = visiblePermissions(payload.data?.permissions || []);
     accessState.roleTemplates = payload.data?.roleTemplates || {};
@@ -331,7 +424,6 @@
         Existing PINs are stored securely as hash. Admin can reset PIN, not read old PIN.
       </div>
     `;
-
     wireAccessUserInputs();
   }
 
@@ -439,18 +531,35 @@
     }
   }
 
+  async function requestJson(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        signal: controller.signal
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Request failed ${res.status}`);
+      return payload;
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("Request timeout. Check server is running.");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function fetchJson(path) {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    return requestJson(path, {
       method: "GET",
       headers: { ...(accessState.token ? { "X-SPWT-Admin-Token": accessState.token } : {}) }
     });
-    const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Request failed ${res.status}`);
-    return payload;
   }
 
   async function postJson(path, body) {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    return requestJson(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -458,8 +567,5 @@
       },
       body: JSON.stringify(body || {})
     });
-    const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Request failed ${res.status}`);
-    return payload;
   }
 })();
