@@ -1,12 +1,14 @@
 // renderer/admin/adminButtonFix.js
-// Safety patch for the full-page Admin screen.
-// Fixes DB-mode Admin add buttons that are missing or unstable on separate admin.html page.
+// Safety wiring for the full-page Admin screen.
+// Cleanup: replaced repeated fixed timeouts with bounded retry wiring and one-time handlers.
 
 (function () {
+  const MAX_WIRE_ATTEMPTS = 12;
+  const WIRE_RETRY_MS = 250;
+  let attempts = 0;
+
   document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(wireButtons, 1200);
-    setTimeout(wireButtons, 2500);
-    setTimeout(wireButtons, 4000);
+    scheduleWireButtons();
   });
 
   function byId(id) {
@@ -15,6 +17,7 @@
 
   function getAppVar(name, fallback) {
     try {
+      // Required because app.js uses global lexical variables, not window properties.
       // eslint-disable-next-line no-eval
       const value = eval(name);
       return value == null ? fallback : value;
@@ -26,16 +29,19 @@
   function setAppVar(name, value) {
     try {
       window.__spwtAdminButtonFixValue = value;
+      // Required for app.js global lexical variables.
       // eslint-disable-next-line no-new-func
       Function(`${name} = window.__spwtAdminButtonFixValue`)();
-      delete window.__spwtAdminButtonFixValue;
     } catch (err) {
       console.warn(`Could not set app variable ${name}`, err);
+    } finally {
+      delete window.__spwtAdminButtonFixValue;
     }
   }
 
   function getAppFn(name) {
     try {
+      // Required because app.js functions are not exported as window properties.
       // eslint-disable-next-line no-eval
       const fn = eval(name);
       return typeof fn === "function" ? fn : null;
@@ -53,41 +59,62 @@
       .replaceAll("'", "&#039;");
   }
 
-  function wireButtons() {
-    wireNormalButton("addMachineBtn", "adminAddMachine");
-    wireNormalButton("addEmployeeBtn", "adminAddEmployee");
-    wireNormalButton("addShiftBtn", "adminAddShift");
-    wireNormalButton("addTypeBtn", "adminAddType");
-    wireNormalButton("addSubWorkBtn", "adminAddSubWork");
-
-    const mainWorkBtn = byId("addMainWorkBtn");
-    if (mainWorkBtn) {
-      mainWorkBtn.type = "button";
-      mainWorkBtn.onclick = addMainWorkDirect;
-    }
-
-    const lossBtn = byId("addLossReasonBtn");
-    if (lossBtn) {
-      lossBtn.type = "button";
-      lossBtn.onclick = addLossReasonDirect;
-    }
-
-    const rootBtn = byId("addRootAreaBtn");
-    if (rootBtn) {
-      rootBtn.type = "button";
-      rootBtn.onclick = addRootAreaDirect;
+  function scheduleWireButtons() {
+    attempts += 1;
+    const wired = wireButtons();
+    if (!wired && attempts < MAX_WIRE_ATTEMPTS) {
+      setTimeout(scheduleWireButtons, WIRE_RETRY_MS);
     }
   }
 
-  function wireNormalButton(id, fnName) {
+  function wireButtons() {
+    const buttonIds = [
+      "addMachineBtn",
+      "addEmployeeBtn",
+      "addShiftBtn",
+      "addTypeBtn",
+      "addSubWorkBtn",
+      "addMainWorkBtn",
+      "addLossReasonBtn",
+      "addRootAreaBtn"
+    ];
+
+    const presentCount = buttonIds.filter((id) => !!byId(id)).length;
+    if (presentCount === 0) return false;
+
+    wireAppFunctionButton("addMachineBtn", "adminAddMachine");
+    wireAppFunctionButton("addEmployeeBtn", "adminAddEmployee");
+    wireAppFunctionButton("addShiftBtn", "adminAddShift");
+    wireAppFunctionButton("addTypeBtn", "adminAddType");
+    wireAppFunctionButton("addSubWorkBtn", "adminAddSubWork");
+
+    wireFallbackButton("addMainWorkBtn", addMainWorkDirect);
+    wireFallbackButton("addLossReasonBtn", addLossReasonDirect);
+    wireFallbackButton("addRootAreaBtn", addRootAreaDirect);
+
+    return true;
+  }
+
+  function wireAppFunctionButton(id, fnName) {
     const btn = byId(id);
     const fn = getAppFn(fnName);
-    if (!btn || !fn) return;
+    if (!btn || !fn || btn.__spwtButtonFixWired) return;
+
+    btn.__spwtButtonFixWired = true;
     btn.type = "button";
     btn.onclick = function (event) {
-      if (event) event.preventDefault();
+      event?.preventDefault?.();
       fn();
     };
+  }
+
+  function wireFallbackButton(id, handler) {
+    const btn = byId(id);
+    if (!btn || btn.__spwtButtonFixWired) return;
+
+    btn.__spwtButtonFixWired = true;
+    btn.type = "button";
+    btn.onclick = handler;
   }
 
   function adminReady() {
@@ -113,7 +140,7 @@
   }
 
   function addMainWorkDirect(event) {
-    if (event) event.preventDefault();
+    event?.preventDefault?.();
     if (!adminReady()) return;
 
     const adminOverrides = getAppVar("adminOverrides", null);
@@ -138,20 +165,13 @@
     catalog.mainWorks = Array.isArray(catalog.mainWorks) ? catalog.mainWorks : [];
     catalog.subWorks = catalog.subWorks && typeof catalog.subWorks === "object" ? catalog.subWorks : {};
 
-    let base = "New Main Work";
-    let name = base;
-    let n = 1;
-    while (catalog.mainWorks.some((x) => String(x).trim().toLowerCase() === name.toLowerCase())) {
-      n += 1;
-      name = `${base} ${n}`;
-    }
-
+    const name = createUniqueName(catalog.mainWorks, "New Main Work");
     catalog.mainWorks.push(name);
     catalog.subWorks[name] = Array.isArray(catalog.subWorks[name]) ? catalog.subWorks[name] : [];
 
-    const globalMainWorks = Array.isArray(adminOverrides.mainWorks) ? adminOverrides.mainWorks : [];
-    if (!globalMainWorks.includes(name)) globalMainWorks.push(name);
-    adminOverrides.mainWorks = globalMainWorks;
+    adminOverrides.mainWorks = Array.isArray(adminOverrides.mainWorks) ? adminOverrides.mainWorks : [];
+    if (!adminOverrides.mainWorks.includes(name)) adminOverrides.mainWorks.push(name);
+
     adminOverrides.subWorks = adminOverrides.subWorks && typeof adminOverrides.subWorks === "object" ? adminOverrides.subWorks : {};
     adminOverrides.subWorks[name] = Array.isArray(adminOverrides.subWorks[name]) ? adminOverrides.subWorks[name] : [];
 
@@ -159,127 +179,141 @@
     setAppVar("selectedDeptForTypeEdit", name);
 
     renderWorkScreen();
+    focusLastInput("#mainWorkList [data-tmw-idx]", name);
+  }
 
+  function createUniqueName(existing, base) {
+    let name = base;
+    let n = 1;
+    while ((existing || []).some((x) => String(x).trim().toLowerCase() === name.toLowerCase())) {
+      n += 1;
+      name = `${base} ${n}`;
+    }
+    return name;
+  }
+
+  function focusLastInput(selector, exactValue) {
     setTimeout(function () {
-      const inputs = Array.from(document.querySelectorAll("#mainWorkList [data-tmw-idx]"));
-      const target = inputs.find((input) => String(input.value || "").trim() === name) || inputs[inputs.length - 1];
+      const inputs = Array.from(document.querySelectorAll(selector));
+      const target = exactValue
+        ? inputs.find((input) => String(input.value || "").trim() === exactValue) || inputs[inputs.length - 1]
+        : inputs[inputs.length - 1];
       if (target) {
         target.focus();
-        target.select();
+        target.select?.();
       }
     }, 50);
   }
 
   function addLossReasonDirect(event) {
-    if (event) event.preventDefault();
+    event?.preventDefault?.();
     if (!adminReady()) return;
+
+    const appFn = getAppFn("adminAddLossReason");
+    if (appFn) {
+      appFn();
+      focusLastInput("#lossReasonsList [data-loss-idx]");
+      return;
+    }
 
     const adminOverrides = getAppVar("adminOverrides", null);
     if (!adminOverrides) return;
 
     adminOverrides.lossReasons = Array.isArray(adminOverrides.lossReasons) ? adminOverrides.lossReasons : [];
     adminOverrides.lossReasons.push("New Loss Reason");
-
-    renderLossReasonsDirect(adminOverrides);
+    renderSimpleList({
+      hostId: "lossReasonsList",
+      items: adminOverrides.lossReasons,
+      inputAttr: "data-loss-idx",
+      delAttr: "data-loss-del",
+      placeholder: "Loss Reason",
+      header: "Loss Reason",
+      hint: "Only define loss reason here. Operator enters loss time during entry.",
+      onChange: (idx, value) => { adminOverrides.lossReasons[idx] = value.trim(); },
+      onDelete: (idx) => { adminOverrides.lossReasons.splice(idx, 1); renderLossReasonsFallback(adminOverrides); }
+    });
+    focusLastInput("#lossReasonsList [data-loss-idx]");
   }
 
   function addRootAreaDirect(event) {
-    if (event) event.preventDefault();
+    event?.preventDefault?.();
     if (!adminReady()) return;
+
+    const appFn = getAppFn("adminAddRootArea");
+    if (appFn) {
+      appFn();
+      focusLastInput("#rootAreasList [data-root-idx]");
+      return;
+    }
 
     const adminOverrides = getAppVar("adminOverrides", null);
     if (!adminOverrides) return;
 
     adminOverrides.rootAreas = Array.isArray(adminOverrides.rootAreas) ? adminOverrides.rootAreas : [];
     adminOverrides.rootAreas.push("New Root Area");
-
-    renderRootAreasDirect(adminOverrides);
+    renderRootAreasFallback(adminOverrides);
+    focusLastInput("#rootAreasList [data-root-idx]");
   }
 
-  function renderLossReasonsDirect(adminOverrides) {
-    const host = byId("lossReasonsList");
+  function renderLossReasonsFallback(adminOverrides) {
+    renderSimpleList({
+      hostId: "lossReasonsList",
+      items: adminOverrides.lossReasons,
+      inputAttr: "data-loss-idx",
+      delAttr: "data-loss-del",
+      placeholder: "Loss Reason",
+      header: "Loss Reason",
+      hint: "Only define loss reason here. Operator enters loss time during entry.",
+      onChange: (idx, value) => { adminOverrides.lossReasons[idx] = value.trim(); },
+      onDelete: (idx) => { adminOverrides.lossReasons.splice(idx, 1); renderLossReasonsFallback(adminOverrides); }
+    });
+  }
+
+  function renderRootAreasFallback(adminOverrides) {
+    renderSimpleList({
+      hostId: "rootAreasList",
+      items: adminOverrides.rootAreas,
+      inputAttr: "data-root-idx",
+      delAttr: "data-root-del",
+      placeholder: "Root Area",
+      header: "Root Area",
+      hint: "",
+      onChange: (idx, value) => { adminOverrides.rootAreas[idx] = value.trim(); },
+      onDelete: (idx) => { adminOverrides.rootAreas.splice(idx, 1); renderRootAreasFallback(adminOverrides); }
+    });
+  }
+
+  function renderSimpleList({ hostId, items, inputAttr, delAttr, placeholder, header, hint, onChange, onDelete }) {
+    const host = byId(hostId);
     if (!host) return;
 
     host.innerHTML = `
       <table class="admin-table">
         <thead>
-          <tr><th>Loss Reason</th><th style="width:160px;">Action</th></tr>
+          <tr><th>${escapeHtml(header)}</th><th style="width:160px;">Action</th></tr>
         </thead>
         <tbody>
-          ${adminOverrides.lossReasons.map((r, idx) => `
+          ${(items || []).map((item, idx) => `
             <tr>
-              <td><input class="admin-input" data-loss-idx="${idx}" value="${escapeHtml(r)}" placeholder="Loss Reason" /></td>
-              <td><button type="button" class="btn grey" data-loss-del="${idx}">Delete</button></td>
+              <td><input class="admin-input" ${inputAttr}="${idx}" value="${escapeHtml(item)}" placeholder="${escapeHtml(placeholder)}" /></td>
+              <td><button type="button" class="btn grey" ${delAttr}="${idx}">Delete</button></td>
             </tr>
           `).join("")}
         </tbody>
       </table>
-      <div class="small-hint">Only define loss reason here. Operator enters loss time during entry.</div>
+      ${hint ? `<div class="small-hint">${escapeHtml(hint)}</div>` : ""}
     `;
 
-    host.querySelectorAll("[data-loss-idx]").forEach((input) => {
+    host.querySelectorAll(`[${inputAttr}]`).forEach((input) => {
       input.oninput = function () {
-        const idx = Number(input.getAttribute("data-loss-idx"));
-        adminOverrides.lossReasons[idx] = input.value.trim();
+        onChange(Number(input.getAttribute(inputAttr)), input.value);
       };
     });
 
-    host.querySelectorAll("[data-loss-del]").forEach((btn) => {
+    host.querySelectorAll(`[${delAttr}]`).forEach((btn) => {
       btn.onclick = function () {
-        const idx = Number(btn.getAttribute("data-loss-del"));
-        adminOverrides.lossReasons.splice(idx, 1);
-        renderLossReasonsDirect(adminOverrides);
+        onDelete(Number(btn.getAttribute(delAttr)));
       };
     });
-
-    const inputs = host.querySelectorAll("[data-loss-idx]");
-    const last = inputs[inputs.length - 1];
-    if (last) {
-      last.focus();
-      last.select();
-    }
-  }
-
-  function renderRootAreasDirect(adminOverrides) {
-    const host = byId("rootAreasList");
-    if (!host) return;
-
-    host.innerHTML = `
-      <table class="admin-table">
-        <thead>
-          <tr><th>Root Area</th><th style="width:160px;">Action</th></tr>
-        </thead>
-        <tbody>
-          ${adminOverrides.rootAreas.map((r, idx) => `
-            <tr>
-              <td><input class="admin-input" data-root-idx="${idx}" value="${escapeHtml(r)}" placeholder="Root Area" /></td>
-              <td><button type="button" class="btn grey" data-root-del="${idx}">Delete</button></td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-
-    host.querySelectorAll("[data-root-idx]").forEach((input) => {
-      input.oninput = function () {
-        const idx = Number(input.getAttribute("data-root-idx"));
-        adminOverrides.rootAreas[idx] = input.value.trim();
-      };
-    });
-
-    host.querySelectorAll("[data-root-del]").forEach((btn) => {
-      btn.onclick = function () {
-        const idx = Number(btn.getAttribute("data-root-del"));
-        adminOverrides.rootAreas.splice(idx, 1);
-        renderRootAreasDirect(adminOverrides);
-      };
-    });
-
-    const inputs = host.querySelectorAll("[data-root-idx]");
-    const last = inputs[inputs.length - 1];
-    if (last) {
-      last.focus();
-      last.select();
-    }
   }
 })();
