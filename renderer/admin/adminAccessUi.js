@@ -1,6 +1,6 @@
 // renderer/admin/adminAccessUi.js
 // DB-mode Admin RBAC UI.
-// File cleanup: stable login state, no field lock after wrong PIN, timeout-protected API calls.
+// Handles username/PIN login, tab permission visibility, and Users & Access management.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -8,6 +8,8 @@
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
   const REQUEST_TIMEOUT_MS = 12000;
+  const MAX_INIT_ATTEMPTS = 12;
+  const INIT_RETRY_MS = 250;
   const HIDDEN_LEGACY_PERMISSIONS = new Set(["workStandards"]);
 
   const PERMISSION_LABELS = {
@@ -47,10 +49,10 @@
   };
 
   let loginBusy = false;
+  let savingUsers = false;
+  let initAttempts = 0;
 
-  document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(initAccessUi, 500);
-  });
+  document.addEventListener("DOMContentLoaded", scheduleInit);
 
   function $(id) {
     return document.getElementById(id);
@@ -63,6 +65,14 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function scheduleInit() {
+    initAttempts += 1;
+    const ready = initAccessUi();
+    if (!ready && initAttempts < MAX_INIT_ATTEMPTS) {
+      setTimeout(scheduleInit, INIT_RETRY_MS);
+    }
   }
 
   function expandLegacyPermissions(perms) {
@@ -93,6 +103,10 @@
   }
 
   function initAccessUi() {
+    const hasLogin = !!$("adminLoginBox") && !!$("adminPinInput");
+    const hasPanel = !!$("adminPanel");
+    if (!hasLogin || !hasPanel) return false;
+
     enhanceLoginBox();
     ensureUsersAccessTab();
     wireAdminLogin();
@@ -101,21 +115,33 @@
     wireTabPermissionGate();
     exposeAccessState();
     setLoginBusy(false);
+    return true;
   }
 
   function exposeAccessState() {
     window.SPWT_ADMIN_ACCESS = {
       getToken: () => accessState.token,
       getUser: () => accessState.user,
-      hasPermission
+      hasPermission,
+      refreshPermissionUi: () => {
+        applyPermissionUi();
+        notifyPermissionUiChanged();
+      }
     };
+  }
+
+  function notifyPermissionUiChanged() {
+    try { window.SPWT_APPLY_STANDARD_TIME_LOCK?.(); } catch (err) { console.warn(err); }
+    try { window.SPWT_RENDER_ADMIN_CONTROLS?.(); } catch (err) { /* controls tab may be hidden */ }
   }
 
   function setLoginStatus(message, type = "") {
     const box = $("adminLoginStatus");
     if (!box) return;
     box.textContent = message || "";
-    box.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "#64748b";
+    box.classList.remove("spwt-login-error", "spwt-login-success");
+    if (type === "error") box.classList.add("spwt-login-error");
+    if (type === "success") box.classList.add("spwt-login-success");
   }
 
   function setLoginBusy(isBusy) {
@@ -175,8 +201,7 @@
     if (!$("adminLoginStatus")) {
       const statusBox = document.createElement("div");
       statusBox.id = "adminLoginStatus";
-      statusBox.className = "small-hint";
-      statusBox.style.marginTop = "8px";
+      statusBox.className = "small-hint spwt-login-status";
       loginBox.appendChild(statusBox);
     }
 
@@ -219,8 +244,8 @@
           </div>
           <button type="button" class="btn orange" id="addAccessUserBtn">+ Add User</button>
         </div>
-        <div id="accessUsersList" class="list" style="margin-top:12px;"></div>
-        <div class="row" style="margin-top:12px; justify-content:flex-end;">
+        <div id="accessUsersList" class="list spwt-access-list"></div>
+        <div class="row spwt-access-actions">
           <button type="button" class="btn green" id="saveAccessUsersBtn">Save Users & Access</button>
         </div>
       `;
@@ -229,8 +254,21 @@
       else panel.appendChild(page);
     }
 
-    $("addAccessUserBtn")?.addEventListener("click", addAccessUser);
-    $("saveAccessUsersBtn")?.addEventListener("click", saveAccessUsers);
+    wireAccessActionButtons();
+  }
+
+  function wireAccessActionButtons() {
+    const addBtn = $("addAccessUserBtn");
+    if (addBtn && !addBtn.__spwtAccessAddWired) {
+      addBtn.__spwtAccessAddWired = true;
+      addBtn.onclick = addAccessUser;
+    }
+
+    const saveBtn = $("saveAccessUsersBtn");
+    if (saveBtn && !saveBtn.__spwtAccessSaveWired) {
+      saveBtn.__spwtAccessSaveWired = true;
+      saveBtn.onclick = saveAccessUsers;
+    }
   }
 
   function wireAdminLogin() {
@@ -282,6 +320,7 @@
       applyPermissionUi();
       await loadAccessUsersIfAllowed();
       switchToFirstAllowedTab();
+      notifyPermissionUiChanged();
     } catch (err) {
       console.error(err);
       resetLoginAfterFailure("Login failed: " + (err.message || err));
@@ -301,6 +340,8 @@
       $("adminLoginBox")?.classList.remove("hidden");
       setLoginBusy(false);
       setLoginStatus("Logged out.", "");
+      notifyPermissionUiChanged();
+
       const pinInput = $("adminPinInput");
       if (pinInput) {
         pinInput.value = "";
@@ -323,6 +364,8 @@
 
     if (tabId === "tabUsersAccess") renderAccessUsers();
     else if (typeof switchAdminTab === "function") switchAdminTab(tabId);
+
+    notifyPermissionUiChanged();
   }
 
   function wireTabPermissionGate() {
@@ -404,27 +447,28 @@
     const users = accessState.users || [];
 
     host.innerHTML = `
-      <table class="admin-table">
+      <table class="admin-table spwt-access-table">
         <thead>
           <tr>
-            <th style="min-width:120px;">Username</th>
-            <th style="min-width:150px;">Display Name</th>
-            <th style="width:130px;">Role</th>
-            <th style="width:120px;">Reset PIN</th>
+            <th>Username</th>
+            <th>Display Name</th>
+            <th>Role</th>
+            <th>Reset PIN</th>
             <th>Permissions</th>
-            <th style="width:90px;">Active</th>
-            <th style="width:90px;">Action</th>
+            <th>Active</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
           ${users.map((u, idx) => renderUserRow(u, idx, permissions)).join("")}
         </tbody>
       </table>
-      <div class="small-hint" style="margin-top:8px;">
+      <div class="small-hint spwt-access-hint">
         Existing PINs are stored securely as hash. Admin can reset PIN, not read old PIN.
       </div>
     `;
     wireAccessUserInputs();
+    wireAccessActionButtons();
   }
 
   function renderUserRow(user, idx, permissions) {
@@ -437,7 +481,7 @@
     const permissionChecks = permissions.map((p) => {
       const checked = userPerms.includes(p) ? "checked" : "";
       return `
-        <label style="display:inline-flex; align-items:center; gap:4px; margin:3px 10px 3px 0; white-space:nowrap;">
+        <label class="spwt-permission-check">
           <input type="checkbox" data-au-idx="${idx}" data-au-perm="${escapeHtml(p)}" ${checked} />
           ${escapeHtml(PERMISSION_LABELS[p] || p)}
         </label>
@@ -505,10 +549,21 @@
     });
   }
 
+  function setUsersSaveBusy(isBusy) {
+    savingUsers = !!isBusy;
+    const btn = $("saveAccessUsersBtn");
+    if (btn) {
+      btn.disabled = savingUsers;
+      btn.textContent = savingUsers ? "Saving..." : "Save Users & Access";
+    }
+  }
+
   async function saveAccessUsers() {
+    if (savingUsers) return;
     if (!hasPermission("userAccess")) return alert("No permission: Users & Access");
 
     try {
+      setUsersSaveBusy(true);
       const users = (accessState.users || []).map((u) => ({
         username: (u.username || "").trim(),
         displayName: (u.displayName || "").trim(),
@@ -528,6 +583,8 @@
     } catch (err) {
       console.error(err);
       alert("Users & Access save failed:\n\n" + (err.message || err));
+    } finally {
+      setUsersSaveBusy(false);
     }
   }
 
