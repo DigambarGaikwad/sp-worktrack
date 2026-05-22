@@ -1,6 +1,6 @@
 // renderer/adminControlsPatch.js
 // Admin Controls tab + entry-screen rule sync.
-// Cleaned: no timer loop, no CSS override. Uses debounced DOM/event updates.
+// Keeps Admin Controls aligned with entry validation until legacy 120% logic is moved from app.js.
 
 (function () {
   const DEFAULT_CONTROLS = {
@@ -10,15 +10,37 @@
   };
 
   const AUTO_REASON = "Not required - disabled by Admin Control";
+  const REQUEST_TIMEOUT_MS = 12000;
 
   let adminControls = { ...DEFAULT_CONTROLS };
   let controlsLoaded = false;
   let controlsSaving = false;
   let applyTimer = null;
   let observerStarted = false;
+  let eventsWired = false;
 
   function apiBaseUrl() {
     return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
+  }
+
+  async function requestJson(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${apiBaseUrl()}${path}`, {
+        ...options,
+        signal: controller.signal
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
+      return payload;
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("Request timeout. Check server is running.");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function normalizeControls(raw) {
@@ -46,7 +68,9 @@
     const el = document.getElementById("adminControlsStatus");
     if (!el) return;
     el.textContent = message || "";
-    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#166534" : "";
+    el.classList.remove("spwt-status-error", "spwt-status-success");
+    if (type === "error") el.classList.add("spwt-status-error");
+    if (type === "success") el.classList.add("spwt-status-success");
   }
 
   function scheduleEntryControlApply(forSubmit = false) {
@@ -62,6 +86,7 @@
     if (!tabs.querySelector('[data-tab="tabControls"]')) {
       const btn = document.createElement("button");
       btn.className = "tab";
+      btn.type = "button";
       btn.setAttribute("data-tab", "tabControls");
       btn.textContent = "Admin Controls";
 
@@ -78,7 +103,7 @@
         <div class="section-title">Admin Controls</div>
         <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
 
-        <div class="card" style="margin-top:12px; box-shadow:none; border:1px solid #e5e7eb;">
+        <div class="card admin-controls-card">
           <div class="grid-2">
             <div class="field">
               <label class="quality-recheck-line">
@@ -103,8 +128,8 @@
             </div>
           </div>
 
-          <div class="row" style="margin-top:12px;">
-            <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
+          <div class="row admin-controls-actions">
+            <button class="btn green" id="saveAdminControlsBtn" type="button">Save Admin Controls</button>
             <span class="small-hint" id="adminControlsStatus"></span>
           </div>
         </div>
@@ -120,9 +145,7 @@
     if (controlsLoaded && !force) return adminControls;
 
     try {
-      const res = await fetch(`${apiBaseUrl()}/api/admin/controls`);
-      const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
+      const payload = await requestJson("/api/admin/controls", { method: "GET" });
       adminControls = normalizeControls(payload.data);
     } catch (err) {
       console.warn("Admin controls load failed. Using defaults.", err);
@@ -179,18 +202,15 @@
       if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
       status("Saving...");
 
-      const body = readControlsForm();
       const token = getAdminToken();
       const headers = { "Content-Type": "application/json" };
       if (token) headers["x-spwt-admin-token"] = token;
 
-      const res = await fetch(`${apiBaseUrl()}/api/admin/controls`, {
+      const payload = await requestJson("/api/admin/controls", {
         method: "POST",
         headers,
-        body: JSON.stringify(body)
+        body: JSON.stringify(readControlsForm())
       });
-      const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
 
       adminControls = normalizeControls(payload.data);
       controlsLoaded = true;
@@ -235,6 +255,7 @@
     const saveBtn = document.getElementById("saveAdminControlsBtn");
     if (saveBtn && !saveBtn.__spwtWired) {
       saveBtn.__spwtWired = true;
+      saveBtn.type = "button";
       saveBtn.onclick = saveAdminControls;
     }
   }
@@ -345,14 +366,10 @@
       const reason = String(bp.overbookingReason || bp.extraReason || bp.reason || "").trim();
 
       if (extra <= 0) return;
-
       if (!isBookingExtraReasonEnabled()) return;
 
-      if (!reason) {
-        errs.push(`Work ${workIndex}: ${point} has ${extra} min extra booking. Reason is required.`);
-      } else {
-        warnings.push(`Work ${workIndex}: ${point} has ${extra} min extra booking; reason will be saved in DB`);
-      }
+      if (!reason) errs.push(`Work ${workIndex}: ${point} has ${extra} min extra booking. Reason is required.`);
+      else warnings.push(`Work ${workIndex}: ${point} has ${extra} min extra booking; reason will be saved in DB`);
     });
 
     return { errs, warnings };
@@ -511,15 +528,9 @@
     observer.observe(host, { childList: true, subtree: true });
   }
 
-  async function init() {
-    ensureAdminControlsTab();
-    await loadAdminControls(false);
-    patchSwitchAdminTab();
-    patchEntryValidationFunctions();
-    wireControlsButton();
-    initSubmitGuard();
-    startWorkContainerObserver();
-    scheduleEntryControlApply();
+  function wireEventsOnce() {
+    if (eventsWired) return;
+    eventsWired = true;
 
     document.addEventListener("click", (e) => {
       if (e.target?.closest?.('[data-tab="tabControls"]')) {
@@ -535,6 +546,18 @@
 
     document.addEventListener("input", () => scheduleEntryControlApply(), false);
     document.addEventListener("change", () => scheduleEntryControlApply(), false);
+  }
+
+  async function init() {
+    ensureAdminControlsTab();
+    await loadAdminControls(false);
+    patchSwitchAdminTab();
+    patchEntryValidationFunctions();
+    wireControlsButton();
+    initSubmitGuard();
+    startWorkContainerObserver();
+    wireEventsOnce();
+    scheduleEntryControlApply();
   }
 
   window.SPWT_ADMIN_CONTROLS = adminControls;
