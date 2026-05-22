@@ -10,14 +10,9 @@
 
 <body>
   <div class="app">
+    <div id="spAppHeader"></div>
 
-    <!-- TOPBAR -->
-   <div id="spAppHeader"></div>
-
-    <!-- MAIN CONTENT -->
     <div class="content">
-
-      <!-- SECTION 1 -->
       <div class="card">
         <div class="card-head">
           <div class="card-title">Shift & Team Details</div>
@@ -70,17 +65,15 @@
         </div>
       </div>
 
-      <!-- SECTION 2 -->
       <div class="card">
         <div id="workContainer" class="work-list"></div>
 
         <div class="work-actions-bottom">
-          <button class="btn orange" id="addWorkBtnBottom">+ Add Work</button>
-          <button class="btn grey" id="deleteLastBtn">Delete Last Work</button>
+          <button class="btn orange" id="addWorkBtnBottom" type="button">+ Add Work</button>
+          <button class="btn grey" id="deleteLastBtn" type="button">Delete Last Work</button>
         </div>
       </div>
 
-      <!-- SECTION 3 SUMMARY -->
       <div class="card">
         <div class="card-head">
           <div class="card-title">Shift Summary</div>
@@ -106,8 +99,8 @@
       </div>
 
       <div class="bottom-actions">
-        <button class="btn green" id="submitBtn">Submit</button>
-        <button class="btn grey" id="saveBtn">Save Local</button>
+        <button class="btn green" id="submitBtn" type="button">Submit</button>
+        <button class="btn grey" id="saveBtn" type="button">Save Local</button>
       </div>
 
       <footer class="app-footer">
@@ -125,200 +118,6 @@
     </div>
   </div>
 
-  <!-- ADMIN MODAL -->
-  <div class="modal-backdrop hidden" id="adminModal">
-    <div class="modal">
-      <div class="modal-head">
-        <div class="modal-title">Admin Settings</div>
-        <button class="icon-btn" id="adminCloseBtn">✕</button>
-      </div>
-      <div class="modal-body">
-
-        <!-- LOGIN -->
-        <div class="admin-login" id="adminLoginBox">
-          <div class="field">
-            <label>Enter Admin PIN</label>
-            <input id="adminPinInput" type="password" placeholder="PIN" />
-          </div>
-          <div class="row">
-            <button class="btn green" id="adminLoginBtn">Login</button>
-            <button class="btn grey" id="adminCancelBtn">Cancel</button>
-          </div>
-          <div class="small-hint">Default PIN: 1234 (change it after first use)</div>
-        </div>
-
-        <!-- PANEL -->
-        <div class="admin-panel hidden" id="adminPanel">
-          <div class="tabs">
-            <button class="tab active" data-tab="tabMachines">Machines</button>
-            <button class="tab" data-tab="tabEmployees">Employees</button>
-            <button class="tab" data-tab="tabShifts">Shifts</button>
-            <button class="tab" data-tab="tabLossReasons">Loss Reasons</button>
-            <button class="tab" data-tab="tabRootAreas">Root Areas</button>
-            <button class="tab" data-tab="tabWork">Work &amp; Sub Work</button>
-            <button class="tab" data-tab="tabControls">Admin Controls</button>
-            <button class="tab" data-tab="tabPin">Change PIN</button>
-          </div>
-
-          <!-- Machines -->
-          <div class="tab-page" id="tabMachines">
-            <div class="section-title">Machines</div>
-            <div id="machinesList" class="list"></div>
-
-            <div class="small-hint">Tip: Mark machine as <b>Completed</b> to hide it from production entry.</div>
-            <div class="admin-floating-actions"><button class="btn orange" id="addMachineBtn">+ Add Machine</button></div>
-          </div>
-
-          <!-- Employees -->
-          <div class="tab-page hidden" id="tabEmployees">
-            <div class="section-title">Employees</div>
-            <div id="employeesList" class="list"></div>
-            <div class="admin-floating-actions"><button class="btn orange" id="addEmployeeBtn">+ Add Employee</button></div>
-          </div>
-
-          <!-- Shifts -->
-          <div class="tab-page hidden" id="tabShifts">
-            <div class="section-title">Shifts</div>
-            <div id="shiftsList" class="list"></div>
-            <div class="small-hint">Tip: Use 24-hour time like 09:00 to 18:00. Mark flexible for overtime-style entry.</div>
-            <div class="admin-floating-actions"><button class="btn orange" id="addShiftBtn">+ Add Shift</button></div>
-          </div>
-
-          <!-- Loss Reasons -->
-          <div class="tab-page hidden" id="tabLossReasons">
-            <div class="section-title">Major Loss Reasons</div>
-            <div class="small-hint">These options appear in Shift &amp; Team Details.</div>
-            <div id="lossReasonsList" class="list"></div>
-            <div class="admin-floating-actions"><button class="btn orange" id="addLossReasonBtn">+ Add Loss Reason</button></div>
-          </div>
-
-          <!-- Root Areas -->
-          <div class="tab-page hidden" id="tabRootAreas">
-            <div class="section-title">Rework Root Areas</div>
-            <div class="small-hint">These options appear when Work Nature = Rework.</div>
-            <div id="rootAreasList" class="list"></div>
-            <div class="admin-floating-actions"><button class="btn orange" id="addRootAreaBtn">+ Add Root Area</button></div>
-          </div>
-
-          <!-- Work & Sub Work -->
-          <div class="tab-page hidden" id="tabWork">
-            <div class="row-between">
-              <div>
-                <div class="section-title">Work &amp; Sub Work</div>
-                <div class="small-hint">This controls Department list + Sub Work list + Standard Time (min).</div>
-              </div>
-            </div>
-
-            <div class="work-admin-grid">
-
-              <!-- (1) Machine Category -->
-              <div class="work-admin-panel">
-                <div class="work-admin-head">Machine Category</div>
-                <div class="small-hint">Select category to manage Department + Sub Work list.</div>
-
-                <div class="field" style="margin-top:10px;">
-                  <label>Machine Category</label>
-                  <select id="workTypeSelect" class="admin-select"></select>
-                </div>
-
-                <div style="margin-top:12px;" id="typeList"></div>
-
-                <div class="small-hint" style="margin-top:10px;">
-                  Tip: Keep different standard times for each machine category.
-                </div>
-              </div>
-
-              <!-- (2) Main Work (Department) -->
-              <div class="work-admin-panel">
-                <div class="work-admin-head">Main Work (Department)</div>
-                <div id="mainWorkList"></div>
-              </div>
-
-              <!-- (3) Sub Work Items -->
-              <div class="work-admin-panel">
-                <div class="work-admin-head">Sub Work Items</div>
-                <div class="small-hint">Editing: <b id="editingDeptLabel">None</b></div>
-                <div id="subWorkList"></div>
-              </div>
-
-            </div>
-            <div class="admin-floating-actions">
-              <button class="btn grey" id="addTypeBtn">+ Add Machine Category</button>
-              <button class="btn grey" id="addMainWorkBtn">+ Add Main Work</button>
-              <button class="btn orange" id="addSubWorkBtn">+ Add Sub Work</button>
-            </div>
-          </div>
-
-          <!-- Admin Controls -->
-          <div class="tab-page hidden" id="tabControls">
-            <div class="section-title">Admin Controls</div>
-            <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
-
-            <div class="card admin-controls-card">
-              <div class="grid-2">
-                <div class="field">
-                  <label class="quality-recheck-line">
-                    <input type="checkbox" id="overrunReasonEnabled" />
-                    Enable overrun reason rule
-                  </label>
-                  <div class="small-hint">If enabled, reason is required when Actual Time crosses configured percentage of Standard Time.</div>
-                </div>
-
-                <div class="field">
-                  <label>Overrun Limit (%)</label>
-                  <input id="overrunReasonLimitPct" class="admin-input" type="number" min="100" max="300" step="1" placeholder="120" />
-                  <div class="small-hint">Example: 120 means Actual Time &gt; 120% of Standard Time requires reason.</div>
-                </div>
-
-                <div class="field">
-                  <label class="quality-recheck-line">
-                    <input type="checkbox" id="bookingExtraReasonEnabled" />
-                    Enable booking extra time reason
-                  </label>
-                  <div class="small-hint">If enabled, reason is required when booking point time is more than remaining standard time.</div>
-                </div>
-              </div>
-
-              <div class="row admin-controls-actions">
-                <button class="btn green" id="saveAdminControlsBtn">Save Admin Controls</button>
-                <span class="small-hint" id="adminControlsStatus"></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- PIN -->
-          <div class="tab-page hidden" id="tabPin">
-            <div class="section-title">Change Admin PIN</div>
-            <div class="grid-2">
-              <div class="field">
-                <label>New PIN</label>
-                <input id="newPin1" type="password" placeholder="New PIN" />
-              </div>
-              <div class="field">
-                <label>Confirm PIN</label>
-                <input id="newPin2" type="password" placeholder="Confirm PIN" />
-              </div>
-            </div>
-            <button class="btn green" id="savePinBtn">Save PIN</button>
-          </div>
-
-          <hr />
-
-          <div class="row-between">
-            <div class="small-hint">These changes apply immediately in the app after Save.</div>
-            <div class="row">
-              <button class="btn grey" id="adminLogoutBtn">Logout</button>
-              <button class="btn grey" onclick="document.getElementById('adminModal')?.classList.add('hidden')">Close</button>
-              <button class="btn green" id="adminSaveBtn">Save Changes</button>
-            </div>
-          </div>
-
-        </div> <!-- /adminPanel -->
-      </div> <!-- /modal-body -->
-    </div> <!-- /modal -->
-  </div> <!-- /modal-backdrop -->
-
-  <!-- SUMMARY SCREEN (FULL PAGE) -->
   <div class="summary-screen hidden" id="summaryScreen">
     <div class="summary-wrap">
       <div class="summary-top">
@@ -327,8 +126,8 @@
           <div class="summary-sub" id="sumMetaLine">—</div>
         </div>
         <div class="summary-actions">
-          <button class="btn grey" id="backToEntryBtn">Back</button>
-          <button class="btn green" id="newEntryBtn">+ New Entry</button>
+          <button class="btn grey" id="backToEntryBtn" type="button">Back</button>
+          <button class="btn green" id="newEntryBtn" type="button">+ New Entry</button>
         </div>
       </div>
 
@@ -357,52 +156,52 @@
       </div>
     </div>
   </div>
-<!-- ABOUT MODAL -->
-<div class="modal-backdrop hidden" id="aboutModal">
-  <div class="modal">
-    <div class="modal-head">
-      <div class="modal-title">About SP WorkTrack</div>
-      <button class="icon-btn" id="aboutCloseBtn">✕</button>
-    </div>
 
-    <div class="modal-body">
-      <div style="line-height:1.6; font-size:14px;margin-left: 25px;">
-        <strong>SP WorkTrack v1.0</strong><br/>
-        Production Management System<br/><br/>
+  <div class="modal-backdrop hidden" id="aboutModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">About SP WorkTrack</div>
+        <button class="icon-btn" id="aboutCloseBtn" type="button">✕</button>
+      </div>
 
-        <strong>Purpose:</strong><br/>
-        To digitally capture and monitor daily production work in a simple and structured way.
+      <div class="modal-body">
+        <div class="about-content">
+          <strong>SP WorkTrack v1.0</strong><br/>
+          Production Management System<br/><br/>
 
-        <br/><br/>
-        <strong>Key Features:</strong>
-        <ul style="margin-top:6px; padding-left:20px;">
-          <li>Production Entry Tracking</li>
-          <li>Machine Category Mapping</li>
-          <li>Department & Sub Work Control</li>
-          <li>Rework Tracking with Root Area</li>
-          <li>Summary Dashboard</li>
-          <li>Google Sheets Integration</li>
-          <li>Real-time multi-device synchronization (simultaneous production entry)</li>
-        </ul>
+          <strong>Purpose:</strong><br/>
+          To digitally capture and monitor daily production work in a simple and structured way.
 
-        <br/>
-        Developed by Digambar Gaikwad<br/>
-        © 2026 Sopan Process Technologies
+          <br/><br/>
+          <strong>Key Features:</strong>
+          <ul>
+            <li>Production Entry Tracking</li>
+            <li>Machine Category Mapping</li>
+            <li>Department & Sub Work Control</li>
+            <li>Rework Tracking with Root Area</li>
+            <li>Summary Dashboard</li>
+            <li>Google Sheets Integration</li>
+            <li>Real-time multi-device synchronization (simultaneous production entry)</li>
+          </ul>
+
+          <br/>
+          Developed by Digambar Gaikwad<br/>
+          © 2026 Sopan Process Technologies
+        </div>
       </div>
     </div>
   </div>
-</div>
 
   <script src="renderer/config.js"></script>
-
   <script src="renderer/shared/appHeader.js"></script>
   <script>
-  window.SPWT.renderAppHeader({
-    title: "SP WorkTrack",
-    subtitle: "Production Management System"
-  });
-</script>
+    window.SPWT.renderAppHeader({
+      title: "SP WorkTrack",
+      subtitle: "Production Management System"
+    });
+  </script>
   <script src="renderer/app.js"></script>
+  <script src="renderer/dbModeEntryGuard.js"></script>
   <script src="renderer/entryUiPatch.js"></script>
   <script src="renderer/adminControlsPatch.js"></script>
 </body>
