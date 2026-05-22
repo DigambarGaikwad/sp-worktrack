@@ -1,34 +1,62 @@
 // renderer/admin/adminDbPatch.js
-// Patch over adminDb.js: reliable planned-absent employee loading from DB API,
-// and save mode that deactivates removed admin records in PocketBase.
-// Admin PIN login/update is handled only by adminPinDb.js.
+// DB admin save patch: saves current admin master data to PocketBase with login token.
+// Cleanup: timeout-protected requests, simpler payload build, safer button wiring.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
   if ((CONFIG.DATA_SOURCE || "local") !== "db") return;
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
+  const REQUEST_TIMEOUT_MS = 15000;
   const $ = (id) => document.getElementById(id);
 
   let dbEmployees = [];
+  let initAttempts = 0;
 
   document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(initAdminDbPatch, 1200);
+    scheduleInit();
   });
 
+  function scheduleInit() {
+    initAttempts += 1;
+    initAdminDbPatch();
+
+    // Admin page loads app.js + several patches. Retry briefly until button/page exists.
+    if (!$("adminSaveBtn") && initAttempts < 12) {
+      setTimeout(scheduleInit, 250);
+    }
+  }
+
   async function initAdminDbPatch() {
-    await loadEmployeesFromDb();
-    populatePlannedAbsentEmployeeSelectFromDb();
     patchSaveButton();
     patchPlannedAbsentTabClick();
+    await loadEmployeesFromDb();
+    populatePlannedAbsentEmployeeSelectFromDb();
+  }
+
+  async function requestJson(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        signal: controller.signal
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok) throw new Error(body?.message || `Request failed ${res.status}`);
+      return body;
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("Request timeout. Check server is running.");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async function loadEmployeesFromDb() {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/master-data`);
-      const body = await res.json().catch(() => null);
-      if (!res.ok || !body?.ok) throw new Error(body?.message || `Master data load failed ${res.status}`);
-
+      const body = await requestJson("/api/admin/master-data", { method: "GET" });
       dbEmployees = Array.isArray(body.data?.employees) ? body.data.employees : [];
     } catch (err) {
       console.warn("DB employee load for planned absent failed:", err);
@@ -62,7 +90,8 @@
 
   function patchPlannedAbsentTabClick() {
     const tab = document.querySelector('[data-tab="tabPlannedAbsent"]');
-    if (!tab) return;
+    if (!tab || tab.__spwtDbPatchWired) return;
+    tab.__spwtDbPatchWired = true;
 
     tab.addEventListener("click", async function () {
       await loadEmployeesFromDb();
@@ -72,8 +101,10 @@
 
   function patchSaveButton() {
     const btn = $("adminSaveBtn");
-    if (!btn) return;
+    if (!btn || btn.__spwtDbSaveWired) return;
 
+    btn.__spwtDbSaveWired = true;
+    btn.type = "button";
     btn.textContent = "Save to DB";
     btn.title = "Save current admin masters to DB and mark deleted items inactive";
     btn.onclick = saveCurrentAdminStateToDb;
@@ -81,11 +112,25 @@
 
   function getGlobalValue(name, fallback) {
     try {
+      // Required until app.js exposes admin state on window.
       // eslint-disable-next-line no-eval
       const value = eval(name);
       return value == null ? fallback : value;
     } catch (err) {
       return fallback;
+    }
+  }
+
+  function assignGlobalValue(name, value) {
+    try {
+      window.__spwtAdminDbPatchValue = value;
+      // Required until app.js exposes admin state on window.
+      // eslint-disable-next-line no-new-func
+      Function(`${name} = window.__spwtAdminDbPatchValue`)();
+    } catch (err) {
+      console.warn(`Could not assign ${name}`, err);
+    } finally {
+      delete window.__spwtAdminDbPatchValue;
     }
   }
 
@@ -103,16 +148,6 @@
       .filter(Boolean);
   }
 
-  function readLossReasonsFromScreen(fallback) {
-    const values = readInputList("#lossReasonsList [data-loss-idx]");
-    return values.length ? values : fallback;
-  }
-
-  function readRootAreasFromScreen(fallback) {
-    const values = readInputList("#rootAreasList [data-root-idx]");
-    return values.length ? values : fallback;
-  }
-
   function safeClone(value, fallback) {
     try {
       return JSON.parse(JSON.stringify(value == null ? fallback : value));
@@ -121,24 +156,26 @@
     }
   }
 
-  function syncVisibleListsToGlobals(payload) {
-    const lossReasonsFromScreen = readLossReasonsFromScreen(payload.lossReasons || []);
-    const rootAreasFromScreen = readRootAreasFromScreen(payload.rootAreas || []);
+  function getScreenOrFallback(selector, fallback) {
+    const values = readInputList(selector);
+    return values.length ? values : safeClone(fallback, []);
+  }
 
-    payload.lossReasons = lossReasonsFromScreen;
-    payload.rootAreas = rootAreasFromScreen;
+  function syncVisibleLists(payload) {
+    const lossReasons = getScreenOrFallback("#lossReasonsList [data-loss-idx]", payload.lossReasons || []);
+    const rootAreas = getScreenOrFallback("#rootAreasList [data-root-idx]", payload.rootAreas || []);
 
-    try {
-      // Keep app.js globals updated so entry dropdowns refresh correctly after reload/open.
-      // eslint-disable-next-line no-eval
-      eval("lossReasons = " + JSON.stringify(lossReasonsFromScreen));
-      // eslint-disable-next-line no-eval
-      eval("rootAreas = " + JSON.stringify(rootAreasFromScreen));
-      // eslint-disable-next-line no-eval
-      eval("if (adminOverrides) { adminOverrides.lossReasons = " + JSON.stringify(lossReasonsFromScreen) + "; adminOverrides.rootAreas = " + JSON.stringify(rootAreasFromScreen) + "; }");
-    } catch (err) {
-      console.warn("Could not sync visible admin lists to globals", err);
+    payload.lossReasons = lossReasons;
+    payload.rootAreas = rootAreas;
+
+    const currentOverrides = getGlobalValue("adminOverrides", null);
+    if (currentOverrides) {
+      currentOverrides.lossReasons = lossReasons;
+      currentOverrides.rootAreas = rootAreas;
     }
+
+    assignGlobalValue("lossReasons", lossReasons);
+    assignGlobalValue("rootAreas", rootAreas);
 
     return payload;
   }
@@ -146,8 +183,6 @@
   function buildPayload() {
     const adminOverrides = getGlobalValue("adminOverrides", {}) || {};
 
-    // Important: Admin screen edits are applied to adminOverrides, not always to runtime globals.
-    // So save adminOverrides first. Runtime globals are only fallback for older screens.
     const payload = {
       ...safeClone(adminOverrides, {}),
       machines: safeClone(adminOverrides.machines || getGlobalValue("machines", []), []),
@@ -161,7 +196,7 @@
       rootAreas: safeClone(adminOverrides.rootAreas || getGlobalValue("rootAreas", []), [])
     };
 
-    return syncVisibleListsToGlobals(payload);
+    return syncVisibleLists(payload);
   }
 
   async function saveCurrentAdminStateToDb() {
@@ -179,18 +214,14 @@
         throw new Error("Login session required. Please logout and login again.");
       }
 
-      const payload = buildPayload();
-      const res = await fetch(`${API_BASE_URL}/api/admin/save-master-data`, {
+      const body = await requestJson("/api/admin/save-master-data", {
         method: "POST",
         headers,
         body: JSON.stringify({
           syncMode: "deactivateMissing",
-          data: payload
+          data: buildPayload()
         })
       });
-
-      const body = await res.json().catch(() => null);
-      if (!res.ok || !body?.ok) throw new Error(body?.message || `Admin DB save failed ${res.status}`);
 
       const msg = body.data?.standardTimeProtected
         ? "Saved to DB ✅ Standard times protected (no Standard Time permission)."
