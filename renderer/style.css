@@ -26,10 +26,23 @@ body {
   padding: 0 22px;
 }
 
-.topbar .left {
+.topbar .left,
+.topbar .right,
+.row,
+.footer-top,
+.footer-bottom,
+.quality-recheck-line {
   display: flex;
   align-items: center;
+}
+
+.topbar .left {
   gap: 14px;
+}
+
+.topbar .right {
+  gap: 18px;
+  font-size: 14px;
 }
 
 .logo {
@@ -47,13 +60,6 @@ body {
 .brand .subtitle {
   font-size: 12px;
   opacity: 0.85;
-}
-
-.topbar .right {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  font-size: 14px;
 }
 
 .settings {
@@ -109,23 +115,27 @@ body {
   flex-wrap: wrap;
 }
 
+.grid,
+.work-grid,
+.summary,
+.summary-cards,
+.grid-2 {
+  display: grid;
+}
+
 .grid {
   padding: 16px 18px 18px;
-  display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px 16px;
 }
 
 .grid-2 {
-  display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
 .row {
-  display: flex;
   gap: 10px;
-  align-items: center;
   flex-wrap: wrap;
 }
 
@@ -202,7 +212,6 @@ input:focus {
 }
 
 .work-grid {
-  display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px 14px;
 }
@@ -217,23 +226,33 @@ input:focus {
 
 .workCheckpointField,
 .qualityCheckpointField {
-  grid-column: 1 / -1 !important;
+  grid-column: 1 / -1;
 }
 
-.checkpoint-list {
+.checkpoint-list,
+.workCheckpointList,
+.qualityCheckpointList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 12px;
   background: #f8fafc;
 }
 
+.checkpoint-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
 .workCheckpointList {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(320px, 1fr)) !important;
-  gap: 10px !important;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+}
+
+.qualityCheckpointList {
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  gap: 12px;
 }
 
 .check-row {
@@ -255,86 +274,108 @@ input:focus {
   background: #f0fdf4;
 }
 
-/* Entry quality checkpoints: 2 entries per row, 60% description + 40% value */
-.qualityCheckpointList {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(360px, 1fr)) !important;
-  gap: 12px !important;
-  padding: 10px !important;
-  border: 1px solid rgba(15, 23, 42, 0.12) !important;
-  border-radius: 12px !important;
-  background: #f8fafc !important;
-}
-
+/* Entry quality checkpoints */
 .quality-entry-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   align-items: center;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 14px;
 }
 
-/* LEFT SIDE (LABEL + INFO) */
-.quality-entry-row label {
-  display: flex;
-  flex-direction: column;
-  font-weight: 600;
-  gap: 4px;
-}
-
-/* RIGHT SIDE (RECHECK AREA) */
+.quality-entry-row label,
 .quality-entry-row > div {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-/* RECHECK LINE */
-.quality-entry-row .qualityRecheckPointInput {
+
+.quality-entry-row label {
+  font-weight: 600;
+  gap: 4px;
+}
+
+.quality-entry-row input[type="checkbox"],
+.qualityRecheckPointInput {
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  min-height: 16px;
   margin: 0;
   cursor: pointer;
+  transform: none;
+  accent-color: #2563eb;
 }
-/* INLINE RECHECK LABEL */
-.quality-entry-row .quality-recheck-line {
-  display: flex;
-  align-items: center;
+
+.quality-recheck-line {
+  flex-direction: row;
+  justify-content: flex-start;
   gap: 8px;
   font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
 }
 
-/* REMOVE BIG CHECKBOX STYLE */
-.quality-entry-row input[type="checkbox"] {
-  transform: scale(1);   /* 🔥 remove large scaling */
-}
-
-/* OLD VALUE TEXT */
-.quality-entry-row .small-hint {
+.quality-entry-row .small-hint,
+.quality-done-row .small-hint {
   font-size: 12px;
   color: #6b7280;
 }
 
-/* DONE ROW STYLE */
 .quality-done-row {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-left: 5px solid #22c55e;
 }
 
-/* VALUE BOX */
+.quality-done-row .small-hint {
+  font-weight: 600;
+  margin-top: 5px;
+}
+
 .qualityRecheckValueBox {
   width: 100%;
+  margin-top: 6px;
 }
 
-/* INPUT FULL WIDTH */
 .qualityRecheckValueBox input,
-.qualityRecheckValueBox select {
+.qualityRecheckValueBox select,
+.qualityValueInput {
   width: 100%;
+  height: 42px;
+  border-radius: 10px;
 }
+
+.quality-entry-row select.qualityValueInput {
+  font-weight: 700;
+}
+
+.booking-point-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.booking-point-done {
+  opacity: 0.6;
+  background: #e5e7eb;
+  color: #64748b;
+  border-radius: 10px;
+  padding: 8px;
+  cursor: not-allowed;
+}
+
+.booking-point-done input {
+  cursor: not-allowed;
+}
+
 /* ===================== SUMMARY ===================== */
 .summary {
   padding: 16px 18px;
-  display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
 }
@@ -408,7 +449,7 @@ input:focus {
   display: none !important;
 }
 
-/* ===================== ADMIN MODAL ===================== */
+/* ===================== ADMIN MODAL / PAGE ===================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -469,6 +510,18 @@ input:focus {
   max-width: 420px;
 }
 
+.spwt-login-status {
+  margin-top: 8px;
+}
+
+.spwt-login-error {
+  color: #b91c1c;
+}
+
+.spwt-login-success {
+  color: #166534;
+}
+
 .tabs {
   display: flex;
   gap: 10px;
@@ -504,7 +557,8 @@ input:focus {
   margin-top: 8px;
 }
 
-.list {
+.list,
+.spwt-access-list {
   margin-top: 10px;
 }
 
@@ -529,6 +583,30 @@ input:focus {
   color: #111827;
 }
 
+.spwt-access-table th:nth-child(1) { min-width: 120px; }
+.spwt-access-table th:nth-child(2) { min-width: 150px; }
+.spwt-access-table th:nth-child(3) { width: 130px; }
+.spwt-access-table th:nth-child(4) { width: 120px; }
+.spwt-access-table th:nth-child(6),
+.spwt-access-table th:nth-child(7) { width: 90px; }
+
+.spwt-permission-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 10px 3px 0;
+  white-space: nowrap;
+}
+
+.spwt-access-actions {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.spwt-access-hint {
+  margin-top: 8px;
+}
+
 .admin-input,
 .admin-select {
   width: 100%;
@@ -546,18 +624,52 @@ input:focus {
   font-family: inherit;
 }
 
+.spwt-standard-time-locked {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.spwt-standard-time-lock-hint {
+  margin: 8px 0;
+  color: #b45309;
+  font-weight: 600;
+}
+
 .admin-floating-actions {
   position: sticky;
-  bottom: 0;
-  z-index: 5;
+  bottom: 62px;
+  z-index: 45;
   margin-top: 12px;
-  padding: 10px 0 4px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), #fff 45%);
+  padding: 10px 0 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  border-top: 1px solid rgba(15,23,42,0.08);
+}
+
+#adminPanel > .row-between:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
+  border-top: 1px solid rgba(15,23,42,0.12);
+  padding: 12px 8px 8px;
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+#adminPanel > .row-between:last-child .row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
 
 /* ===================== ADMIN WORK TAB ===================== */
@@ -670,28 +782,20 @@ input:focus {
   gap: 10px;
 }
 
-/* Admin quality row: line 1 = description + type, line 2 = mandatory + delete */
 .mini-row.quality-row {
-  display: grid !important;
-  grid-template-columns: 1fr 180px !important;
+  grid-template-columns: 1fr 180px;
   grid-template-areas:
     "qname qtype"
-    "qmandatory qdelete" !important;
-  gap: 10px !important;
-  align-items: center !important;
+    "qmandatory qdelete";
+  gap: 10px;
 }
 
-.mini-row.quality-row input.admin-input {
-  grid-area: qname !important;
-}
-
-.mini-row.quality-row select.admin-select {
-  grid-area: qtype !important;
-}
+.mini-row.quality-row input.admin-input { grid-area: qname; }
+.mini-row.quality-row select.admin-select { grid-area: qtype; }
 
 .mini-row.quality-row .mini-check {
-  grid-area: qmandatory !important;
-  justify-self: start !important;
+  grid-area: qmandatory;
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -699,9 +803,9 @@ input:focus {
 }
 
 .mini-row.quality-row button {
-  grid-area: qdelete !important;
-  justify-self: end !important;
-  min-width: 120px !important;
+  grid-area: qdelete;
+  justify-self: end;
+  min-width: 120px;
 }
 
 .admin-table-wide {
@@ -746,16 +850,15 @@ input:focus {
   font-size: 13px;
 }
 
-.summary-actions {
-  display: flex;
-  gap: 10px;
-}
-
 .summary-cards {
-  display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin: 14px 0 18px;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .sum-card {
@@ -809,28 +912,11 @@ input:focus {
   font-size: 12px;
 }
 
-.badge-normal {
-  background: #eef6ff;
-  color: #1d4ed8;
-}
-
-.badge-other {
-  background: #fff7ed;
-  color: #b45309;
-}
-
-.badge-rework {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.row-rework td {
-  background: #fff5f5;
-}
-
-.row-other td {
-  background: #fffbeb;
-}
+.badge-normal { background: #eef6ff; color: #1d4ed8; }
+.badge-other { background: #fff7ed; color: #b45309; }
+.badge-rework { background: #fee2e2; color: #b91c1c; }
+.row-rework td { background: #fff5f5; }
+.row-other td { background: #fffbeb; }
 
 /* ===================== FOOTER ===================== */
 .app-footer {
@@ -845,8 +931,6 @@ input:focus {
 
 .footer-top,
 .footer-bottom {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
 
@@ -887,19 +971,16 @@ input:focus {
   .admin-subwork-list,
   .qualityCheckpointList,
   .workCheckpointList {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
   }
 
   .quality-entry-row {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 1050px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
+  .grid,
   .work-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -916,6 +997,12 @@ input:focus {
 @media (max-width: 900px) {
   .summary-cards {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  #adminPanel > .row-between:last-child,
+  #adminPanel > .row-between:last-child .row,
+  .admin-floating-actions {
+    flex-wrap: wrap;
   }
 }
 
@@ -940,155 +1027,16 @@ input:focus {
 
   .mini-row.booking-row,
   .mini-row.quality-row {
-    grid-template-columns: 1fr !important;
-    grid-template-areas: none !important;
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
   }
 
   .mini-row.quality-row input.admin-input,
   .mini-row.quality-row select.admin-select,
   .mini-row.quality-row .mini-check,
   .mini-row.quality-row button {
-    grid-area: auto !important;
-    width: 100% !important;
-    justify-self: stretch !important;
+    grid-area: auto;
+    width: 100%;
+    justify-self: stretch;
   }
-}
-/* Admin bottom action bar: all buttons floating in one line */
-#adminPanel > .row-between:last-child {
-  position: sticky;
-  bottom: 0;
-  z-index: 50;
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
-  border-top: 1px solid rgba(15,23,42,0.12);
-  padding: 12px 8px 8px;
-  margin-top: 12px;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 12px;
-}
-
-#adminPanel > .row-between:last-child .row {
-  display: flex !important;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
-}
-
-/* Keep add buttons on right side floating */
-.admin-floating-actions {
-  position: sticky;
-  bottom: 62px;
-  z-index: 45;
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
-  padding: 10px 0 8px;
-  display: flex !important;
-  justify-content: flex-end !important;
-  gap: 10px;
-  border-top: 1px solid rgba(15,23,42,0.08);
-}
-
-/* Mobile fallback */
-@media (max-width: 900px) {
-  #adminPanel > .row-between:last-child,
-  #adminPanel > .row-between:last-child .row,
-  .admin-floating-actions {
-    flex-wrap: wrap !important;
-  }
-}
-.booking-point-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.booking-point-done {
-  opacity: 0.55;
-  background: #e5e7eb;
-  border-radius: 8px;
-  padding: 6px;
-  cursor: not-allowed;
-}
-
-/* QUALITY SMART VISUAL UI */
-.qualityCheckpointList {
-  gap: 12px !important;
-}
-
-.quality-entry-row {
-  border: 1px solid #e5e7eb !important;
-  background: #ffffff !important;
-  border-radius: 14px !important;
-  padding: 14px !important;
-}
-
-.quality-done-row {
-  background: #f8fafc !important;
-}
-
-.quality-done-row:has(.small-hint) {
-  border-left: 5px solid #22c55e !important;
-}
-
-.quality-done-row .small-hint {
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  margin-top: 5px !important;
-}
-
-.quality-done-row .small-hint:has(+ *) {
-  color: #475569 !important;
-}
-
-.quality-recheck-line {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 8px !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  color: #334155 !important;
-  margin-bottom: 8px !important;
-}
-
-.quality-recheck-line input[type="checkbox"],
-.qualityRecheckPointInput {
-  width: 16px !important;
-  height: 16px !important;
-  min-width: 16px !important;
-  min-height: 16px !important;
-  transform: none !important;
-  accent-color: #2563eb !important;
-}
-
-.qualityRecheckValueBox {
-  margin-top: 6px !important;
-}
-
-.qualityRecheckValueBox input,
-.qualityRecheckValueBox select,
-.qualityValueInput {
-  height: 42px !important;
-  border-radius: 10px !important;
-}
-
-/* Better status visibility */
-.quality-entry-row select.qualityValueInput {
-  font-weight: 700 !important;
-}
-
-/* Booking completed cleaner */
-.booking-point-done {
-  opacity: 0.6 !important;
-  background: #e5e7eb !important;
-  color: #64748b !important;
-  border-radius: 10px !important;
-  padding: 8px !important;
-}
-
-.booking-point-done input {
-  cursor: not-allowed !important;
 }
