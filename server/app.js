@@ -10,6 +10,7 @@ const adminRecoveryRoutes = require("./routes/adminRecoveryRoutes");
 const productionRoutes = require("./routes/productionRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const emailRoutes = require("./routes/emailRoutes");
+const backupRoutes = require("./routes/backupRoutes");
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use("/api/admin/pin", adminRecoveryRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/backup", backupRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({
