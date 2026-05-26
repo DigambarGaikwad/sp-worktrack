@@ -68,13 +68,14 @@ function appendRows_(body) {
   const sheetName = String(body.sheetName || "").trim();
   const rows = Array.isArray(body.rows) ? body.rows : [];
   const headers = Array.isArray(body.headers) ? body.headers : [];
+  const uniqueKeyColumns = Array.isArray(body.uniqueKeyColumns) ? body.uniqueKeyColumns : [];
 
   if (!sheetName) {
     return json_({ ok: false, error: "Missing sheetName." });
   }
 
   if (!rows.length) {
-    return json_({ ok: true, sheetName: sheetName, appended: 0, message: "No rows to append." });
+    return json_({ ok: true, sheetName: sheetName, appended: 0, skippedDuplicates: 0, message: "No rows to append." });
   }
 
   const sh = getOrCreateSheet_(ss, sheetName, headers);
@@ -90,14 +91,77 @@ function appendRows_(body) {
     return row;
   });
 
-  sh.getRange(sh.getLastRow() + 1, 1, normalizedRows.length, width).setValues(normalizedRows);
+  const duplicateSet = buildExistingKeySet_(sh, uniqueKeyColumns);
+  const headerMap = getHeaderMap_(sh);
+
+  const rowsToAppend = [];
+  let skippedDuplicates = 0;
+
+  normalizedRows.forEach(function(row) {
+    const key = buildRowUniqueKey_(row, headerMap, uniqueKeyColumns);
+    if (key && duplicateSet[key]) {
+      skippedDuplicates += 1;
+      return;
+    }
+    if (key) duplicateSet[key] = true;
+    rowsToAppend.push(row);
+  });
+
+  if (rowsToAppend.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, rowsToAppend.length, width).setValues(rowsToAppend);
+  }
 
   return json_({
     ok: true,
     sheetName: sheetName,
-    appended: normalizedRows.length,
+    appended: rowsToAppend.length,
+    skippedDuplicates: skippedDuplicates,
     lastRow: sh.getLastRow()
   });
+}
+
+function buildExistingKeySet_(sh, uniqueKeyColumns) {
+  const out = {};
+  if (!uniqueKeyColumns || !uniqueKeyColumns.length) return out;
+  if (sh.getLastRow() < 2) return out;
+
+  const headerMap = getHeaderMap_(sh);
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+
+  values.forEach(function(row) {
+    const key = buildRowUniqueKey_(row, headerMap, uniqueKeyColumns);
+    if (key) out[key] = true;
+  });
+
+  return out;
+}
+
+function buildRowUniqueKey_(row, headerMap, uniqueKeyColumns) {
+  if (!uniqueKeyColumns || !uniqueKeyColumns.length) return "";
+
+  const parts = [];
+  for (let i = 0; i < uniqueKeyColumns.length; i++) {
+    const name = String(uniqueKeyColumns[i] || "").trim();
+    const colIndex = headerMap[name.toLowerCase()];
+    if (colIndex == null) return "";
+    const value = String(row[colIndex] || "").trim();
+    if (!value) return "";
+    parts.push(value.toLowerCase());
+  }
+
+  return parts.join("|");
+}
+
+function getHeaderMap_(sh) {
+  const map = {};
+  if (!sh || sh.getLastColumn() < 1) return map;
+
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  headers.forEach(function(h, index) {
+    const key = String(h || "").trim().toLowerCase();
+    if (key) map[key] = index;
+  });
+  return map;
 }
 
 function ensureBackupSheets_() {
@@ -172,6 +236,7 @@ function logHeaders_() {
     "Work Checkpoints",
     "Quality Checkpoints",
     "Source Entry No",
+    "Source Line No",
     "Synced At"
   ];
 }
