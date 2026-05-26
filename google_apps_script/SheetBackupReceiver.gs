@@ -6,18 +6,22 @@
 // 1) Open the target Google Sheet.
 // 2) Extensions -> Apps Script.
 // 3) Paste this code into Code.gs.
-// 4) Set BACKUP_SECRET below to match GOOGLE_SHEET_BACKUP_SECRET in the Node .env file.
+// 4) In Apps Script, set Project Settings -> Script properties:
+//    BACKUP_SECRET = same value as GOOGLE_SHEET_BACKUP_SECRET in Node .env.
 // 5) Deploy -> New deployment -> Web app.
 // 6) Execute as: Me. Access: Anyone with the link.
 // 7) Copy Web App URL into GOOGLE_SHEET_WEBAPP_URL in Node .env.
 
-const BACKUP_SECRET = "CHANGE_ME_TO_STRONG_SECRET";
+function getBackupSecret_() {
+  return String(PropertiesService.getScriptProperties().getProperty("BACKUP_SECRET") || "").trim();
+}
 
 function doGet() {
   return json_({
     ok: true,
     app: "SP WorkTrack Google Sheet Backup Receiver",
     message: "Receiver is running. Use POST for sync actions.",
+    hasBackupSecret: !!getBackupSecret_(),
     timestamp: new Date().toISOString()
   });
 }
@@ -26,8 +30,13 @@ function doPost(e) {
   try {
     const raw = e && e.postData && e.postData.contents ? e.postData.contents : "{}";
     const body = JSON.parse(raw || "{}");
+    const backupSecret = getBackupSecret_();
 
-    if (!body.secret || body.secret !== BACKUP_SECRET) {
+    if (!backupSecret) {
+      return json_({ ok: false, error: "Server configuration missing: BACKUP_SECRET script property is not set." });
+    }
+
+    if (!body.secret || body.secret !== backupSecret) {
       return json_({ ok: false, error: "Unauthorized: bad or missing secret." });
     }
 
@@ -51,15 +60,9 @@ function doPost(e) {
       return json_({ ok: true, message: "Backup sheets checked/created." });
     }
 
-    return json_({
-      ok: false,
-      error: "Unknown action: " + action
-    });
+    return json_({ ok: false, error: "Unknown action: " + action });
   } catch (err) {
-    return json_({
-      ok: false,
-      error: String(err && err.message ? err.message : err)
-    });
+    return json_({ ok: false, error: String(err && err.message ? err.message : err) });
   }
 }
 
@@ -93,7 +96,6 @@ function appendRows_(body) {
 
   const duplicateSet = buildExistingKeySet_(sh, uniqueKeyColumns);
   const headerMap = getHeaderMap_(sh);
-
   const rowsToAppend = [];
   let skippedDuplicates = 0;
 
@@ -207,135 +209,45 @@ function ensureHeaders_(sh, headers) {
 
 function logHeaders_() {
   return [
-    "Timestamp",
-    "Work Date",
-    "Shift",
-    "Shift Start",
-    "Shift End",
-    "Break Minutes",
-    "Work Type",
-    "Emp ID",
-    "Emp Name",
-    "Shift Available",
-    "Utilized",
-    "Remaining",
-    "Productivity %",
-    "Machine",
-    "Machine Category",
-    "Department",
-    "Sub Work",
-    "Type",
-    "Description",
-    "Root Area",
-    "Standard Time",
-    "Actual Time",
-    "Efficiency Reason",
-    "Major Loss Reason",
-    "Major Loss Remark",
-    "Flexible Shift Minutes",
-    "Work Checkpoints",
-    "Quality Checkpoints",
-    "Source Entry No",
-    "Source Line No",
-    "Synced At"
+    "Timestamp", "Work Date", "Shift", "Shift Start", "Shift End", "Break Minutes", "Work Type",
+    "Emp ID", "Emp Name", "Shift Available", "Utilized", "Remaining", "Productivity %",
+    "Machine", "Machine Category", "Department", "Sub Work", "Type", "Description", "Root Area",
+    "Standard Time", "Actual Time", "Efficiency Reason", "Major Loss Reason", "Major Loss Remark",
+    "Flexible Shift Minutes", "Work Checkpoints", "Quality Checkpoints", "Source Entry No", "Source Line No", "Synced At"
   ];
 }
 
 function attendanceHeaders_() {
   return [
-    "Timestamp",
-    "Work Date",
-    "Emp ID",
-    "Emp Name",
-    "Shift",
-    "Work Type",
-    "Status",
-    "Shift Available (min)",
-    "Utilized (min)",
-    "Total Hours",
-    "OT Minutes",
-    "OT Hours",
-    "Productivity %",
-    "Major Loss Reason",
-    "Major Loss Remark",
-    "Flexible Shift Minutes",
-    "Source Entry No",
-    "Synced At"
+    "Timestamp", "Work Date", "Emp ID", "Emp Name", "Shift", "Work Type", "Status",
+    "Shift Available (min)", "Utilized (min)", "Total Hours", "OT Minutes", "OT Hours",
+    "Productivity %", "Major Loss Reason", "Major Loss Remark", "Flexible Shift Minutes", "Source Entry No", "Synced At"
   ];
 }
 
 function qualityLogHeaders_() {
   return [
-    "Timestamp",
-    "Work Date",
-    "Machine",
-    "Machine Category",
-    "Department",
-    "Sub Work",
-    "Quality Point",
-    "Input Type",
-    "Reading/Status",
-    "Result",
-    "Done By ID",
-    "Done By Name",
-    "Shift",
-    "Status",
-    "Source Entry No",
-    "Synced At"
+    "Timestamp", "Work Date", "Machine", "Machine Category", "Department", "Sub Work", "Quality Point",
+    "Input Type", "Reading/Status", "Result", "Done By ID", "Done By Name", "Shift", "Status", "Source Entry No", "Synced At"
   ];
 }
 
 function bookingLogHeaders_() {
   return [
-    "Timestamp",
-    "Work Date",
-    "Machine",
-    "Machine Category",
-    "Department",
-    "Sub Work",
-    "Booking Point",
-    "Booking Std Time",
-    "Actual Time",
-    "Emp ID",
-    "Emp Name",
-    "Shift",
-    "Work Type",
-    "Status",
-    "Source Entry No",
-    "Synced At"
+    "Timestamp", "Work Date", "Machine", "Machine Category", "Department", "Sub Work", "Booking Point",
+    "Booking Std Time", "Actual Time", "Emp ID", "Emp Name", "Shift", "Work Type", "Status", "Source Entry No", "Synced At"
   ];
 }
 
 function bookingStatusHeaders_() {
   return [
-    "Machine",
-    "Machine Category",
-    "Department",
-    "Sub Work",
-    "Booking Point",
-    "Booking Std Time",
-    "Consumed Time",
-    "Remaining Time",
-    "Completion %",
-    "Status",
-    "Done Date",
-    "Done By ID",
-    "Done By Name",
-    "Shift",
-    "Source Entry No",
-    "Synced At"
+    "Machine", "Machine Category", "Department", "Sub Work", "Booking Point", "Booking Std Time", "Consumed Time",
+    "Remaining Time", "Completion %", "Status", "Done Date", "Done By ID", "Done By Name", "Shift", "Source Entry No", "Synced At"
   ];
 }
 
 function syncStatusHeaders_() {
-  return [
-    "Timestamp",
-    "Action",
-    "Sheet Name",
-    "Rows",
-    "Status",
-    "Message"
-  ];
+  return ["Timestamp", "Action", "Sheet Name", "Rows", "Status", "Message"];
 }
 
 function json_(obj) {
