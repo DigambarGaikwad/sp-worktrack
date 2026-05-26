@@ -53,6 +53,14 @@ function pbEscape(value) {
   return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function pbEquals(fieldName, value) {
+  return `${fieldName}="${pbEscape(value)}"`;
+}
+
+function pbNotEquals(fieldName, value) {
+  return `${fieldName}!="${pbEscape(value)}"`;
+}
+
 function localDateISO() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -245,8 +253,8 @@ async function testConnection() {
 async function syncToday(options = {}) {
   const workDate = clean(options.workDate || options.date || localDateISO());
   const year = getYearFromDate(workDate);
-  const entryFilter = [`work_date=\"${pbEscape(workDate)}\"`, `status!=\"CANCELLED\"`].join(" && ");
-  const lineFilter = `work_date=\"${pbEscape(workDate)}\"`;
+  const entryFilter = [pbEquals("work_date", workDate), pbNotEquals("status", "CANCELLED")].join(" && ");
+  const lineFilter = pbEquals("work_date", workDate);
 
   const entries = await pbListAll("production_entries", entryFilter, "created");
   const lines = await pbListAll("production_entry_lines", lineFilter, "created");
