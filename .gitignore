@@ -5,6 +5,10 @@ release/
 .env.local
 .env.*.local
 
+# Google Apps Script local deployment config
+# Keep project IDs/local clasp auth mapping out of GitHub.
+google_apps_script/.clasp.json
+
 # Local database tools / PocketBase runtime
 local-tools/
 pb_data/
