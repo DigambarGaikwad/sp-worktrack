@@ -1,11 +1,69 @@
 // server/services/sheetsSyncService.js
 // SP WorkTrack DB Edition - Google Sheets sync service.
 
+const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
+
 const MODE = "google_apps_script";
 const TIMEOUT_MS = Number(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS || 15000);
 
+const LOG_HEADERS = [
+  "Timestamp",
+  "Work Date",
+  "Shift",
+  "Shift Start",
+  "Shift End",
+  "Break Minutes",
+  "Work Type",
+  "Emp ID",
+  "Emp Name",
+  "Shift Available",
+  "Utilized",
+  "Remaining",
+  "Productivity %",
+  "Machine",
+  "Machine Category",
+  "Department",
+  "Sub Work",
+  "Type",
+  "Description",
+  "Root Area",
+  "Standard Time",
+  "Actual Time",
+  "Efficiency Reason",
+  "Major Loss Reason",
+  "Major Loss Remark",
+  "Flexible Shift Minutes",
+  "Work Checkpoints",
+  "Quality Checkpoints",
+  "Source Entry No",
+  "Source Line No",
+  "Synced At"
+];
+
 function clean(value) {
   return String(value ?? "").trim();
+}
+
+function toNumber(value, defaultValue = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : defaultValue;
+}
+
+function pbEscape(value) {
+  return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function localDateISO() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function getYearFromDate(value) {
+  const text = clean(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(0, 4);
+  const match = text.match(/(\d{4})/);
+  return match ? match[1] : String(new Date().getFullYear());
 }
 
 function isEnabled() {
@@ -88,6 +146,89 @@ async function postToWebApp(payload = {}) {
   }
 }
 
+async function pbListAll(collectionName, filter, sort = "created") {
+  const all = [];
+  let page = 1;
+  const perPage = 200;
+
+  while (true) {
+    const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
+      method: "GET",
+      query: { page, perPage, filter, sort }
+    });
+
+    const items = Array.isArray(result.items) ? result.items : [];
+    all.push(...items);
+
+    if (!items.length || page >= Number(result.totalPages || 1)) break;
+    page += 1;
+  }
+
+  return all;
+}
+
+function summarizePointList(value) {
+  const list = Array.isArray(value) ? value : [];
+  if (!list.length) return "";
+
+  return list.map((item) => {
+    if (item == null) return "";
+    if (typeof item === "string") return item;
+    const name = clean(item.name || item.point || item.pointName || item.value);
+    const minutes = clean(item.bookedTime || item.bookedMinutes || item.standardTime || item.standardMinutes || "");
+    const reading = clean(item.reading || item.status || item.result || "");
+    return [name, minutes ? `${minutes} min` : "", reading].filter(Boolean).join(" - ");
+  }).filter(Boolean).join("; ");
+}
+
+function buildLogRows(entries, lines, workDate) {
+  const headerByEntryNo = new Map();
+  entries.forEach((entry) => headerByEntryNo.set(clean(entry.entry_no), entry));
+
+  const syncedAt = new Date().toISOString();
+
+  return lines.map((line) => {
+    const entryNo = clean(line.entry_no);
+    const header = headerByEntryNo.get(entryNo) || {};
+    const standardMinutes = toNumber(line.standard_minutes, 0);
+    const actualMinutes = toNumber(line.actual_minutes, 0);
+
+    return [
+      clean(header.created || line.created || syncedAt),
+      clean(line.work_date || header.work_date || workDate),
+      clean(header.shift_name || header.shift_code),
+      clean(header.shift_start),
+      clean(header.shift_end),
+      toNumber(header.break_minutes, 0),
+      clean(header.work_type || "Normal"),
+      clean(line.emp_code || header.emp_code),
+      clean(line.emp_name || header.emp_name),
+      toNumber(header.shift_available, 0),
+      toNumber(header.total_actual_minutes, 0),
+      toNumber(header.remaining_minutes, 0),
+      toNumber(header.productivity_percent, 0),
+      clean(line.machine_no),
+      clean(line.machine_category),
+      clean(line.department_name || line.department_code),
+      clean(line.subwork_name || line.subwork_code),
+      clean(line.work_nature || "Normal"),
+      clean(line.description),
+      clean(line.root_area),
+      standardMinutes,
+      actualMinutes,
+      clean(line.efficiency_reason),
+      clean(header.major_loss_reason),
+      clean(header.remarks),
+      toNumber(header.flexible_shift_minutes, 0),
+      summarizePointList(line.booking_points_json),
+      summarizePointList(line.quality_points_json),
+      entryNo,
+      toNumber(line.line_no, 0),
+      syncedAt
+    ];
+  });
+}
+
 async function testConnection() {
   const appsScriptResponse = await postToWebApp({
     action: "backupTest",
@@ -101,11 +242,37 @@ async function testConnection() {
   };
 }
 
-async function syncToday() {
+async function syncToday(options = {}) {
+  const workDate = clean(options.workDate || options.date || localDateISO());
+  const year = getYearFromDate(workDate);
+  const entryFilter = [`work_date=\"${pbEscape(workDate)}\"`, `status!=\"CANCELLED\"`].join(" && ");
+  const lineFilter = `work_date=\"${pbEscape(workDate)}\"`;
+
+  const entries = await pbListAll("production_entries", entryFilter, "created");
+  const lines = await pbListAll("production_entry_lines", lineFilter, "created");
+  const rows = buildLogRows(entries, lines, workDate);
+
+  await postToWebApp({ action: "ensureSheets" });
+
+  const appendResult = await postToWebApp({
+    action: "appendRows",
+    sheetName: `LOG_${year}`,
+    headers: LOG_HEADERS,
+    rows,
+    uniqueKeyColumns: ["Source Entry No", "Source Line No"]
+  });
+
   return {
-    ok: false,
-    implemented: false,
-    message: "Route is ready. Next step: map PocketBase DB records to old Google Sheet columns."
+    ok: appendResult?.ok !== false,
+    implemented: true,
+    workDate,
+    sheetName: `LOG_${year}`,
+    entryCount: entries.length,
+    lineCount: lines.length,
+    rowCount: rows.length,
+    appended: appendResult?.appended ?? 0,
+    skippedDuplicates: appendResult?.skippedDuplicates ?? 0,
+    appsScriptResponse: appendResult
   };
 }
 
