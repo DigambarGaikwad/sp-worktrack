@@ -49,16 +49,8 @@ function toNumber(value, defaultValue = 0) {
   return Number.isFinite(n) ? n : defaultValue;
 }
 
-function pbEscape(value) {
-  return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-function pbEquals(fieldName, value) {
-  return `${fieldName}="${pbEscape(value)}"`;
-}
-
-function pbNotEquals(fieldName, value) {
-  return `${fieldName}!="${pbEscape(value)}"`;
+function sameDate(a, b) {
+  return clean(a).slice(0, 10) === clean(b).slice(0, 10);
 }
 
 function localDateISO() {
@@ -154,15 +146,18 @@ async function postToWebApp(payload = {}) {
   }
 }
 
-async function pbListAll(collectionName, filter, sort = "created") {
+async function pbListAll(collectionName, filter = "", sort = "created") {
   const all = [];
   let page = 1;
   const perPage = 200;
 
   while (true) {
+    const query = { page, perPage, sort };
+    if (filter) query.filter = filter;
+
     const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
       method: "GET",
-      query: { page, perPage, filter, sort }
+      query
     });
 
     const items = Array.isArray(result.items) ? result.items : [];
@@ -253,11 +248,13 @@ async function testConnection() {
 async function syncToday(options = {}) {
   const workDate = clean(options.workDate || options.date || localDateISO());
   const year = getYearFromDate(workDate);
-  const entryFilter = [pbEquals("work_date", workDate), pbNotEquals("status", "CANCELLED")].join(" && ");
-  const lineFilter = pbEquals("work_date", workDate);
 
-  const entries = await pbListAll("production_entries", entryFilter, "created");
-  const lines = await pbListAll("production_entry_lines", lineFilter, "created");
+  const allEntries = await pbListAll("production_entries", "", "created");
+  const allLines = await pbListAll("production_entry_lines", "", "created");
+
+  const entries = allEntries.filter((entry) => sameDate(entry.work_date, workDate) && clean(entry.status).toUpperCase() !== "CANCELLED");
+  const validEntryNos = new Set(entries.map((entry) => clean(entry.entry_no)).filter(Boolean));
+  const lines = allLines.filter((line) => sameDate(line.work_date, workDate) && (!validEntryNos.size || validEntryNos.has(clean(line.entry_no))));
   const rows = buildLogRows(entries, lines, workDate);
 
   await postToWebApp({ action: "ensureSheets" });
