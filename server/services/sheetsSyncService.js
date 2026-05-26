@@ -7,51 +7,16 @@ const MODE = "google_apps_script";
 const TIMEOUT_MS = Number(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS || 15000);
 
 const LOG_HEADERS = [
-  "Timestamp",
-  "Work Date",
-  "Shift",
-  "Shift Start",
-  "Shift End",
-  "Break Minutes",
-  "Work Type",
-  "Emp ID",
-  "Emp Name",
-  "Shift Available",
-  "Utilized",
-  "Remaining",
-  "Productivity %",
-  "Machine",
-  "Machine Category",
-  "Department",
-  "Sub Work",
-  "Type",
-  "Description",
-  "Root Area",
-  "Standard Time",
-  "Actual Time",
-  "Efficiency Reason",
-  "Major Loss Reason",
-  "Major Loss Remark",
-  "Flexible Shift Minutes",
-  "Work Checkpoints",
-  "Quality Checkpoints",
-  "Source Entry No",
-  "Source Line No",
-  "Synced At"
+  "Timestamp", "Work Date", "Shift", "Shift Start", "Shift End", "Break Minutes", "Work Type",
+  "Emp ID", "Emp Name", "Shift Available", "Utilized", "Remaining", "Productivity %",
+  "Machine", "Machine Category", "Department", "Sub Work", "Type", "Description", "Root Area",
+  "Standard Time", "Actual Time", "Efficiency Reason", "Major Loss Reason", "Major Loss Remark",
+  "Flexible Shift Minutes", "Work Checkpoints", "Quality Checkpoints", "Source Entry No", "Source Line No", "Synced At"
 ];
 
-function clean(value) {
-  return String(value ?? "").trim();
-}
-
-function toNumber(value, defaultValue = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : defaultValue;
-}
-
-function sameDate(a, b) {
-  return clean(a).slice(0, 10) === clean(b).slice(0, 10);
-}
+function clean(value) { return String(value ?? "").trim(); }
+function toNumber(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
+function sameDate(a, b) { return clean(a).slice(0, 10) === clean(b).slice(0, 10); }
 
 function localDateISO() {
   const now = new Date();
@@ -66,25 +31,15 @@ function getYearFromDate(value) {
   return match ? match[1] : String(new Date().getFullYear());
 }
 
-function isEnabled() {
-  return String(process.env.GOOGLE_SHEET_BACKUP_ENABLED || "false").toLowerCase() === "true";
-}
-
-function getWebAppUrl() {
-  return clean(process.env.GOOGLE_SHEET_WEBAPP_URL || "");
-}
-
-function getSecret() {
-  return clean(process.env.GOOGLE_SHEET_BACKUP_SECRET || "");
-}
+function isEnabled() { return String(process.env.GOOGLE_SHEET_BACKUP_ENABLED || "false").toLowerCase() === "true"; }
+function getWebAppUrl() { return clean(process.env.GOOGLE_SHEET_WEBAPP_URL || ""); }
+function getSecret() { return clean(process.env.GOOGLE_SHEET_BACKUP_SECRET || ""); }
 
 function getStatus() {
-  const enabled = isEnabled();
   const hasWebAppUrl = !!getWebAppUrl();
   const hasSecret = !!getSecret();
-
   return {
-    enabled,
+    enabled: isEnabled(),
     configured: hasWebAppUrl && hasSecret,
     mode: MODE,
     hasWebAppUrl,
@@ -98,13 +53,11 @@ function getStatus() {
 
 async function postToWebApp(payload = {}) {
   const status = getStatus();
-
   if (!status.enabled) {
     const err = new Error("Google Sheets sync is disabled. Set GOOGLE_SHEET_BACKUP_ENABLED=true in .env.");
     err.status = 400;
     throw err;
   }
-
   if (!status.configured) {
     const err = new Error("Google Sheets sync is not configured. Set GOOGLE_SHEET_WEBAPP_URL and GOOGLE_SHEET_BACKUP_SECRET in .env.");
     err.status = 400;
@@ -113,7 +66,6 @@ async function postToWebApp(payload = {}) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
   try {
     const res = await fetch(getWebAppUrl(), {
       method: "POST",
@@ -121,18 +73,15 @@ async function postToWebApp(payload = {}) {
       body: JSON.stringify({ secret: getSecret(), ...payload }),
       signal: controller.signal
     });
-
     const text = await res.text();
     let body = null;
     try { body = text ? JSON.parse(text) : null; } catch (err) { body = { raw: text }; }
-
     if (!res.ok) {
       const err = new Error(`Google Apps Script request failed with HTTP ${res.status}`);
       err.status = 502;
       err.details = body;
       throw err;
     }
-
     return body || { ok: true, raw: text };
   } catch (err) {
     if (err?.name === "AbortError") {
@@ -146,34 +95,32 @@ async function postToWebApp(payload = {}) {
   }
 }
 
-async function pbListAll(collectionName, filter = "", sort = "created") {
+async function pbListAll(collectionName) {
   const all = [];
   let page = 1;
   const perPage = 200;
-
   while (true) {
-    const query = { page, perPage, sort };
-    if (filter) query.filter = filter;
-
-    const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
-      method: "GET",
-      query
-    });
-
+    let result;
+    try {
+      result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
+        method: "GET",
+        query: { page, perPage }
+      });
+    } catch (err) {
+      err.message = `PocketBase list failed for ${collectionName}: ${err.message}`;
+      err.details = { collectionName, page, perPage, originalDetails: err.details || null };
+      throw err;
+    }
     const items = Array.isArray(result.items) ? result.items : [];
     all.push(...items);
-
     if (!items.length || page >= Number(result.totalPages || 1)) break;
     page += 1;
   }
-
   return all;
 }
 
 function summarizePointList(value) {
   const list = Array.isArray(value) ? value : [];
-  if (!list.length) return "";
-
   return list.map((item) => {
     if (item == null) return "";
     if (typeof item === "string") return item;
@@ -187,15 +134,11 @@ function summarizePointList(value) {
 function buildLogRows(entries, lines, workDate) {
   const headerByEntryNo = new Map();
   entries.forEach((entry) => headerByEntryNo.set(clean(entry.entry_no), entry));
-
   const syncedAt = new Date().toISOString();
 
   return lines.map((line) => {
     const entryNo = clean(line.entry_no);
     const header = headerByEntryNo.get(entryNo) || {};
-    const standardMinutes = toNumber(line.standard_minutes, 0);
-    const actualMinutes = toNumber(line.actual_minutes, 0);
-
     return [
       clean(header.created || line.created || syncedAt),
       clean(line.work_date || header.work_date || workDate),
@@ -217,8 +160,8 @@ function buildLogRows(entries, lines, workDate) {
       clean(line.work_nature || "Normal"),
       clean(line.description),
       clean(line.root_area),
-      standardMinutes,
-      actualMinutes,
+      toNumber(line.standard_minutes, 0),
+      toNumber(line.actual_minutes, 0),
       clean(line.efficiency_reason),
       clean(header.major_loss_reason),
       clean(header.remarks),
@@ -238,27 +181,21 @@ async function testConnection() {
     source: "sp-worktrack-db-edition",
     timestamp: new Date().toISOString()
   });
-
-  return {
-    ok: appsScriptResponse?.ok !== false,
-    appsScriptResponse
-  };
+  return { ok: appsScriptResponse?.ok !== false, appsScriptResponse };
 }
 
 async function syncToday(options = {}) {
   const workDate = clean(options.workDate || options.date || localDateISO());
   const year = getYearFromDate(workDate);
 
-  const allEntries = await pbListAll("production_entries", "", "created");
-  const allLines = await pbListAll("production_entry_lines", "", "created");
-
+  const allEntries = await pbListAll("production_entries");
+  const allLines = await pbListAll("production_entry_lines");
   const entries = allEntries.filter((entry) => sameDate(entry.work_date, workDate) && clean(entry.status).toUpperCase() !== "CANCELLED");
   const validEntryNos = new Set(entries.map((entry) => clean(entry.entry_no)).filter(Boolean));
   const lines = allLines.filter((line) => sameDate(line.work_date, workDate) && (!validEntryNos.size || validEntryNos.has(clean(line.entry_no))));
   const rows = buildLogRows(entries, lines, workDate);
 
   await postToWebApp({ action: "ensureSheets" });
-
   const appendResult = await postToWebApp({
     action: "appendRows",
     sheetName: `LOG_${year}`,
@@ -281,8 +218,4 @@ async function syncToday(options = {}) {
   };
 }
 
-module.exports = {
-  getStatus,
-  testConnection,
-  syncToday
-};
+module.exports = { getStatus, testConnection, syncToday };
