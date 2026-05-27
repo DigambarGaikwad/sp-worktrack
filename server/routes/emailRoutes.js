@@ -3,6 +3,11 @@
 
 const express = require("express");
 const { getEmailStatus, sendTestEmail } = require("../services/emailService");
+const {
+  getQualityReportRecipients,
+  saveQualityReportRecipients,
+  sendQualityReport
+} = require("../services/qualityReportEmailService");
 
 const router = express.Router();
 
@@ -11,11 +16,7 @@ router.get("/status", async (req, res) => {
     res.json({ ok: true, data: getEmailStatus() });
   } catch (err) {
     console.error("GET /api/email/status failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to read email status.",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to read email status.", details: err.details || null });
   }
 });
 
@@ -26,11 +27,37 @@ router.post("/test", async (req, res) => {
     res.json({ ok: true, data: result });
   } catch (err) {
     console.error("POST /api/email/test failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Failed to send test email.",
-      details: err.details || null
-    });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send test email.", details: err.details || null });
+  }
+});
+
+router.get("/quality-report/recipients", async (req, res) => {
+  try {
+    const data = await getQualityReportRecipients();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/email/quality-report/recipients failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load quality report recipients.", details: err.details || null });
+  }
+});
+
+router.post("/quality-report/recipients", async (req, res) => {
+  try {
+    const data = await saveQualityReportRecipients(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/email/quality-report/recipients failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save quality report recipients.", details: err.details || null });
+  }
+});
+
+router.post("/quality-report/send", async (req, res) => {
+  try {
+    const data = await sendQualityReport(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/email/quality-report/send failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send quality report.", details: err.details || null });
   }
 });
 
