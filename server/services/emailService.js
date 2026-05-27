@@ -58,7 +58,7 @@ function assertEmail(value, label = "Email") {
   return email;
 }
 
-async function sendEmail({ to, cc = "", bcc = "", subject = "", text = "", html = "" } = {}) {
+async function sendEmail({ to, cc = "", bcc = "", subject = "", text = "", html = "", attachments = [] } = {}) {
   const cfg = getSmtpConfig();
   const transporter = createTransporter();
 
@@ -72,6 +72,7 @@ async function sendEmail({ to, cc = "", bcc = "", subject = "", text = "", html 
 
   if (clean(cc)) message.cc = cc;
   if (clean(bcc)) message.bcc = bcc;
+  if (Array.isArray(attachments) && attachments.length) message.attachments = attachments;
   if (!message.text && !message.html) message.text = "SP WorkTrack notification.";
 
   const result = await transporter.sendMail(message);
