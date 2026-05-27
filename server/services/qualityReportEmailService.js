@@ -1,15 +1,17 @@
 // server/services/qualityReportEmailService.js
-// Stores quality report email recipients and sends report emails.
+// Stores quality report email recipients, observations and sends report emails.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const { sendEmail } = require("./emailService");
 const { generatePdfFromHtml } = require("./pdfReportService");
 
 const COLLECTION = "admin_settings";
-const KEY = "quality_report_recipients_json";
+const RECIPIENTS_KEY = "quality_report_recipients_json";
+const OBSERVATIONS_KEY = "quality_report_observations_json";
 
 function clean(value) { return String(value ?? "").trim(); }
 function isValidEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(value)); }
+function machineKey(value) { return clean(value).toUpperCase(); }
 
 function safeJsonParse(value, fallback) {
   try {
@@ -24,17 +26,28 @@ function isMissingCollectionError(err) {
   return err?.status === 404 || /missing collection context/i.test(String(err?.message || ""));
 }
 
-async function findSettingRecord() {
+async function findSettingRecord(settingKey) {
   try {
     const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
       method: "GET",
-      query: { page: 1, perPage: 1, filter: `setting_key="${KEY}"` }
+      query: { page: 1, perPage: 1, filter: `setting_key="${settingKey}"` }
     });
     return Array.isArray(result.items) ? result.items[0] || null : null;
   } catch (err) {
     if (isMissingCollectionError(err)) return null;
     throw err;
   }
+}
+
+async function saveSettingJson(settingKey, data) {
+  const rec = await findSettingRecord(settingKey);
+  const body = { setting_key: settingKey, setting_value: JSON.stringify(data || {}) };
+  if (rec?.id) {
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
+  } else {
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
+  }
+  return data;
 }
 
 function normalizeRecipient(r = {}, index = 0) {
@@ -62,23 +75,48 @@ function safeFilePart(value) {
 }
 
 async function getQualityReportRecipients() {
-  const rec = await findSettingRecord();
+  const rec = await findSettingRecord(RECIPIENTS_KEY);
   const parsed = safeJsonParse(rec?.setting_value, { recipients: [] });
   return { recipients: normalizeRecipients(parsed) };
 }
 
 async function saveQualityReportRecipients(raw = {}) {
   const data = { recipients: normalizeRecipients(raw) };
-  const rec = await findSettingRecord();
-  const body = { setting_key: KEY, setting_value: JSON.stringify(data) };
+  return await saveSettingJson(RECIPIENTS_KEY, data);
+}
 
-  if (rec?.id) {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
-  } else {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
+async function getQualityReportObservation(machineNo = "") {
+  const key = machineKey(machineNo);
+  if (!key) return { machineNo: clean(machineNo), observation: "", updatedAt: "" };
+  const rec = await findSettingRecord(OBSERVATIONS_KEY);
+  const parsed = safeJsonParse(rec?.setting_value, { observations: {} });
+  const item = parsed?.observations?.[key] || {};
+  return {
+    machineNo: clean(machineNo),
+    observation: clean(item.observation || item.text || ""),
+    updatedAt: clean(item.updatedAt || "")
+  };
+}
+
+async function saveQualityReportObservation({ machineNo = "", observation = "" } = {}) {
+  const key = machineKey(machineNo);
+  if (!key) {
+    const err = new Error("Machine No is required to save observation.");
+    err.status = 400;
+    throw err;
   }
 
-  return data;
+  const rec = await findSettingRecord(OBSERVATIONS_KEY);
+  const parsed = safeJsonParse(rec?.setting_value, { observations: {} });
+  const observations = parsed.observations && typeof parsed.observations === "object" ? parsed.observations : {};
+  observations[key] = {
+    machineNo: clean(machineNo),
+    observation: clean(observation),
+    updatedAt: new Date().toISOString()
+  };
+
+  await saveSettingJson(OBSERVATIONS_KEY, { observations });
+  return await getQualityReportObservation(machineNo);
 }
 
 function splitManualEmails(value = "") {
@@ -164,5 +202,7 @@ async function sendQualityReport({ machineNo = "", machineCategory = "", period 
 module.exports = {
   getQualityReportRecipients,
   saveQualityReportRecipients,
+  getQualityReportObservation,
+  saveQualityReportObservation,
   sendQualityReport
 };
