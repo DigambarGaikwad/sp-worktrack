@@ -11,6 +11,7 @@ const productionRoutes = require("./routes/productionRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const emailRoutes = require("./routes/emailRoutes");
 const backupRoutes = require("./routes/backupRoutes");
+const { startBackupScheduler } = require("./services/backupScheduler");
 
 dotenv.config();
 
@@ -47,4 +48,5 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`SP WorkTrack API running on http://localhost:${PORT}`);
+  startBackupScheduler();
 });
