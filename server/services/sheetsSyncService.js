@@ -14,9 +14,16 @@ const LOG_HEADERS = [
   "Flexible Shift Minutes", "Work Checkpoints", "Quality Checkpoints", "Source Entry No", "Source Line No", "Synced At"
 ];
 
+const ATTENDANCE_HEADERS = [
+  "Timestamp", "Work Date", "Emp ID", "Emp Name", "Shift", "Work Type", "Status",
+  "Shift Available (min)", "Utilized (min)", "Total Hours", "OT Minutes", "OT Hours",
+  "Productivity %", "Major Loss Reason", "Major Loss Remark", "Flexible Shift Minutes", "Source Entry No", "Synced At"
+];
+
 function clean(value) { return String(value ?? "").trim(); }
 function toNumber(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
 function sameDate(a, b) { return clean(a).slice(0, 10) === clean(b).slice(0, 10); }
+function round2(value) { return Math.round(toNumber(value, 0) * 100) / 100; }
 
 function localDateISO() {
   const now = new Date();
@@ -131,10 +138,9 @@ function summarizePointList(value) {
   }).filter(Boolean).join("; ");
 }
 
-function buildLogRows(entries, lines, workDate) {
+function buildLogRows(entries, lines, workDate, syncedAt) {
   const headerByEntryNo = new Map();
   entries.forEach((entry) => headerByEntryNo.set(clean(entry.entry_no), entry));
-  const syncedAt = new Date().toISOString();
 
   return lines.map((line) => {
     const entryNo = clean(line.entry_no);
@@ -175,6 +181,35 @@ function buildLogRows(entries, lines, workDate) {
   });
 }
 
+function buildAttendanceRows(entries, workDate, syncedAt) {
+  return entries.map((entry) => {
+    const shiftAvailable = toNumber(entry.shift_available, 0);
+    const utilized = toNumber(entry.total_actual_minutes, 0);
+    const otMinutes = Math.max(0, utilized - shiftAvailable);
+
+    return [
+      clean(entry.created || syncedAt),
+      clean(entry.work_date || workDate),
+      clean(entry.emp_code),
+      clean(entry.emp_name),
+      clean(entry.shift_name || entry.shift_code),
+      clean(entry.work_type || "Normal"),
+      clean(entry.status || "SUBMITTED"),
+      shiftAvailable,
+      utilized,
+      round2(utilized / 60),
+      otMinutes,
+      round2(otMinutes / 60),
+      toNumber(entry.productivity_percent, 0),
+      clean(entry.major_loss_reason),
+      clean(entry.remarks),
+      toNumber(entry.flexible_shift_minutes, 0),
+      clean(entry.entry_no),
+      syncedAt
+    ];
+  });
+}
+
 async function testConnection() {
   const appsScriptResponse = await postToWebApp({
     action: "backupTest",
@@ -187,34 +222,62 @@ async function testConnection() {
 async function syncToday(options = {}) {
   const workDate = clean(options.workDate || options.date || localDateISO());
   const year = getYearFromDate(workDate);
+  const syncedAt = new Date().toISOString();
 
   const allEntries = await pbListAll("production_entries");
   const allLines = await pbListAll("production_entry_lines");
   const entries = allEntries.filter((entry) => sameDate(entry.work_date, workDate) && clean(entry.status).toUpperCase() !== "CANCELLED");
   const validEntryNos = new Set(entries.map((entry) => clean(entry.entry_no)).filter(Boolean));
   const lines = allLines.filter((line) => sameDate(line.work_date, workDate) && (!validEntryNos.size || validEntryNos.has(clean(line.entry_no))));
-  const rows = buildLogRows(entries, lines, workDate);
+
+  const logRows = buildLogRows(entries, lines, workDate, syncedAt);
+  const attendanceRows = buildAttendanceRows(entries, workDate, syncedAt);
 
   await postToWebApp({ action: "ensureSheets" });
-  const appendResult = await postToWebApp({
+
+  const logResult = await postToWebApp({
     action: "appendRows",
     sheetName: `LOG_${year}`,
     headers: LOG_HEADERS,
-    rows,
+    rows: logRows,
     uniqueKeyColumns: ["Source Entry No", "Source Line No"]
   });
 
+  const attendanceResult = await postToWebApp({
+    action: "appendRows",
+    sheetName: `ATT_${year}`,
+    headers: ATTENDANCE_HEADERS,
+    rows: attendanceRows,
+    uniqueKeyColumns: ["Source Entry No"]
+  });
+
   return {
-    ok: appendResult?.ok !== false,
+    ok: logResult?.ok !== false && attendanceResult?.ok !== false,
     implemented: true,
     workDate,
-    sheetName: `LOG_${year}`,
+    sheets: {
+      log: {
+        sheetName: `LOG_${year}`,
+        rowCount: logRows.length,
+        appended: logResult?.appended ?? 0,
+        skippedDuplicates: logResult?.skippedDuplicates ?? 0
+      },
+      attendance: {
+        sheetName: `ATT_${year}`,
+        rowCount: attendanceRows.length,
+        appended: attendanceResult?.appended ?? 0,
+        skippedDuplicates: attendanceResult?.skippedDuplicates ?? 0
+      }
+    },
     entryCount: entries.length,
     lineCount: lines.length,
-    rowCount: rows.length,
-    appended: appendResult?.appended ?? 0,
-    skippedDuplicates: appendResult?.skippedDuplicates ?? 0,
-    appsScriptResponse: appendResult
+    rowCount: logRows.length,
+    appended: logResult?.appended ?? 0,
+    skippedDuplicates: logResult?.skippedDuplicates ?? 0,
+    appsScriptResponse: {
+      log: logResult,
+      attendance: attendanceResult
+    }
   };
 }
 
