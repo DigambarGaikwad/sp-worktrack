@@ -174,17 +174,7 @@
     setTimeout(() => win.print(), 500);
   }
 
-  function addObservation() {
-    const text = prompt("Add observation / deviation / remarks for this quality report:", observationText || window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
-    if (text === null) return;
-    observationText = text.trim();
-    window.__SPWT_QUALITY_REPORT_OBSERVATION = observationText;
-    alert(observationText ? "Observation added for next print/send." : "Observation cleared.");
-  }
-
-  function removeDownloadButton() {
-    document.getElementById("downloadQualityReportBtn")?.remove();
-  }
+  function removeDownloadButton() { document.getElementById("downloadQualityReportBtn")?.remove(); }
 
   function interceptClicks(e) {
     if (e.target?.closest?.("#downloadQualityReportBtn")) {
@@ -193,9 +183,7 @@
     if (e.target?.closest?.("#printQualityReportBtn")) {
       e.preventDefault(); e.stopImmediatePropagation(); printPolishedReport(); return;
     }
-    if (e.target?.closest?.("#addQualityObservationBtn")) {
-      e.preventDefault(); e.stopImmediatePropagation(); addObservation(); return;
-    }
+    // Add Observation is handled by dashboardButtonsPolishPatch.js to open inline field.
   }
 
   function init() { removeDownloadButton(); }
