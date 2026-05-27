@@ -129,13 +129,13 @@
   * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   body { margin:0; background:#ffffff; font-family:Arial, Helvetica, sans-serif; color:#111827; }
   .page { max-width: 820px; margin: 12px auto; background:#ffffff; border:1px solid #111827; border-radius:8px; overflow:hidden; }
-  .app-head { background:#ffffff !important; color:#111827 !important; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:3px solid #0b3f73; }
+  .app-head { background:#111827 !important; color:#ffffff !important; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:3px solid #0b3f73; }
   .brand { display:flex; align-items:center; gap:10px; min-width:0; }
-  .logo-img { width:86px; height:36px; object-fit:contain; background:#ffffff !important; border:1px solid #d1d5db; border-radius:3px; flex:0 0 auto; padding:2px; }
-  .app-title { font-size:18px; font-weight:800; line-height:1; letter-spacing:.15px; color:#111827 !important; }
-  .app-sub { font-size:10.5px; margin-top:3px; color:#475569 !important; }
-  .header-report-title { font-size:13.5px; font-weight:800; text-align:right; letter-spacing:.2px; white-space:nowrap; color:#111827 !important; }
-  .header-report-sub { font-size:9.6px; color:#475569 !important; margin-top:3px; text-align:right; }
+  .logo-img { width:86px; height:36px; object-fit:contain; background:#111827 !important; border:0; border-radius:3px; flex:0 0 auto; padding:0; }
+  .app-title { font-size:18px; font-weight:800; line-height:1; letter-spacing:.15px; color:#ffffff !important; }
+  .app-sub { font-size:10.5px; margin-top:3px; color:#e5e7eb !important; }
+  .header-report-title { font-size:13.5px; font-weight:800; text-align:right; letter-spacing:.2px; white-space:nowrap; color:#ffffff !important; }
+  .header-report-sub { font-size:9.6px; color:#d1d5db !important; margin-top:3px; text-align:right; }
   .content { padding:10px 14px 10px; }
   .subtitle { color:#334155; font-size:10px; font-weight:700; margin-bottom:6px; }
   .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:5px; margin-top:5px; }
