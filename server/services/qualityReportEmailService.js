@@ -3,6 +3,7 @@
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const { sendEmail } = require("./emailService");
+const { generatePdfFromHtml } = require("./pdfReportService");
 
 const COLLECTION = "admin_settings";
 const KEY = "quality_report_recipients_json";
@@ -50,6 +51,13 @@ function normalizeRecipients(value) {
   return list.map(normalizeRecipient).filter((r) => r.email);
 }
 
+function safeFilePart(value) {
+  return clean(value || "Report")
+    .replace(/[^a-z0-9_-]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80) || "Report";
+}
+
 async function getQualityReportRecipients() {
   const rec = await findSettingRecord();
   const parsed = safeJsonParse(rec?.setting_value, { recipients: [] });
@@ -70,7 +78,7 @@ async function saveQualityReportRecipients(raw = {}) {
   return data;
 }
 
-async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "" } = {}) {
+async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "", pdfHtml = "" } = {}) {
   const recipientsData = await getQualityReportRecipients();
   const activeRecipients = recipientsData.recipients.filter((r) => r.active && r.email);
   const manualTo = clean(to);
@@ -84,18 +92,40 @@ async function sendQualityReport({ machineNo = "", machineCategory = "", period 
 
   const subject = `SP WorkTrack Quality Report - ${clean(machineNo) || "Machine"}${period ? " - " + period : ""}`;
   const results = [];
+  const attachments = [];
+
+  if (clean(pdfHtml || html)) {
+    const pdfBuffer = await generatePdfFromHtml(pdfHtml || html);
+    attachments.push({
+      filename: `Quality_Report_${safeFilePart(machineNo)}.pdf`,
+      content: pdfBuffer,
+      contentType: "application/pdf"
+    });
+  }
+
+  const bodyText = text || `SP WorkTrack Quality Report\nMachine: ${machineNo}\nCategory: ${machineCategory}\nPeriod: ${period}\n\nPDF report is attached.`;
+  const bodyHtml = html || `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;">
+      <h2>SP WorkTrack Quality Report</h2>
+      <p><b>Machine:</b> ${clean(machineNo)}</p>
+      <p><b>Category:</b> ${clean(machineCategory)}</p>
+      <p><b>Period:</b> ${clean(period)}</p>
+      <p>Please find attached PDF report.</p>
+    </div>
+  `;
 
   for (const email of targets) {
     const result = await sendEmail({
       to: email,
       subject,
-      text: text || `SP WorkTrack Quality Report\nMachine: ${machineNo}\nCategory: ${machineCategory}\nPeriod: ${period}`,
-      html
+      text: bodyText,
+      html: bodyHtml,
+      attachments
     });
     results.push({ email, ...result });
   }
 
-  return { sent: results.length, results };
+  return { sent: results.length, attachmentCount: attachments.length, results };
 }
 
 module.exports = {
