@@ -2,7 +2,7 @@
 // Adds Backup Controls tab in Admin screen.
 
 (function () {
-  const REQUEST_TIMEOUT_MS = 20000;
+  const REQUEST_TIMEOUT_MS = 120000;
   let backupControlsLoaded = false;
   let backupControls = null;
   let eventsWired = false;
@@ -20,7 +20,7 @@
       if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
       return payload;
     } catch (err) {
-      if (err?.name === "AbortError") throw new Error("Request timeout. Check backend server / Apps Script connection.");
+      if (err?.name === "AbortError") throw new Error("Request timeout. Range backup may take longer; check backend/server logs.");
       throw err;
     } finally {
       clearTimeout(timer);
@@ -30,6 +30,13 @@
   function todayISO() {
     const d = new Date();
     const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function firstDateOfMonthISO() {
+    const d = new Date();
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    const local = new Date(first.getTime() - first.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 10);
   }
 
@@ -58,11 +65,8 @@
       btn.type = "button";
       btn.setAttribute("data-tab", "tabBackupControls");
       btn.textContent = "Backup";
-
-      const controlsTab = tabs.querySelector('[data-tab="tabControls"]');
       const pinTab = tabs.querySelector('[data-tab="tabPin"]');
       if (pinTab) tabs.insertBefore(btn, pinTab);
-      else if (controlsTab) tabs.insertBefore(btn, controlsTab.nextSibling);
       else tabs.appendChild(btn);
     }
 
@@ -77,31 +81,32 @@
         <div class="card admin-controls-card">
           <div class="grid-2">
             <div class="field">
-              <label class="quality-recheck-line">
-                <input type="checkbox" id="googleSheetBackupEnabled" />
-                Enable Google Sheet backup
-              </label>
+              <label class="quality-recheck-line"><input type="checkbox" id="googleSheetBackupEnabled" /> Enable Google Sheet backup</label>
               <div class="small-hint">If disabled, manual and daily sheet backup will be blocked.</div>
             </div>
-
             <div class="field">
-              <label class="quality-recheck-line">
-                <input type="checkbox" id="dailyBackupEnabled" />
-                Enable daily auto backup
-              </label>
+              <label class="quality-recheck-line"><input type="checkbox" id="dailyBackupEnabled" /> Enable daily auto backup</label>
               <div class="small-hint">Runs once daily when backend server is running.</div>
             </div>
-
             <div class="field">
               <label>Daily Backup Time</label>
               <input id="dailyBackupTime" class="admin-input" type="time" value="20:00" />
               <div class="small-hint">Use 24-hour format. Example: 20:00 for 8 PM.</div>
             </div>
-
             <div class="field">
               <label>Manual Backup Date</label>
               <input id="manualBackupDate" class="admin-input" type="date" />
-              <div class="small-hint">Use this to sync a selected date to Google Sheet backup.</div>
+              <div class="small-hint">Use this to sync one selected date.</div>
+            </div>
+            <div class="field">
+              <label>Range From Date</label>
+              <input id="rangeFromDate" class="admin-input" type="date" />
+              <div class="small-hint">Start date for date range backup.</div>
+            </div>
+            <div class="field">
+              <label>Range To / Till Date</label>
+              <input id="rangeToDate" class="admin-input" type="date" />
+              <div class="small-hint">End date for range backup, or till date for full backup till selected date.</div>
             </div>
           </div>
 
@@ -110,27 +115,17 @@
             <button class="btn grey" id="testBackupBtn" type="button">Test Connection</button>
             <button class="btn orange" id="syncTodayBackupBtn" type="button">Sync Today</button>
             <button class="btn orange" id="syncDateBackupBtn" type="button">Sync Selected Date</button>
+            <button class="btn orange" id="syncRangeBackupBtn" type="button">Sync Date Range</button>
+            <button class="btn orange" id="syncTillDateBackupBtn" type="button">Sync Till Date</button>
           </div>
 
           <div class="small-hint" id="backupControlsStatus"></div>
 
           <div class="summary-cards" style="margin-top:12px;">
-            <div class="sum-card">
-              <div class="sum-card-label">Configured</div>
-              <div class="sum-card-val" id="backupConfiguredVal">—</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Last Run</div>
-              <div class="sum-card-val" id="backupLastRunVal">—</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Last Result</div>
-              <div class="sum-card-val" id="backupLastResultVal">—</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Last Work Date</div>
-              <div class="sum-card-val" id="backupLastDateVal">—</div>
-            </div>
+            <div class="sum-card"><div class="sum-card-label">Configured</div><div class="sum-card-val" id="backupConfiguredVal">—</div></div>
+            <div class="sum-card"><div class="sum-card-label">Last Run</div><div class="sum-card-val" id="backupLastRunVal">—</div></div>
+            <div class="sum-card"><div class="sum-card-label">Last Result</div><div class="sum-card-val" id="backupLastResultVal">—</div></div>
+            <div class="sum-card"><div class="sum-card-label">Last Work Date</div><div class="sum-card-val" id="backupLastDateVal">—</div></div>
           </div>
 
           <div class="sum-table-wrap" style="margin-top:12px;">
@@ -139,7 +134,6 @@
           </div>
         </div>
       `;
-
       const hr = panel.querySelector("hr");
       if (hr) panel.insertBefore(page, hr);
       else panel.appendChild(page);
@@ -148,16 +142,18 @@
 
   function fillBackupForm(data) {
     backupControls = data || backupControls || {};
-
     const googleEnabled = document.getElementById("googleSheetBackupEnabled");
     const dailyEnabled = document.getElementById("dailyBackupEnabled");
     const dailyTime = document.getElementById("dailyBackupTime");
     const manualDate = document.getElementById("manualBackupDate");
-
+    const rangeFrom = document.getElementById("rangeFromDate");
+    const rangeTo = document.getElementById("rangeToDate");
     if (googleEnabled) googleEnabled.checked = backupControls.googleSheetBackupEnabled !== false;
     if (dailyEnabled) dailyEnabled.checked = backupControls.dailyBackupEnabled === true;
     if (dailyTime) dailyTime.value = backupControls.dailyBackupTime || "20:00";
     if (manualDate && !manualDate.value) manualDate.value = todayISO();
+    if (rangeFrom && !rangeFrom.value) rangeFrom.value = firstDateOfMonthISO();
+    if (rangeTo && !rangeTo.value) rangeTo.value = todayISO();
   }
 
   function renderStatusCards(statusData) {
@@ -166,12 +162,10 @@
     const lastRun = document.getElementById("backupLastRunVal");
     const lastResult = document.getElementById("backupLastResultVal");
     const lastDate = document.getElementById("backupLastDateVal");
-
     if (configured) configured.textContent = statusData?.configured ? "Yes" : "No";
     if (lastRun) lastRun.textContent = controls.lastRunAt ? new Date(controls.lastRunAt).toLocaleString() : "—";
     if (lastResult) lastResult.textContent = controls.lastRunOk === true ? "OK" : controls.lastRunOk === false ? "Failed" : "—";
     if (lastDate) lastDate.textContent = controls.lastRunWorkDate || "—";
-
     renderLastSummary(controls.lastRunSummary);
   }
 
@@ -179,36 +173,17 @@
     const host = document.getElementById("backupLastSummaryTable");
     if (!host) return;
     const sheets = summary?.sheets || null;
-    if (!sheets) {
-      host.textContent = "No backup summary available.";
-      return;
-    }
-
+    if (!sheets) { host.textContent = "No backup summary available."; return; }
     host.innerHTML = `
       <table style="width:100%; border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:6px;">Sheet</th>
-            <th style="text-align:right; padding:6px;">Rows</th>
-            <th style="text-align:right; padding:6px;">Added</th>
-            <th style="text-align:right; padding:6px;">Skipped/Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Object.keys(sheets).map((key) => {
-            const x = sheets[key] || {};
-            const added = x.appended ?? x.inserted ?? 0;
-            const changed = x.skippedDuplicates ?? x.updated ?? 0;
-            return `<tr>
-              <td style="padding:6px;">${escapeHtml(x.sheetName || key)}</td>
-              <td style="text-align:right; padding:6px;">${Number(x.rowCount || 0)}</td>
-              <td style="text-align:right; padding:6px;">${Number(added || 0)}</td>
-              <td style="text-align:right; padding:6px;">${Number(changed || 0)}</td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-    `;
+        <thead><tr><th style="text-align:left; padding:6px;">Sheet</th><th style="text-align:right; padding:6px;">Rows</th><th style="text-align:right; padding:6px;">Added</th><th style="text-align:right; padding:6px;">Skipped/Updated</th></tr></thead>
+        <tbody>${Object.keys(sheets).map((key) => {
+          const x = sheets[key] || {};
+          const added = x.appended ?? x.inserted ?? 0;
+          const changed = x.skippedDuplicates ?? x.updated ?? 0;
+          return `<tr><td style="padding:6px;">${escapeHtml(x.sheetName || key)}</td><td style="text-align:right; padding:6px;">${Number(x.rowCount || 0)}</td><td style="text-align:right; padding:6px;">${Number(added || 0)}</td><td style="text-align:right; padding:6px;">${Number(changed || 0)}</td></tr>`;
+        }).join("")}</tbody>
+      </table>`;
   }
 
   async function loadBackupControls(force = false) {
@@ -234,23 +209,15 @@
     try {
       if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
       status("Saving backup controls...");
-
       const token = getAdminToken();
       const headers = { "Content-Type": "application/json" };
       if (token) headers["x-spwt-admin-token"] = token;
-
-      const payload = await requestJson("/api/backup/sheets/controls", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(readBackupForm())
-      });
-
+      const payload = await requestJson("/api/backup/sheets/controls", { method: "POST", headers, body: JSON.stringify(readBackupForm()) });
       backupControlsLoaded = false;
       backupControls = payload.data;
       await loadBackupControls(true);
       status("Backup controls saved.", "success");
     } catch (err) {
-      console.error("Backup controls save failed:", err);
       status("Save failed: " + (err?.message || err), "error");
       alert("Backup controls save failed: " + (err?.message || err));
     } finally {
@@ -275,28 +242,32 @@
   }
 
   async function syncBackupDate(workDate, buttonId) {
+    await runBackup(buttonId, "Syncing backup for " + workDate + "...", "/api/backup/sheets/sync-today", { workDate, runType: "manual-ui" });
+  }
+
+  async function syncBackupRange(fromDate, toDate, buttonId) {
+    await runBackup(buttonId, `Syncing backup range ${fromDate} to ${toDate}...`, "/api/backup/sheets/sync-range", { fromDate, toDate, mode: "range", runType: "manual-range-ui" });
+  }
+
+  async function syncBackupTillDate(toDate, buttonId) {
+    await runBackup(buttonId, `Syncing all backend data till ${toDate}...`, "/api/backup/sheets/sync-range", { toDate, mode: "till-date", runType: "manual-till-date-ui" });
+  }
+
+  async function runBackup(buttonId, message, path, body) {
     const btn = document.getElementById(buttonId);
+    const oldText = btn?.textContent || "Sync";
     try {
       if (btn) { btn.disabled = true; btn.textContent = "Syncing..."; }
-      status("Syncing backup for " + workDate + "...");
-
-      await requestJson("/api/backup/sheets/sync-today", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workDate, runType: "manual-ui" })
-      });
-
-      status("Backup synced for " + workDate + ".", "success");
+      status(message);
+      await requestJson(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      status("Backup completed.", "success");
       backupControlsLoaded = false;
       await loadBackupControls(true);
     } catch (err) {
       status("Sync failed: " + (err?.message || err), "error");
       alert("Backup sync failed: " + (err?.message || err));
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = buttonId === "syncTodayBackupBtn" ? "Sync Today" : "Sync Selected Date";
-      }
+      if (btn) { btn.disabled = false; btn.textContent = oldText; }
     }
   }
 
@@ -305,19 +276,19 @@
     const testBtn = document.getElementById("testBackupBtn");
     const syncTodayBtn = document.getElementById("syncTodayBackupBtn");
     const syncDateBtn = document.getElementById("syncDateBackupBtn");
-
+    const syncRangeBtn = document.getElementById("syncRangeBackupBtn");
+    const syncTillBtn = document.getElementById("syncTillDateBackupBtn");
     if (saveBtn && !saveBtn.__spwtBackupWired) { saveBtn.__spwtBackupWired = true; saveBtn.onclick = saveBackupControls; }
     if (testBtn && !testBtn.__spwtBackupWired) { testBtn.__spwtBackupWired = true; testBtn.onclick = testBackupConnection; }
-    if (syncTodayBtn && !syncTodayBtn.__spwtBackupWired) {
-      syncTodayBtn.__spwtBackupWired = true;
-      syncTodayBtn.onclick = () => syncBackupDate(todayISO(), "syncTodayBackupBtn");
+    if (syncTodayBtn && !syncTodayBtn.__spwtBackupWired) { syncTodayBtn.__spwtBackupWired = true; syncTodayBtn.onclick = () => syncBackupDate(todayISO(), "syncTodayBackupBtn"); }
+    if (syncDateBtn && !syncDateBtn.__spwtBackupWired) { syncDateBtn.__spwtBackupWired = true; syncDateBtn.onclick = () => syncBackupDate(document.getElementById("manualBackupDate")?.value || todayISO(), "syncDateBackupBtn"); }
+    if (syncRangeBtn && !syncRangeBtn.__spwtBackupWired) {
+      syncRangeBtn.__spwtBackupWired = true;
+      syncRangeBtn.onclick = () => syncBackupRange(document.getElementById("rangeFromDate")?.value || firstDateOfMonthISO(), document.getElementById("rangeToDate")?.value || todayISO(), "syncRangeBackupBtn");
     }
-    if (syncDateBtn && !syncDateBtn.__spwtBackupWired) {
-      syncDateBtn.__spwtBackupWired = true;
-      syncDateBtn.onclick = () => {
-        const d = document.getElementById("manualBackupDate")?.value || todayISO();
-        syncBackupDate(d, "syncDateBackupBtn");
-      };
+    if (syncTillBtn && !syncTillBtn.__spwtBackupWired) {
+      syncTillBtn.__spwtBackupWired = true;
+      syncTillBtn.onclick = () => syncBackupTillDate(document.getElementById("rangeToDate")?.value || todayISO(), "syncTillDateBackupBtn");
     }
   }
 
@@ -333,23 +304,15 @@
     ensureBackupControlsTab();
     wireButtons();
     status("Loading backup status...");
-    try {
-      await loadBackupControls(true);
-      status("Backup controls loaded.");
-    } catch (err) {
-      status("Load failed: " + (err?.message || err), "error");
-    }
+    try { await loadBackupControls(true); status("Backup controls loaded."); }
+    catch (err) { status("Load failed: " + (err?.message || err), "error"); }
   }
 
   function patchSwitchAdminTab() {
     const original = window.switchAdminTab;
     if (typeof original !== "function" || original.__spwtBackupPatched) return;
-
     const patched = function (tabId) {
-      if (tabId === "tabBackupControls") {
-        showBackupTabDirectly();
-        return;
-      }
+      if (tabId === "tabBackupControls") { showBackupTabDirectly(); return; }
       return original.apply(this, arguments);
     };
     patched.__spwtBackupPatched = true;
@@ -359,7 +322,6 @@
   function wireEventsOnce() {
     if (eventsWired) return;
     eventsWired = true;
-
     document.addEventListener("click", (e) => {
       if (e.target?.closest?.('[data-tab="tabBackupControls"]')) {
         e.preventDefault();
@@ -382,7 +344,6 @@
   }
 
   window.SPWT_RENDER_BACKUP_CONTROLS = renderBackupControls;
-
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
