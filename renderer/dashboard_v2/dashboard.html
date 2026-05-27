@@ -43,440 +43,95 @@
 
         <!-- OVERALL SUMMARY -->
         <section class="kpi-grid" id="overallKpiGrid">
-          <div class="kpi-card accent-blue">
-            <div class="kpi-label">Active Machines</div>
-            <div class="kpi-value" id="kpiActiveMachines">0</div>
-            <div class="kpi-note">Currently active</div>
-          </div>
-
-          <div class="kpi-card accent-green">
-            <div class="kpi-label">Completed</div>
-            <div class="kpi-value" id="kpiCompletedMachines">0</div>
-            <div class="kpi-note">Completed machines</div>
-          </div>
-
-          <div class="kpi-card accent-navy">
-            <div class="kpi-label">Std Hours</div>
-            <div class="kpi-value" id="kpiStdHours">0</div>
-            <div class="kpi-note">Total planned hours</div>
-          </div>
-
-          <div class="kpi-card accent-red">
-            <div class="kpi-label">Actual Hours</div>
-            <div class="kpi-value" id="kpiActualHours">0</div>
-            <div class="kpi-note">Consumed hours</div>
-          </div>
-
-          <div class="kpi-card accent-orange">
-            <div class="kpi-label">Remaining</div>
-            <div class="kpi-value" id="kpiRemainingHours">0</div>
-            <div class="kpi-note">Pending hours</div>
-          </div>
-
-          <div class="kpi-card accent-purple">
-            <div class="kpi-label">Completion</div>
-            <div class="kpi-value" id="kpiCompletionPct">0%</div>
-            <div class="kpi-note">Overall progress</div>
-          </div>
+          <div class="kpi-card accent-blue"><div class="kpi-label">Active Machines</div><div class="kpi-value" id="kpiActiveMachines">0</div><div class="kpi-note">Currently active</div></div>
+          <div class="kpi-card accent-green"><div class="kpi-label">Completed</div><div class="kpi-value" id="kpiCompletedMachines">0</div><div class="kpi-note">Completed machines</div></div>
+          <div class="kpi-card accent-navy"><div class="kpi-label">Std Hours</div><div class="kpi-value" id="kpiStdHours">0</div><div class="kpi-note">Total planned hours</div></div>
+          <div class="kpi-card accent-red"><div class="kpi-label">Actual Hours</div><div class="kpi-value" id="kpiActualHours">0</div><div class="kpi-note">Consumed hours</div></div>
+          <div class="kpi-card accent-orange"><div class="kpi-label">Remaining</div><div class="kpi-value" id="kpiRemainingHours">0</div><div class="kpi-note">Pending hours</div></div>
+          <div class="kpi-card accent-purple"><div class="kpi-label">Completion</div><div class="kpi-value" id="kpiCompletionPct">0%</div><div class="kpi-note">Overall progress</div></div>
         </section>
 
         <!-- ACTIVE MACHINE CARDS -->
         <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Active Machines Summary</h2>
-              <p>Machine-wise completion and remaining manhours</p>
-            </div>
-          </div>
-
+          <div class="panel-head"><div><h2>Active Machines Summary</h2><p>Machine-wise completion and remaining manhours</p></div></div>
           <div class="machine-card-grid" id="machineCardGrid"></div>
         </section>
 
         <!-- SELECTED MACHINE DETAIL -->
         <section class="machine-detail" id="machineDetailSection">
-
           <div class="machine-header-card">
-            <div>
-              <h1 id="selectedMachineName">Select Machine</h1>
-              <p id="selectedMachineMeta">Machine type • Status • Start date</p>
-            </div>
-
+            <div><h1 id="selectedMachineName">Select Machine</h1><p id="selectedMachineMeta">Machine type • Status • Start date</p></div>
             <div class="machine-header-metrics">
-              <div class="mini-metric purple">
-                <span>Last 6 Work Days</span>
-                <strong id="lastSixPct">0%</strong>
-                <small id="lastSixHours">0 hrs</small>
-              </div>
-
-              <div class="mini-metric orange">
-                <span>Material Shortage</span>
-                <strong id="shortageCount">0</strong>
-                <small>open items</small>
-              </div>
+              <div class="mini-metric purple"><span>Last 6 Work Days</span><strong id="lastSixPct">0%</strong><small id="lastSixHours">0 hrs</small></div>
+              <div class="mini-metric orange"><span>Material Shortage</span><strong id="shortageCount">0</strong><small>open items</small></div>
             </div>
           </div>
-                      <!-- LAST 6 WORK DAYS TREND -->
-          <section class="panel last-six-panel">
-            <div class="panel-head">
-              <div>
-                <h2>Last 6 Work Days Trend</h2>
-                <p>Day 1 is latest calendar working day excluding Sunday. Shows progress, efficiency, standard, actual and overrun.</p>
-              </div>
-            </div>
 
+          <section class="panel last-six-panel">
+            <div class="panel-head"><div><h2>Last 6 Work Days Trend</h2><p>Day 1 is latest calendar working day excluding Sunday. Shows progress, efficiency, standard, actual and overrun.</p></div></div>
             <div class="last-six-grid" id="lastSixGrid"></div>
           </section>
 
-          <!-- MACHINE KPI -->
           <div class="machine-kpi-grid">
-            <div class="kpi-card accent-navy">
-              <div class="kpi-label">Standard</div>
-              <div class="kpi-value" id="machineStdHours">0</div>
-              <div class="kpi-note">Hours</div>
-            </div>
-
-            <div class="kpi-card accent-red">
-              <div class="kpi-label">Actual</div>
-              <div class="kpi-value" id="machineActualHours">0</div>
-              <div class="kpi-note">Hours</div>
-            </div>
-
-            <div class="kpi-card accent-orange">
-              <div class="kpi-label">Remaining</div>
-              <div class="kpi-value" id="machineRemainingHours">0</div>
-              <div class="kpi-note">Hours</div>
-            </div>
-
-            <div class="kpi-card accent-purple">
-              <div class="kpi-label">Efficiency</div>
-              <div class="kpi-value" id="machineEfficiencyPct">0%</div>
-              <div class="kpi-note">Std vs Actual</div>
-            </div>
-
-            <div class="kpi-card accent-green">
-              <div class="kpi-label">Completion</div>
-              <div class="kpi-value" id="machineCompletionPct">0%</div>
-              <div class="kpi-note">Machine progress</div>
-            </div>
-
-            <div class="kpi-card accent-teal">
-              <div class="kpi-label">Overrun</div>
-              <div class="kpi-value" id="machineOverrunHours">0</div>
-              <div class="kpi-note">Hours</div>
-            </div>
+            <div class="kpi-card accent-navy"><div class="kpi-label">Standard</div><div class="kpi-value" id="machineStdHours">0</div><div class="kpi-note">Hours</div></div>
+            <div class="kpi-card accent-red"><div class="kpi-label">Actual</div><div class="kpi-value" id="machineActualHours">0</div><div class="kpi-note">Hours</div></div>
+            <div class="kpi-card accent-orange"><div class="kpi-label">Remaining</div><div class="kpi-value" id="machineRemainingHours">0</div><div class="kpi-note">Hours</div></div>
+            <div class="kpi-card accent-purple"><div class="kpi-label">Efficiency</div><div class="kpi-value" id="machineEfficiencyPct">0%</div><div class="kpi-note">Std vs Actual</div></div>
+            <div class="kpi-card accent-green"><div class="kpi-label">Completion</div><div class="kpi-value" id="machineCompletionPct">0%</div><div class="kpi-note">Machine progress</div></div>
+            <div class="kpi-card accent-teal"><div class="kpi-label">Overrun</div><div class="kpi-value" id="machineOverrunHours">0</div><div class="kpi-note">Hours</div></div>
           </div>
 
-          <!-- ROW 1: CHART + DEPARTMENT PERFORMANCE -->
           <div class="detail-grid-lower">
-
             <div class="panel chart-panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Department Std vs Actual vs Overrun</h2>
-                  <p>Blue = Standard • Red = Actual • Orange = Overrun</p>
-                </div>
-              </div>
-
-              <div class="chart-wrap">
-                <canvas id="deptChart"></canvas>
-              </div>
+              <div class="panel-head"><div><h2>Department Std vs Actual vs Overrun</h2><p>Blue = Standard • Red = Actual • Orange = Overrun</p></div></div>
+              <div class="chart-wrap"><canvas id="deptChart"></canvas></div>
             </div>
-
             <div class="panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Department Performance</h2>
-                  <p>Department-wise machine progress</p>
-                </div>
-              </div>
-
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Department</th>
-                      <th>Std</th>
-                      <th>Actual</th>
-                      <th>Remaining</th>
-                      <th>Overrun</th>
-                      <th>Completion</th>
-                    </tr>
-                  </thead>
-                  <tbody id="departmentTableBody"></tbody>
-                </table>
-              </div>
+              <div class="panel-head"><div><h2>Department Performance</h2><p>Department-wise machine progress</p></div></div>
+              <div class="table-wrap"><table><thead><tr><th>Department</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Completion</th></tr></thead><tbody id="departmentTableBody"></tbody></table></div>
             </div>
-
           </div>
 
-          <!-- ROW 2: REWORK / OTHER SUMMARY FULL WIDTH -->
           <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h2>Rework / Other Summary</h2>
-                <p>Loss visibility by machine</p>
-              </div>
-            </div>
-
+            <div class="panel-head"><div><h2>Rework / Other Summary</h2><p>Loss visibility by machine</p></div></div>
             <div class="loss-grid loss-grid-4">
-              <div class="loss-box red">
-                <span>Rework Hours</span>
-                <strong id="reworkHours">0</strong>
-              </div>
-
-              <div class="loss-box red">
-                <span>Rework %</span>
-                <strong id="reworkPct">0%</strong>
-              </div>
-
-              <div class="loss-box orange">
-                <span>Other Hours</span>
-                <strong id="otherHours">0</strong>
-              </div>
-
-              <div class="loss-box orange">
-                <span>Other %</span>
-                <strong id="otherPct">0%</strong>
-              </div>
+              <div class="loss-box red"><span>Rework Hours</span><strong id="reworkHours">0</strong></div>
+              <div class="loss-box red"><span>Rework %</span><strong id="reworkPct">0%</strong></div>
+              <div class="loss-box orange"><span>Other Hours</span><strong id="otherHours">0</strong></div>
+              <div class="loss-box orange"><span>Other %</span><strong id="otherPct">0%</strong></div>
             </div>
           </section>
 
-          <!-- ROW 3: QUALITY + REWORK/OTHER DESCRIPTION -->
           <div class="detail-grid-lower">
-
             <div class="panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Quality Point Checklist</h2>
-                  <p>Planned + completed quality checkpoints</p>
-                </div>
-              </div>
-
-              <div class="table-wrap small-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Point</th>
-                      <th>Status</th>
-                      <th>Result</th>
-                      <th>Done By</th>
-                      <th>Date</th>
-                    </tr>
-                  </thead>
-                  <tbody id="qualityTableBody"></tbody>
-                </table>
-              </div>
+              <div class="panel-head"><div><h2>Quality Point Checklist</h2><p>Planned + completed quality checkpoints</p></div></div>
+              <div class="table-wrap small-table"><table><thead><tr><th>Point</th><th>Status</th><th>Result</th><th>Done By</th><th>Date</th></tr></thead><tbody id="qualityTableBody"></tbody></table></div>
             </div>
-
             <div class="panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Rework / Other Description</h2>
-                  <p>Detailed loss/rework entries with reason visibility</p>
-                </div>
-              </div>
-
-              <div class="table-wrap small-table">
-                <table>
-                  <thead>
-                    <tr>
-                     <th>Date</th>
-                     <th>Type</th>
-                     <th>Dept</th>
-                     <th>Sub Work</th>
-                     <th>Root Area</th>
-                     <th>Time</th>
-                     <th>Description / Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody id="reworkOtherTableBody"></tbody>
-                </table>
-              </div>
+              <div class="panel-head"><div><h2>Rework / Other Description</h2><p>Detailed loss/rework entries with reason visibility</p></div></div>
+              <div class="table-wrap small-table"><table><thead><tr><th>Date</th><th>Type</th><th>Dept</th><th>Sub Work</th><th>Root Area</th><th>Time</th><th>Description / Reason</th></tr></thead><tbody id="reworkOtherTableBody"></tbody></table></div>
             </div>
-
           </div>
 
-          <!-- ROW 4: FULL WIDTH REMAINING / COMPLETED WORK -->
           <div class="detail-grid-full">
-
             <div class="panel">
-              <div class="panel-head">
-                <div>
-                  <h2>Remaining / Completed Work</h2>
-                  <p>Department → Sub Work → Booking point visibility</p>
-                </div>
-
-                <div class="tab-buttons">
-                  <button class="tab-btn active" id="remainingTabBtn">Remaining</button>
-                  <button class="tab-btn" id="completedTabBtn">Completed</button>
-                </div>
-              </div>
-
-              <div class="table-wrap work-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Dept</th>
-                      <th>Sub Work</th>
-                      <th>Booking Points</th>
-                      <th>Std</th>
-                      <th>Actual</th>
-                      <th>Remaining</th>
-                      <th>Overrun</th>
-                      <th>Done Date</th>
-                    </tr>
-                  </thead>
-                  <tbody id="workTableBody"></tbody>
-                </table>
-              </div>
+              <div class="panel-head"><div><h2>Remaining / Completed Work</h2><p>Department → Sub Work → Booking point visibility</p></div><div class="tab-buttons"><button class="tab-btn active" id="remainingTabBtn">Remaining</button><button class="tab-btn" id="completedTabBtn">Completed</button></div></div>
+              <div class="table-wrap work-table-wrap"><table><thead><tr><th>Dept</th><th>Sub Work</th><th>Booking Points</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Done Date</th></tr></thead><tbody id="workTableBody"></tbody></table></div>
             </div>
-
           </div>
-            <!-- ROW 5: REWORK / OTHER / MAJOR LOSS SUMMARY -->
+
           <section class="panel loss-summary-panel">
             <div class="panel-head">
-              <div>
-                <h2>Rework / Other / Major Loss Summary</h2>
-                <p id="lossSummaryRangeLabel">Current Month</p>
-              </div>
-
-              <div class="loss-filter-bar">
-                <select id="lossRangeSelect" class="dash-select">
-                  <option value="currentMonth">Current Month</option>
-                  <option value="lastMonth">Last Month</option>
-                  <option value="last6Months">Last 6 Months</option>
-                  <option value="year">Current Year</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-
-                <input id="lossFromDate" class="dash-select loss-date-input" type="date" />
-                <input id="lossToDate" class="dash-select loss-date-input" type="date" />
-
-                <button class="dash-btn primary loss-apply-btn" id="lossApplyBtn">
-                  <span class="btn-spinner" id="lossApplySpinner"></span>
-                  <span id="lossApplyText">Apply</span>
-                </button>
-              </div>
+              <div><h2>Rework / Other / Major Loss Summary</h2><p id="lossSummaryRangeLabel">Current Month</p></div>
+              <div class="loss-filter-bar"><select id="lossRangeSelect" class="dash-select"><option value="currentMonth">Current Month</option><option value="lastMonth">Last Month</option><option value="last6Months">Last 6 Months</option><option value="year">Current Year</option><option value="custom">Custom Range</option></select><input id="lossFromDate" class="dash-select loss-date-input" type="date" /><input id="lossToDate" class="dash-select loss-date-input" type="date" /><button class="dash-btn primary loss-apply-btn" id="lossApplyBtn"><span class="btn-spinner" id="lossApplySpinner"></span><span id="lossApplyText">Apply</span></button></div>
             </div>
-
-            <!-- Summary cards in one line -->
-            <div class="loss-summary-kpis">
-              <div class="loss-box red">
-                <span>Rework Hours</span>
-                <strong id="lossReworkHours">0</strong>
-              </div>
-
-              <div class="loss-box orange">
-                <span>Other Hours</span>
-                <strong id="lossOtherHours">0</strong>
-              </div>
-
-              <div class="loss-box purple">
-                <span>Major Loss Hours</span>
-                <strong id="lossMajorHours">0</strong>
-              </div>
-
-              <div class="loss-box navy">
-                <span>Total Loss Hours</span>
-                <strong id="lossTotalHours">0</strong>
-              </div>
-            </div>
-
-            <!-- Rework and Major Loss tables in second line -->
-            <div class="detail-grid-lower">
-              <div class="panel inner-panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Rework by Root Area</h2>
-                    <p>Root cause area wise rework hours</p>
-                  </div>
-                </div>
-
-                <div class="table-wrap small-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Root Area</th>
-                        <th>Count</th>
-                        <th>Hours</th>
-                      </tr>
-                    </thead>
-                    <tbody id="lossReworkRootBody"></tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div class="panel inner-panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>Major Loss by Reason</h2>
-                    <p>No power, short leave, meeting, waiting etc.</p>
-                  </div>
-                </div>
-
-                <div class="table-wrap small-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Reason</th>
-                        <th>Count</th>
-                        <th>Hours</th>
-                      </tr>
-                    </thead>
-                    <tbody id="lossMajorReasonBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- All loss details in third line -->
-            <div class="detail-grid-full">
-              <div class="panel inner-panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>All Loss Details</h2>
-                    <p>Combined Rework, Other Work and Major Loss entries</p>
-                  </div>
-                </div>
-
-                <div class="table-wrap work-table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Machine</th>
-                        <th>Dept</th>
-                        <th>Sub Work</th>
-                        <th>Root Area</th>
-                        <th>Reason</th>
-                        <th>Hours</th>
-                        <th>Employee</th>
-                      </tr>
-                    </thead>
-                    <tbody id="lossDetailBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+            <div class="loss-summary-kpis"><div class="loss-box red"><span>Rework Hours</span><strong id="lossReworkHours">0</strong></div><div class="loss-box orange"><span>Other Hours</span><strong id="lossOtherHours">0</strong></div><div class="loss-box purple"><span>Major Loss Hours</span><strong id="lossMajorHours">0</strong></div><div class="loss-box navy"><span>Total Loss Hours</span><strong id="lossTotalHours">0</strong></div></div>
+            <div class="detail-grid-lower"><div class="panel inner-panel"><div class="panel-head"><div><h2>Rework by Root Area</h2><p>Root cause area wise rework hours</p></div></div><div class="table-wrap small-table"><table><thead><tr><th>Root Area</th><th>Count</th><th>Hours</th></tr></thead><tbody id="lossReworkRootBody"></tbody></table></div></div><div class="panel inner-panel"><div class="panel-head"><div><h2>Major Loss by Reason</h2><p>No power, short leave, meeting, waiting etc.</p></div></div><div class="table-wrap small-table"><table><thead><tr><th>Reason</th><th>Count</th><th>Hours</th></tr></thead><tbody id="lossMajorReasonBody"></tbody></table></div></div></div>
+            <div class="detail-grid-full"><div class="panel inner-panel"><div class="panel-head"><div><h2>All Loss Details</h2><p>Combined Rework, Other Work and Major Loss entries</p></div></div><div class="table-wrap work-table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Machine</th><th>Dept</th><th>Sub Work</th><th>Root Area</th><th>Reason</th><th>Hours</th><th>Employee</th></tr></thead><tbody id="lossDetailBody"></tbody></table></div></div></div>
           </section>
 
-          <!-- SHORTAGE PLACEHOLDER -->
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h2>Shortage Material / Constraints</h2>
-                <p>Reserved for future entry from main production screen</p>
-              </div>
-            </div>
-
-            <div class="empty-state" id="shortageEmptyState">
-              No shortage material provision added yet.
-            </div>
-          </section>
-
+          <section class="panel"><div class="panel-head"><div><h2>Shortage Material / Constraints</h2><p>Reserved for future entry from main production screen</p></div></div><div class="empty-state" id="shortageEmptyState">No shortage material provision added yet.</div></section>
         </section>
-
       </div>
     </div>
   </div>
@@ -487,16 +142,11 @@
   <script src="../config.js"></script>
   <script src="../shared/appModals.js"></script>
   <script src="../shared/appHeader.js"></script>
-
   <script>
     window.SPWT.renderSharedModals();
-
-    window.SPWT.renderAppHeader({
-      title: "SP WorkTrack",
-      subtitle: "Production Management System"
-    });
+    window.SPWT.renderAppHeader({ title: "SP WorkTrack", subtitle: "Production Management System" });
   </script>
-
   <script src="dashboard.js"></script>
+  <script src="qualityReportPatch.js"></script>
 </body>
 </html>
