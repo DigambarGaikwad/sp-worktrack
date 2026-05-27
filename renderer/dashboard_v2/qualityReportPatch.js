@@ -84,6 +84,13 @@
     return `<span class="badge" style="border-color:${border};color:${color};">${esc(label)}</span>`;
   }
 
+  function emailBadge(status, value) {
+    const s = clean(status || value || "PENDING").toUpperCase();
+    const label = s || "PENDING";
+    const color = label.includes("NOT OK") ? "#b91c1c" : label === "PENDING" ? "#b45309" : "#15803d";
+    return `<span style="display:inline-block;border:1px solid ${color};border-radius:10px;padding:2px 6px;color:${color};font-weight:700;font-size:10px;white-space:nowrap;">${esc(label)}</span>`;
+  }
+
   function buildRuledLines() {
     const obs = clean(qualityReportObservation);
     const obsHtml = obs ? `<div class="observation-text">${esc(obs).replace(/\n/g, "<br>")}</div>` : "";
@@ -98,6 +105,99 @@
         <div class="line"></div>
         <div class="line"></div>
       </section>`;
+  }
+
+  function buildEmailReportHtml() {
+    const data = getReportData();
+    const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
+    const obs = clean(qualityReportObservation);
+    const border = "1px solid #cbd5e1";
+    const th = `padding:7px 6px;border:${border};background:#0b3f73;color:#ffffff;font-size:12px;text-align:left;`;
+    const td = `padding:7px 6px;border:${border};font-size:12px;color:#111827;vertical-align:top;`;
+    const label = `font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:#475569;font-weight:700;`;
+    const value = `font-size:14px;color:#111827;font-weight:700;margin-top:2px;`;
+
+    const rowsHtml = data.rows.map((r, index) => {
+      const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
+      return `
+        <tr>
+          <td style="${td};text-align:center;width:34px;">${index + 1}</td>
+          <td style="${td};font-weight:700;">${esc(r.point || r.qualityPoint || "-")}</td>
+          <td style="${td}">${esc(r.department || "-")}</td>
+          <td style="${td}">${esc(r.subwork || r.subWork || "-")}</td>
+          <td style="${td}">${emailBadge(status, r.value)}</td>
+          <td style="${td}">${esc(r.value || r.readingStatus || "-")}</td>
+          <td style="${td}">${esc(r.empName || r.doneByName || r.empCode || "-")}</td>
+          <td style="${td}">${esc(displayDate(r.workDate || r.doneDate))}</td>
+        </tr>`;
+    }).join("") || `<tr><td colspan="8" style="${td};text-align:center;">No quality checkpoint data available</td></tr>`;
+
+    return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:16px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="760" cellpadding="0" cellspacing="0" style="width:760px;max-width:760px;background:#ffffff;border:1px solid #111827;border-collapse:collapse;">
+          <tr>
+            <td style="background:#111827;color:#ffffff;padding:14px 16px;border-bottom:3px solid #0b3f73;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="color:#ffffff;font-size:22px;font-weight:800;line-height:1.1;">SP WorkTrack<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Production Management System</span></td>
+                  <td align="right" style="color:#ffffff;font-size:18px;font-weight:800;line-height:1.1;">Quality Checkpoint Report<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Planned + completed checkpoints</span></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:14px 16px;">
+              <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:10px;">Status, result, done by and done date are captured from production entries.</div>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:10px;">
+                <tr>
+                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine No</div><div style="${value}">${esc(data.machineNo)}</div></td>
+                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine Category</div><div style="${value}">${esc(data.machineCategory)}</div></td>
+                </tr>
+                <tr>
+                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Report Period</div><div style="${value}">${esc(period)}</div></td>
+                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Generated On</div><div style="${value}">${esc(nowText())}</div></td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:5px;margin-bottom:10px;">
+                <tr>
+                  <td style="border:1px solid #1d4ed8;padding:7px;"><span style="${label}">Total</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.total}</span></td>
+                  <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">Done</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.done}</span></td>
+                  <td style="border:1px solid #b45309;padding:7px;"><span style="${label}">Pending</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.pending}</span></td>
+                  <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.ok}</span></td>
+                  <td style="border:1px solid #b91c1c;padding:7px;"><span style="${label}">Not OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.notOk}</span></td>
+                </tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #0b3f73;">
+                <thead>
+                  <tr><th style="${th};width:34px;">Sr</th><th style="${th}">Point</th><th style="${th}">Dept</th><th style="${th}">Sub Work</th><th style="${th}">Status</th><th style="${th}">Result</th><th style="${th}">Done By</th><th style="${th}">Done Date</th></tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+
+              <div style="margin-top:14px;border:1px solid #64748b;padding:10px;">
+                <div style="font-size:13px;font-weight:800;margin-bottom:8px;">Observations / Deviations / Remarks</div>
+                ${obs ? `<div style="font-size:12px;line-height:1.5;margin-bottom:8px;">${esc(obs).replace(/\n/g, "<br>")}</div>` : ""}
+                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
+                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
+                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
+              </div>
+
+              <div style="font-size:11px;color:#64748b;margin-top:12px;">Generated from SP WorkTrack quality checkpoint data.</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
   }
 
   function buildReportHtml() {
@@ -235,7 +335,7 @@
 
   async function sendQualityReport() {
     const data = getReportData();
-    const html = buildReportHtml();
+    const html = buildEmailReportHtml();
     try {
       await requestJson("/api/email/quality-report/send", {
         method: "POST",
@@ -258,45 +358,13 @@
     const style = document.createElement("style");
     style.id = "qualityReportButtonStyles";
     style.textContent = `
-      .quality-report-actions {
-        align-items: center;
-        justify-content: flex-end;
-        margin-left: auto;
-      }
-      .quality-report-actions .qr-action-btn {
-        border: 0;
-        border-radius: 10px;
-        padding: 7px 11px;
-        min-height: 32px;
-        font-size: 12px;
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: .1px;
-        cursor: pointer;
-        transition: transform .14s ease, box-shadow .14s ease, opacity .14s ease;
-        box-shadow: 0 6px 14px rgba(15, 23, 42, .08);
-        white-space: nowrap;
-      }
-      .quality-report-actions .qr-action-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 10px 20px rgba(15, 23, 42, .13);
-      }
-      .quality-report-actions .qr-action-btn:active {
-        transform: translateY(0);
-        box-shadow: 0 5px 10px rgba(15, 23, 42, .10);
-      }
-      .quality-report-actions .qr-action-secondary {
-        background: #e5e7eb;
-        color: #111827;
-      }
-      .quality-report-actions .qr-action-primary {
-        background: #0b3f73;
-        color: #ffffff;
-      }
-      .quality-report-actions .qr-action-send {
-        background: #f97316;
-        color: #ffffff;
-      }
+      .quality-report-actions { align-items: center; justify-content: flex-end; margin-left: auto; }
+      .quality-report-actions .qr-action-btn { border: 0; border-radius: 10px; padding: 7px 11px; min-height: 32px; font-size: 12px; line-height: 1; font-weight: 800; letter-spacing: .1px; cursor: pointer; transition: transform .14s ease, box-shadow .14s ease, opacity .14s ease; box-shadow: 0 6px 14px rgba(15, 23, 42, .08); white-space: nowrap; }
+      .quality-report-actions .qr-action-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(15, 23, 42, .13); }
+      .quality-report-actions .qr-action-btn:active { transform: translateY(0); box-shadow: 0 5px 10px rgba(15, 23, 42, .10); }
+      .quality-report-actions .qr-action-secondary { background: #e5e7eb; color: #111827; }
+      .quality-report-actions .qr-action-primary { background: #0b3f73; color: #ffffff; }
+      .quality-report-actions .qr-action-send { background: #f97316; color: #ffffff; }
     `;
     document.head.appendChild(style);
   }
