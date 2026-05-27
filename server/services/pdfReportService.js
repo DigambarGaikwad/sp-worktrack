@@ -20,12 +20,25 @@ async function generatePdfFromHtml(html = "", options = {}) {
 
   const browser = await puppeteer.launch({
     headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--allow-file-access-from-files"]
   });
 
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
+
+    await page.evaluate(async () => {
+      const images = Array.from(document.images || []);
+      await Promise.all(images.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          setTimeout(resolve, 1500);
+        });
+      }));
+      if (document.fonts?.ready) await document.fonts.ready;
+    });
 
     return await page.pdf({
       format: options.format || "A4",
