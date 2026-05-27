@@ -136,65 +136,33 @@
 <html>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#111827;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:16px 0;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="760" cellpadding="0" cellspacing="0" style="width:760px;max-width:760px;background:#ffffff;border:1px solid #111827;border-collapse:collapse;">
-          <tr>
-            <td style="background:#111827;color:#ffffff;padding:14px 16px;border-bottom:3px solid #0b3f73;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="color:#ffffff;font-size:22px;font-weight:800;line-height:1.1;">SP WorkTrack<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Production Management System</span></td>
-                  <td align="right" style="color:#ffffff;font-size:18px;font-weight:800;line-height:1.1;">Quality Checkpoint Report<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Planned + completed checkpoints</span></td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:14px 16px;">
-              <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:10px;">Status, result, done by and done date are captured from production entries.</div>
-
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:10px;">
-                <tr>
-                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine No</div><div style="${value}">${esc(data.machineNo)}</div></td>
-                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine Category</div><div style="${value}">${esc(data.machineCategory)}</div></td>
-                </tr>
-                <tr>
-                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Report Period</div><div style="${value}">${esc(period)}</div></td>
-                  <td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Generated On</div><div style="${value}">${esc(nowText())}</div></td>
-                </tr>
-              </table>
-
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:5px;margin-bottom:10px;">
-                <tr>
-                  <td style="border:1px solid #1d4ed8;padding:7px;"><span style="${label}">Total</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.total}</span></td>
-                  <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">Done</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.done}</span></td>
-                  <td style="border:1px solid #b45309;padding:7px;"><span style="${label}">Pending</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.pending}</span></td>
-                  <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.ok}</span></td>
-                  <td style="border:1px solid #b91c1c;padding:7px;"><span style="${label}">Not OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.notOk}</span></td>
-                </tr>
-              </table>
-
-              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #0b3f73;">
-                <thead>
-                  <tr><th style="${th};width:34px;">Sr</th><th style="${th}">Point</th><th style="${th}">Dept</th><th style="${th}">Sub Work</th><th style="${th}">Status</th><th style="${th}">Result</th><th style="${th}">Done By</th><th style="${th}">Done Date</th></tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-              </table>
-
-              <div style="margin-top:14px;border:1px solid #64748b;padding:10px;">
-                <div style="font-size:13px;font-weight:800;margin-bottom:8px;">Observations / Deviations / Remarks</div>
-                ${obs ? `<div style="font-size:12px;line-height:1.5;margin-bottom:8px;">${esc(obs).replace(/\n/g, "<br>")}</div>` : ""}
-                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
-                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
-                <div style="height:18px;border-bottom:1px solid #94a3b8;"></div>
-              </div>
-
-              <div style="font-size:11px;color:#64748b;margin-top:12px;">Generated from SP WorkTrack quality checkpoint data.</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+    <tr><td align="center">
+      <table role="presentation" width="760" cellpadding="0" cellspacing="0" style="width:760px;max-width:760px;background:#ffffff;border:1px solid #111827;border-collapse:collapse;">
+        <tr><td style="background:#111827;color:#ffffff;padding:14px 16px;border-bottom:3px solid #0b3f73;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="color:#ffffff;font-size:22px;font-weight:800;line-height:1.1;">SP WorkTrack<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Production Management System</span></td>
+            <td align="right" style="color:#ffffff;font-size:18px;font-weight:800;line-height:1.1;">Quality Checkpoint Report<br><span style="font-size:12px;font-weight:400;color:#e5e7eb;">Planned + completed checkpoints</span></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:14px 16px;">
+          <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:10px;">Status, result, done by and done date are captured from production entries.</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:10px;">
+            <tr><td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine No</div><div style="${value}">${esc(data.machineNo)}</div></td><td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Machine Category</div><div style="${value}">${esc(data.machineCategory)}</div></td></tr>
+            <tr><td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Report Period</div><div style="${value}">${esc(period)}</div></td><td width="50%" style="padding:7px;border:1px solid #94a3b8;border-left:4px solid #0b3f73;"><div style="${label}">Generated On</div><div style="${value}">${esc(nowText())}</div></td></tr>
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:5px;margin-bottom:10px;"><tr>
+            <td style="border:1px solid #1d4ed8;padding:7px;"><span style="${label}">Total</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.total}</span></td>
+            <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">Done</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.done}</span></td>
+            <td style="border:1px solid #b45309;padding:7px;"><span style="${label}">Pending</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.pending}</span></td>
+            <td style="border:1px solid #15803d;padding:7px;"><span style="${label}">OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.ok}</span></td>
+            <td style="border:1px solid #b91c1c;padding:7px;"><span style="${label}">Not OK</span><span style="float:right;font-size:18px;font-weight:800;">${data.summary.notOk}</span></td>
+          </tr></table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #0b3f73;"><thead><tr><th style="${th};width:34px;">Sr</th><th style="${th}">Point</th><th style="${th}">Dept</th><th style="${th}">Sub Work</th><th style="${th}">Status</th><th style="${th}">Result</th><th style="${th}">Done By</th><th style="${th}">Done Date</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+          <div style="margin-top:14px;border:1px solid #64748b;padding:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">Observations / Deviations / Remarks</div>${obs ? `<div style="font-size:12px;line-height:1.5;margin-bottom:8px;">${esc(obs).replace(/\n/g, "<br>")}</div>` : ""}<div style="height:18px;border-bottom:1px solid #94a3b8;"></div><div style="height:18px;border-bottom:1px solid #94a3b8;"></div><div style="height:18px;border-bottom:1px solid #94a3b8;"></div></div>
+          <div style="font-size:11px;color:#64748b;margin-top:12px;">Generated from SP WorkTrack quality checkpoint data.</div>
+        </td></tr>
+      </table>
+    </td></tr>
   </table>
 </body>
 </html>`;
@@ -207,24 +175,10 @@
     const rowsHtml = data.rows.map((r, index) => {
       const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
       return `
-        <tr>
-          <td class="sr">${index + 1}</td>
-          <td class="point">${esc(r.point || r.qualityPoint || "-")}</td>
-          <td>${esc(r.department || "-")}</td>
-          <td>${esc(r.subwork || r.subWork || "-")}</td>
-          <td>${badge(status, r.value)}</td>
-          <td>${esc(r.value || r.readingStatus || "-")}</td>
-          <td>${esc(r.empName || r.doneByName || r.empCode || "-")}</td>
-          <td>${esc(displayDate(r.workDate || r.doneDate))}</td>
-        </tr>`;
+        <tr><td class="sr">${index + 1}</td><td class="point">${esc(r.point || r.qualityPoint || "-")}</td><td>${esc(r.department || "-")}</td><td>${esc(r.subwork || r.subWork || "-")}</td><td>${badge(status, r.value)}</td><td>${esc(r.value || r.readingStatus || "-")}</td><td>${esc(r.empName || r.doneByName || r.empCode || "-")}</td><td>${esc(displayDate(r.workDate || r.doneDate))}</td></tr>`;
     }).join("") || `<tr><td colspan="8" class="empty-row">No quality checkpoint data available</td></tr>`;
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8" />
-<title>SP WorkTrack Quality Report</title>
-<style>
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>SP WorkTrack Quality Report</title><style>
   @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   body { margin:0; background:#ffffff; font-family:Arial, Helvetica, sans-serif; color:#111827; }
@@ -265,55 +219,8 @@
   .foot { padding:6px 14px 9px; color:#475569; font-size:8.2px; display:flex; justify-content:space-between; gap:8px; }
   .no-print { padding:8px 14px; display:flex; justify-content:flex-end; gap:8px; }
   .print-btn { border:1px solid #0b3f73; background:#ffffff !important; color:#0b3f73 !important; border-radius:6px; padding:7px 11px; font-weight:800; cursor:pointer; }
-  @media print {
-    body { background:#ffffff !important; }
-    .page { margin:0; max-width:none; box-shadow:none; border-radius:0; border:1px solid #111827; }
-    .no-print { display:none; }
-    .content { padding:8px 7px 7px; }
-    .app-head { padding:7px 8px; }
-    .meta-grid, .sum-grid { gap:4px; }
-    .meta-card { min-height:30px; padding:3px 5px; }
-    .value { font-size:10.5px; }
-    th, td { padding:3.4px 2.8px; }
-    .line { height:15px; }
-  }
-</style>
-</head>
-<body>
-  <div class="page">
-    <div class="app-head">
-      <div class="brand">
-        <img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" />
-        <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
-      </div>
-      <div><div class="header-report-title">Quality Checkpoint Report</div><div class="header-report-sub">Planned + completed checkpoints</div></div>
-    </div>
-    <div class="content">
-      <div class="subtitle">Status, result, done by and done date are captured from production entries.</div>
-      <div class="meta-grid">
-        <div class="meta-card"><div class="label">Machine No</div><div class="value">${esc(data.machineNo)}</div></div>
-        <div class="meta-card"><div class="label">Machine Category</div><div class="value">${esc(data.machineCategory)}</div></div>
-        <div class="meta-card"><div class="label">Report Period</div><div class="value">${esc(period)}</div></div>
-        <div class="meta-card"><div class="label">Generated On</div><div class="value">${esc(nowText())}</div></div>
-      </div>
-      <div class="sum-grid">
-        <div class="sum-card total"><span>Total</span><strong>${data.summary.total}</strong></div>
-        <div class="sum-card done"><span>Done</span><strong>${data.summary.done}</strong></div>
-        <div class="sum-card pending"><span>Pending</span><strong>${data.summary.pending}</strong></div>
-        <div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div>
-        <div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div>
-      </div>
-      <table>
-        <thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:19%;">Sub Work</th><th style="width:8%;">Status</th><th style="width:8%;">Result</th><th style="width:18%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      ${buildRuledLines()}
-    </div>
-    <div class="foot"><span>Generated from SP WorkTrack quality checkpoint data.</span><span>View-only report.</span></div>
-    <div class="no-print"><button class="print-btn" onclick="window.print()">Print / Save PDF</button></div>
-  </div>
-</body>
-</html>`;
+  @media print { body { background:#ffffff !important; } .page { margin:0; max-width:none; box-shadow:none; border-radius:0; border:1px solid #111827; } .no-print { display:none; } .content { padding:8px 7px 7px; } .app-head { padding:7px 8px; } .meta-grid, .sum-grid { gap:4px; } .meta-card { min-height:30px; padding:3px 5px; } .value { font-size:10.5px; } th, td { padding:3.4px 2.8px; } .line { height:15px; } }
+</style></head><body><div class="page"><div class="app-head"><div class="brand"><img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" /><div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div></div><div><div class="header-report-title">Quality Checkpoint Report</div><div class="header-report-sub">Planned + completed checkpoints</div></div></div><div class="content"><div class="subtitle">Status, result, done by and done date are captured from production entries.</div><div class="meta-grid"><div class="meta-card"><div class="label">Machine No</div><div class="value">${esc(data.machineNo)}</div></div><div class="meta-card"><div class="label">Machine Category</div><div class="value">${esc(data.machineCategory)}</div></div><div class="meta-card"><div class="label">Report Period</div><div class="value">${esc(period)}</div></div><div class="meta-card"><div class="label">Generated On</div><div class="value">${esc(nowText())}</div></div></div><div class="sum-grid"><div class="sum-card total"><span>Total</span><strong>${data.summary.total}</strong></div><div class="sum-card done"><span>Done</span><strong>${data.summary.done}</strong></div><div class="sum-card pending"><span>Pending</span><strong>${data.summary.pending}</strong></div><div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div><div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div></div><table><thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:19%;">Sub Work</th><th style="width:8%;">Status</th><th style="width:8%;">Result</th><th style="width:18%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead><tbody>${rowsHtml}</tbody></table>${buildRuledLines()}</div><div class="foot"><span>Generated from SP WorkTrack quality checkpoint data.</span><span>View-only report.</span></div><div class="no-print"><button class="print-btn" onclick="window.print()">Print / Save PDF</button></div></div></body></html>`;
   }
 
   function printQualityReport() {
@@ -336,6 +243,7 @@
   async function sendQualityReport() {
     const data = getReportData();
     const html = buildEmailReportHtml();
+    const pdfHtml = buildReportHtml();
     try {
       await requestJson("/api/email/quality-report/send", {
         method: "POST",
@@ -344,10 +252,11 @@
           machineNo: data.machineNo,
           machineCategory: data.machineCategory,
           period: `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`,
-          html
+          html,
+          pdfHtml
         })
       });
-      alert("Quality report email sent successfully.");
+      alert("Quality report email sent successfully with PDF attachment.");
     } catch (err) {
       alert("Send quality report failed: " + (err?.message || err));
     }
