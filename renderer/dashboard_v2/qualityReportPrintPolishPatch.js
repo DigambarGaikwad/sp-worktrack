@@ -17,6 +17,17 @@
     catch (err) { return ""; }
   }
 
+  function syncObservationFromField() {
+    const fieldValue = clean(document.getElementById("qualityReportObservationText")?.value || "");
+    if (fieldValue || document.getElementById("qualityReportObservationText")) {
+      observationText = fieldValue;
+      window.__SPWT_QUALITY_REPORT_OBSERVATION = fieldValue;
+    } else {
+      observationText = clean(window.__SPWT_QUALITY_REPORT_OBSERVATION || observationText || "");
+    }
+    return observationText;
+  }
+
   function getCurrentQualityRows() {
     try {
       const rawRows = latestMachineDetails?.raw?.qualityStatus;
@@ -61,7 +72,7 @@
     const data = getReportData();
     const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
     const logo = assetUrl("logo%20(2).png") || assetUrl("app.ico");
-    const obs = clean(observationText || window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
+    const obs = clean(syncObservationFromField());
     const rowsHtml = data.rows.map((r, index) => {
       const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
       return `
@@ -127,11 +138,7 @@
   .empty-row { text-align:center; color:#64748b; padding:14px; }
   .no-print { padding:8px 15px; display:flex; justify-content:flex-end; }
   .print-btn { border:0; border-radius:8px; background:#0b3f73; color:#fff; padding:8px 12px; font-weight:900; }
-  @media print {
-    body { background:#fff !important; }
-    .page { margin:0; max-width:none; box-shadow:none; border-radius:8px; }
-    .no-print { display:none; }
-  }
+  @media print { body { background:#fff !important; } .page { margin:0; max-width:none; box-shadow:none; border-radius:8px; } .no-print { display:none; } }
 </style>
 </head>
 <body>
@@ -148,13 +155,7 @@
         <div class="meta-card"><div class="label">Report Period</div><div class="value">${esc(period)}</div></div>
         <div class="meta-card"><div class="label">Generated On</div><div class="value">${esc(nowText())}</div></div>
       </div>
-      <div class="sum-grid">
-        <div class="sum-card total"><span>Total</span><strong>${data.summary.total}</strong></div>
-        <div class="sum-card done"><span>Done</span><strong>${data.summary.done}</strong></div>
-        <div class="sum-card pending"><span>Pending</span><strong>${data.summary.pending}</strong></div>
-        <div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div>
-        <div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div>
-      </div>
+      <div class="sum-grid"><div class="sum-card total"><span>Total</span><strong>${data.summary.total}</strong></div><div class="sum-card done"><span>Done</span><strong>${data.summary.done}</strong></div><div class="sum-card pending"><span>Pending</span><strong>${data.summary.pending}</strong></div><div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div><div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div></div>
       <table><thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:18%;">Sub Work</th><th style="width:10%;">Status</th><th style="width:9%;">Result</th><th style="width:16%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead><tbody>${rowsHtml}</tbody></table>
       <section class="obs-section"><div class="section-head">Observations / Deviations / Remarks</div>${obs ? `<div class="observation-text">${esc(obs).replace(/\n/g, "<br>")}</div>` : ""}<div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></section>
     </div>
@@ -166,6 +167,7 @@
   }
 
   function printPolishedReport() {
+    syncObservationFromField();
     const win = window.open("", "_blank", "width=850,height=900");
     if (!win) return alert("Popup blocked. Allow popups for SP WorkTrack.");
     win.document.open();
@@ -176,18 +178,17 @@
 
   function removeDownloadButton() { document.getElementById("downloadQualityReportBtn")?.remove(); }
 
+  window.SPWT_BUILD_QUALITY_REPORT_HTML = function () {
+    syncObservationFromField();
+    return buildPolishedPrintHtml();
+  };
+
   function interceptClicks(e) {
-    if (e.target?.closest?.("#downloadQualityReportBtn")) {
-      e.preventDefault(); e.stopImmediatePropagation(); removeDownloadButton(); return;
-    }
-    if (e.target?.closest?.("#printQualityReportBtn")) {
-      e.preventDefault(); e.stopImmediatePropagation(); printPolishedReport(); return;
-    }
-    // Add Observation is handled by dashboardButtonsPolishPatch.js to open inline field.
+    if (e.target?.closest?.("#downloadQualityReportBtn")) { e.preventDefault(); e.stopImmediatePropagation(); removeDownloadButton(); return; }
+    if (e.target?.closest?.("#printQualityReportBtn")) { e.preventDefault(); e.stopImmediatePropagation(); printPolishedReport(); return; }
   }
 
   function init() { removeDownloadButton(); }
-
   document.addEventListener("click", interceptClicks, true);
   document.addEventListener("DOMContentLoaded", () => setTimeout(init, 700));
   document.addEventListener("click", () => setTimeout(init, 150), true);
