@@ -1,5 +1,5 @@
 // renderer/backupControlsPatch.js
-// Adds Backup Controls tab in Admin screen.
+// Adds Backup to Google Sheet tab in Admin screen.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 120000;
@@ -64,7 +64,7 @@
       btn.className = "tab";
       btn.type = "button";
       btn.setAttribute("data-tab", "tabBackupControls");
-      btn.textContent = "Backup";
+      btn.textContent = "Backup to Google Sheet";
       const pinTab = tabs.querySelector('[data-tab="tabPin"]');
       if (pinTab) tabs.insertBefore(btn, pinTab);
       else tabs.appendChild(btn);
@@ -75,7 +75,7 @@
       page.className = "tab-page hidden";
       page.id = "tabBackupControls";
       page.innerHTML = `
-        <div class="section-title">Backup Controls</div>
+        <div class="section-title">Backup to Google Sheet</div>
         <div class="small-hint">Control Google Sheet backup and daily auto backup. Backend must be running for daily backup.</div>
 
         <div class="card admin-controls-card">
