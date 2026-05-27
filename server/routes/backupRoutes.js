@@ -2,7 +2,7 @@
 // SP WorkTrack DB Edition - Backup and Google Sheets sync routes.
 
 const express = require("express");
-const { getStatus, testConnection, syncToday } = require("../services/sheetsSyncService");
+const { getStatus, testConnection, syncToday, syncRange } = require("../services/sheetsSyncService");
 const {
   getBackupControls,
   saveBackupControls,
@@ -10,6 +10,15 @@ const {
 } = require("../services/backupControlService");
 
 const router = express.Router();
+
+async function ensureBackupAllowed(res) {
+  const controls = await getBackupControls();
+  if (controls.googleSheetBackupEnabled === false) {
+    res.status(400).json({ ok: false, message: "Google Sheet backup is disabled from Backup Controls." });
+    return null;
+  }
+  return controls;
+}
 
 router.get("/sheets/status", async (req, res) => {
   try {
@@ -63,10 +72,8 @@ router.post("/sheets/test", async (req, res) => {
 
 router.post("/sheets/sync-today", async (req, res) => {
   try {
-    const controls = await getBackupControls();
-    if (controls.googleSheetBackupEnabled === false) {
-      return res.status(400).json({ ok: false, message: "Google Sheet backup is disabled from Backup Controls." });
-    }
+    const controls = await ensureBackupAllowed(res);
+    if (!controls) return;
 
     const data = await syncToday(req.body || {});
     await saveBackupResult(data, {
@@ -74,17 +81,29 @@ router.post("/sheets/sync-today", async (req, res) => {
       workDate: req.body?.workDate || req.body?.date || data.workDate
     });
 
-    res.status(data.implemented === false ? 501 : 200).json({
-      ok: data.ok !== false,
-      data
-    });
+    res.status(data.implemented === false ? 501 : 200).json({ ok: data.ok !== false, data });
   } catch (err) {
     console.error("POST /api/backup/sheets/sync-today failed:", err);
-    res.status(err.status || 500).json({
-      ok: false,
-      message: err.message || "Google Sheets sync failed.",
-      details: err.details || null
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Google Sheets sync failed.", details: err.details || null });
+  }
+});
+
+router.post("/sheets/sync-range", async (req, res) => {
+  try {
+    const controls = await ensureBackupAllowed(res);
+    if (!controls) return;
+
+    const body = req.body || {};
+    const data = await syncRange(body);
+    await saveBackupResult(data, {
+      runType: body.runType || body.mode || "range",
+      workDate: data.workDate
     });
+
+    res.json({ ok: data.ok !== false, data });
+  } catch (err) {
+    console.error("POST /api/backup/sheets/sync-range failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Google Sheets range sync failed.", details: err.details || null });
   }
 });
 
