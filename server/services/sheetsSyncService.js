@@ -20,6 +20,11 @@ const ATTENDANCE_HEADERS = [
   "Productivity %", "Major Loss Reason", "Major Loss Remark", "Flexible Shift Minutes", "Source Entry No", "Synced At"
 ];
 
+const QUALITY_HEADERS = [
+  "Timestamp", "Work Date", "Machine", "Machine Category", "Department", "Sub Work", "Quality Point",
+  "Input Type", "Reading/Status", "Result", "Done By ID", "Done By Name", "Shift", "Status", "Source Entry No", "Synced At"
+];
+
 function clean(value) { return String(value ?? "").trim(); }
 function toNumber(value, defaultValue = 0) { const n = Number(value); return Number.isFinite(n) ? n : defaultValue; }
 function sameDate(a, b) { return clean(a).slice(0, 10) === clean(b).slice(0, 10); }
@@ -210,6 +215,34 @@ function buildAttendanceRows(entries, workDate, syncedAt) {
   });
 }
 
+function buildQualityRows(qualityLogs, entries, workDate, syncedAt) {
+  const headerByEntryNo = new Map();
+  entries.forEach((entry) => headerByEntryNo.set(clean(entry.entry_no), entry));
+
+  return qualityLogs.map((q) => {
+    const entryNo = clean(q.entry_no);
+    const header = headerByEntryNo.get(entryNo) || {};
+    return [
+      clean(q.created || header.created || syncedAt),
+      clean(q.work_date || header.work_date || workDate),
+      clean(q.machine_no),
+      clean(q.machine_category),
+      clean(q.department_name || q.department_code),
+      clean(q.subwork_name || q.subwork_code),
+      clean(q.point_name || q.point_code),
+      clean(q.input_type),
+      clean(q.value),
+      clean(q.status || "DONE"),
+      clean(q.emp_code || header.emp_code),
+      clean(q.emp_name || header.emp_name),
+      clean(header.shift_name || header.shift_code),
+      clean(header.status || "SUBMITTED"),
+      entryNo,
+      syncedAt
+    ];
+  });
+}
+
 async function testConnection() {
   const appsScriptResponse = await postToWebApp({
     action: "backupTest",
@@ -226,12 +259,16 @@ async function syncToday(options = {}) {
 
   const allEntries = await pbListAll("production_entries");
   const allLines = await pbListAll("production_entry_lines");
+  const allQualityLogs = await pbListAll("quality_logs");
+
   const entries = allEntries.filter((entry) => sameDate(entry.work_date, workDate) && clean(entry.status).toUpperCase() !== "CANCELLED");
   const validEntryNos = new Set(entries.map((entry) => clean(entry.entry_no)).filter(Boolean));
   const lines = allLines.filter((line) => sameDate(line.work_date, workDate) && (!validEntryNos.size || validEntryNos.has(clean(line.entry_no))));
+  const qualityLogs = allQualityLogs.filter((q) => sameDate(q.work_date, workDate) && (!validEntryNos.size || validEntryNos.has(clean(q.entry_no))));
 
   const logRows = buildLogRows(entries, lines, workDate, syncedAt);
   const attendanceRows = buildAttendanceRows(entries, workDate, syncedAt);
+  const qualityRows = buildQualityRows(qualityLogs, entries, workDate, syncedAt);
 
   await postToWebApp({ action: "ensureSheets" });
 
@@ -251,8 +288,16 @@ async function syncToday(options = {}) {
     uniqueKeyColumns: ["Source Entry No"]
   });
 
+  const qualityResult = await postToWebApp({
+    action: "appendRows",
+    sheetName: "QUALITY_LOG",
+    headers: QUALITY_HEADERS,
+    rows: qualityRows,
+    uniqueKeyColumns: ["Source Entry No", "Quality Point"]
+  });
+
   return {
-    ok: logResult?.ok !== false && attendanceResult?.ok !== false,
+    ok: logResult?.ok !== false && attendanceResult?.ok !== false && qualityResult?.ok !== false,
     implemented: true,
     workDate,
     sheets: {
@@ -267,16 +312,24 @@ async function syncToday(options = {}) {
         rowCount: attendanceRows.length,
         appended: attendanceResult?.appended ?? 0,
         skippedDuplicates: attendanceResult?.skippedDuplicates ?? 0
+      },
+      quality: {
+        sheetName: "QUALITY_LOG",
+        rowCount: qualityRows.length,
+        appended: qualityResult?.appended ?? 0,
+        skippedDuplicates: qualityResult?.skippedDuplicates ?? 0
       }
     },
     entryCount: entries.length,
     lineCount: lines.length,
+    qualityCount: qualityLogs.length,
     rowCount: logRows.length,
     appended: logResult?.appended ?? 0,
     skippedDuplicates: logResult?.skippedDuplicates ?? 0,
     appsScriptResponse: {
       log: logResult,
-      attendance: attendanceResult
+      attendance: attendanceResult,
+      quality: qualityResult
     }
   };
 }
