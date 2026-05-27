@@ -9,6 +9,7 @@ const COLLECTION = "admin_settings";
 const KEY = "quality_report_recipients_json";
 
 function clean(value) { return String(value ?? "").trim(); }
+function isValidEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(value)); }
 
 function safeJsonParse(value, fallback) {
   try {
@@ -78,14 +79,33 @@ async function saveQualityReportRecipients(raw = {}) {
   return data;
 }
 
+function getTargetEmails({ to = "", recipients = [] } = {}) {
+  const manualTo = clean(to);
+  const rawTargets = manualTo
+    ? manualTo.split(/[;,]/).map(clean).filter(Boolean)
+    : recipients.filter((r) => r.active && r.email).map((r) => clean(r.email));
+
+  const valid = [];
+  const invalid = [];
+  rawTargets.forEach((email) => {
+    if (isValidEmail(email)) valid.push(email);
+    else invalid.push(email);
+  });
+
+  return {
+    valid: Array.from(new Set(valid)),
+    invalid: Array.from(new Set(invalid))
+  };
+}
+
 async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "", pdfHtml = "" } = {}) {
   const recipientsData = await getQualityReportRecipients();
-  const activeRecipients = recipientsData.recipients.filter((r) => r.active && r.email);
-  const manualTo = clean(to);
-  const targets = manualTo ? manualTo.split(/[;,]/).map(clean).filter(Boolean) : activeRecipients.map((r) => r.email);
+  const targets = getTargetEmails({ to, recipients: recipientsData.recipients });
 
-  if (!targets.length) {
-    const err = new Error("No active quality report recipients found. Add recipients in Admin screen.");
+  if (!targets.valid.length) {
+    const err = new Error(targets.invalid.length
+      ? `No valid quality report recipient found. Invalid: ${targets.invalid.join(", ")}`
+      : "No active quality report recipients found. Add recipients in Admin screen.");
     err.status = 400;
     throw err;
   }
@@ -114,7 +134,7 @@ async function sendQualityReport({ machineNo = "", machineCategory = "", period 
     </div>
   `;
 
-  for (const email of targets) {
+  for (const email of targets.valid) {
     const result = await sendEmail({
       to: email,
       subject,
@@ -125,7 +145,7 @@ async function sendQualityReport({ machineNo = "", machineCategory = "", period 
     results.push({ email, ...result });
   }
 
-  return { sent: results.length, attachmentCount: attachments.length, results };
+  return { sent: results.length, attachmentCount: attachments.length, skippedInvalidRecipients: targets.invalid, results };
 }
 
 module.exports = {
