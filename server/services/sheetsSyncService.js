@@ -5,6 +5,7 @@ const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 const MODE = "google_apps_script";
 const TIMEOUT_MS = Number(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS || 15000);
+const MAX_RANGE_DAYS = Number(process.env.GOOGLE_SHEET_BACKUP_MAX_RANGE_DAYS || 370);
 
 const LOG_HEADERS = [
   "Timestamp", "Work Date", "Shift", "Shift Start", "Shift End", "Break Minutes", "Work Type",
@@ -51,6 +52,54 @@ function getYearFromDate(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(0, 4);
   const match = text.match(/(\d{4})/);
   return match ? match[1] : String(new Date().getFullYear());
+}
+
+function parseISODate(value, fieldName = "date") {
+  const text = clean(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const err = new Error(`Invalid ${fieldName}. Use YYYY-MM-DD format.`);
+    err.status = 400;
+    throw err;
+  }
+  const d = new Date(`${text}T00:00:00`);
+  if (Number.isNaN(d.getTime())) {
+    const err = new Error(`Invalid ${fieldName}.`);
+    err.status = 400;
+    throw err;
+  }
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date.getTime());
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function toISODate(date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function listDateRange(fromDate, toDate) {
+  const start = parseISODate(fromDate, "fromDate");
+  const end = parseISODate(toDate, "toDate");
+  if (start > end) {
+    const err = new Error("fromDate cannot be after toDate.");
+    err.status = 400;
+    throw err;
+  }
+
+  const out = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    out.push(toISODate(d));
+    if (out.length > MAX_RANGE_DAYS) {
+      const err = new Error(`Date range too large. Maximum ${MAX_RANGE_DAYS} days allowed.`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  return out;
 }
 
 function isEnabled() { return String(process.env.GOOGLE_SHEET_BACKUP_ENABLED || "false").toLowerCase() === "true"; }
@@ -285,4 +334,79 @@ async function syncToday(options = {}) {
   };
 }
 
-module.exports = { getStatus, testConnection, syncToday };
+function mergeSheetSummary(target, source) {
+  Object.keys(source || {}).forEach((key) => {
+    const src = source[key] || {};
+    const t = target[key] || { sheetName: src.sheetName || key, rowCount: 0, appended: 0, skippedDuplicates: 0, inserted: 0, updated: 0 };
+    t.sheetName = src.sheetName || t.sheetName || key;
+    t.rowCount += toNumber(src.rowCount, 0);
+    t.appended += toNumber(src.appended, 0);
+    t.skippedDuplicates += toNumber(src.skippedDuplicates, 0);
+    t.inserted += toNumber(src.inserted, 0);
+    t.updated += toNumber(src.updated, 0);
+    target[key] = t;
+  });
+}
+
+async function getFirstProductionEntryDate() {
+  const entries = await pbListAll("production_entries");
+  const dates = entries.map((x) => clean(x.work_date).slice(0, 10)).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+  return dates[0] || localDateISO();
+}
+
+async function syncRange(options = {}) {
+  const mode = clean(options.mode || "range");
+  const toDate = clean(options.toDate || options.endDate || options.workDate || options.date || localDateISO());
+  let fromDate = clean(options.fromDate || options.startDate || "");
+
+  if (!fromDate && mode === "till-date") {
+    fromDate = await getFirstProductionEntryDate();
+  }
+
+  if (!fromDate) {
+    const err = new Error("fromDate is required for date range sync.");
+    err.status = 400;
+    throw err;
+  }
+
+  const dates = listDateRange(fromDate, toDate);
+  const results = [];
+  const sheets = {};
+  let ok = true;
+  let entryCount = 0;
+  let lineCount = 0;
+  let qualityCount = 0;
+  let bookingLogCount = 0;
+  let bookingStatusCount = 0;
+
+  for (const workDate of dates) {
+    const result = await syncToday({ workDate, runType: options.runType || mode });
+    results.push({ workDate, ok: result.ok !== false, sheets: result.sheets });
+    if (result.ok === false) ok = false;
+    entryCount += toNumber(result.entryCount, 0);
+    lineCount += toNumber(result.lineCount, 0);
+    qualityCount += toNumber(result.qualityCount, 0);
+    bookingLogCount += toNumber(result.bookingLogCount, 0);
+    bookingStatusCount = Math.max(bookingStatusCount, toNumber(result.bookingStatusCount, 0));
+    mergeSheetSummary(sheets, result.sheets);
+  }
+
+  return {
+    ok,
+    implemented: true,
+    mode,
+    fromDate,
+    toDate,
+    dateCount: dates.length,
+    workDate: `${fromDate} to ${toDate}`,
+    sheets,
+    entryCount,
+    lineCount,
+    qualityCount,
+    bookingLogCount,
+    bookingStatusCount,
+    results
+  };
+}
+
+module.exports = { getStatus, testConnection, syncToday, syncRange };
