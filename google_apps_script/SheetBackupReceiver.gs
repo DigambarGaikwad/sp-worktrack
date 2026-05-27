@@ -55,6 +55,10 @@ function doPost(e) {
       return appendRows_(body);
     }
 
+    if (action === "upsertRows") {
+      return upsertRows_(body);
+    }
+
     if (action === "ensureSheets") {
       ensureBackupSheets_();
       return json_({ ok: true, message: "Backup sheets checked/created." });
@@ -66,6 +70,14 @@ function doPost(e) {
   }
 }
 
+function normalizeRows_(rows, width) {
+  return rows.map(function(row) {
+    row = Array.isArray(row) ? row.slice() : [row];
+    while (row.length < width) row.push("");
+    return row;
+  });
+}
+
 function appendRows_(body) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetName = String(body.sheetName || "").trim();
@@ -73,13 +85,8 @@ function appendRows_(body) {
   const headers = Array.isArray(body.headers) ? body.headers : [];
   const uniqueKeyColumns = Array.isArray(body.uniqueKeyColumns) ? body.uniqueKeyColumns : [];
 
-  if (!sheetName) {
-    return json_({ ok: false, error: "Missing sheetName." });
-  }
-
-  if (!rows.length) {
-    return json_({ ok: true, sheetName: sheetName, appended: 0, skippedDuplicates: 0, message: "No rows to append." });
-  }
+  if (!sheetName) return json_({ ok: false, error: "Missing sheetName." });
+  if (!rows.length) return json_({ ok: true, sheetName: sheetName, appended: 0, skippedDuplicates: 0, message: "No rows to append." });
 
   const sh = getOrCreateSheet_(ss, sheetName, headers);
   ensureHeaders_(sh, headers);
@@ -88,12 +95,7 @@ function appendRows_(body) {
     return Math.max(max, Array.isArray(row) ? row.length : 0);
   }, headers.length || 1);
 
-  const normalizedRows = rows.map(function(row) {
-    row = Array.isArray(row) ? row.slice() : [row];
-    while (row.length < width) row.push("");
-    return row;
-  });
-
+  const normalizedRows = normalizeRows_(rows, width);
   const duplicateSet = buildExistingKeySet_(sh, uniqueKeyColumns);
   const headerMap = getHeaderMap_(sh);
   const rowsToAppend = [];
@@ -113,16 +115,59 @@ function appendRows_(body) {
     sh.getRange(sh.getLastRow() + 1, 1, rowsToAppend.length, width).setValues(rowsToAppend);
   }
 
-  return json_({
-    ok: true,
-    sheetName: sheetName,
-    appended: rowsToAppend.length,
-    skippedDuplicates: skippedDuplicates,
-    lastRow: sh.getLastRow()
+  return json_({ ok: true, sheetName: sheetName, appended: rowsToAppend.length, skippedDuplicates: skippedDuplicates, lastRow: sh.getLastRow() });
+}
+
+function upsertRows_(body) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = String(body.sheetName || "").trim();
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const headers = Array.isArray(body.headers) ? body.headers : [];
+  const uniqueKeyColumns = Array.isArray(body.uniqueKeyColumns) ? body.uniqueKeyColumns : [];
+
+  if (!sheetName) return json_({ ok: false, error: "Missing sheetName." });
+  if (!uniqueKeyColumns.length) return json_({ ok: false, error: "Missing uniqueKeyColumns for upsertRows." });
+  if (!rows.length) return json_({ ok: true, sheetName: sheetName, inserted: 0, updated: 0, message: "No rows to upsert." });
+
+  const sh = getOrCreateSheet_(ss, sheetName, headers);
+  ensureHeaders_(sh, headers);
+
+  const width = rows.reduce(function(max, row) {
+    return Math.max(max, Array.isArray(row) ? row.length : 0);
+  }, Math.max(headers.length || 1, sh.getLastColumn() || 1));
+
+  const headerMap = getHeaderMap_(sh);
+  const existingRowMap = buildExistingRowMap_(sh, uniqueKeyColumns);
+  const normalizedRows = normalizeRows_(rows, width);
+
+  const rowsToAppend = [];
+  let updated = 0;
+
+  normalizedRows.forEach(function(row) {
+    const key = buildRowUniqueKey_(row, headerMap, uniqueKeyColumns);
+    if (key && existingRowMap[key]) {
+      sh.getRange(existingRowMap[key], 1, 1, width).setValues([row]);
+      updated += 1;
+      return;
+    }
+    rowsToAppend.push(row);
   });
+
+  if (rowsToAppend.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, rowsToAppend.length, width).setValues(rowsToAppend);
+  }
+
+  return json_({ ok: true, sheetName: sheetName, inserted: rowsToAppend.length, updated: updated, lastRow: sh.getLastRow() });
 }
 
 function buildExistingKeySet_(sh, uniqueKeyColumns) {
+  const out = {};
+  const rowMap = buildExistingRowMap_(sh, uniqueKeyColumns);
+  Object.keys(rowMap).forEach(function(key) { out[key] = true; });
+  return out;
+}
+
+function buildExistingRowMap_(sh, uniqueKeyColumns) {
   const out = {};
   if (!uniqueKeyColumns || !uniqueKeyColumns.length) return out;
   if (sh.getLastRow() < 2) return out;
@@ -130,9 +175,9 @@ function buildExistingKeySet_(sh, uniqueKeyColumns) {
   const headerMap = getHeaderMap_(sh);
   const values = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
 
-  values.forEach(function(row) {
+  values.forEach(function(row, index) {
     const key = buildRowUniqueKey_(row, headerMap, uniqueKeyColumns);
-    if (key) out[key] = true;
+    if (key) out[key] = index + 2;
   });
 
   return out;
@@ -180,9 +225,7 @@ function ensureBackupSheets_() {
 
 function getOrCreateSheet_(ss, sheetName, headers) {
   let sh = ss.getSheetByName(sheetName);
-  if (!sh) {
-    sh = ss.insertSheet(sheetName);
-  }
+  if (!sh) sh = ss.insertSheet(sheetName);
   ensureHeaders_(sh, headers || []);
   return sh;
 }
