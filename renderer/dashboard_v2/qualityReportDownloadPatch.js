@@ -1,28 +1,23 @@
 // renderer/dashboard_v2/qualityReportDownloadPatch.js
-// Adds Download Report button and sends/downloads rich PDF styled quality report.
+// Adds Download Report button and sends/downloads premium PDF styled quality report.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 60000;
   let observationText = "";
 
-  function apiBaseUrl() {
-    return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
-  }
-
+  function apiBaseUrl() { return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030"; }
   function clean(value) { return String(value ?? "").trim(); }
-  function esc(value) {
-    return clean(value).replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
-  }
+  function esc(value) { return clean(value).replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch])); }
   function displayDate(value) {
     const s = clean(value).slice(0, 10);
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? `${m[3]}/${m[2]}/${m[1]}` : s || "-";
   }
-  function nowText() {
-    return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  }
-  function safeFilePart(value) {
-    return clean(value || "Report").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "Report";
+  function nowText() { return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
+  function safeFilePart(value) { return clean(value || "Report").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "Report"; }
+  function assetUrl(fileName) {
+    try { return new URL(`../../assets/${fileName}`, window.location.href).href; }
+    catch (err) { return ""; }
   }
 
   function getCurrentQualityRows() {
@@ -62,13 +57,14 @@
     const label = s || "PENDING";
     const color = label.includes("NOT OK") ? "#b91c1c" : label === "PENDING" ? "#b45309" : "#15803d";
     const bg = label.includes("NOT OK") ? "#fee2e2" : label === "PENDING" ? "#fef3c7" : "#dcfce7";
-    return `<span class="badge" style="background:${bg};color:${color};">${esc(label)}</span>`;
+    return `<span class="badge" style="background:${bg};color:${color};border-color:${color};">${esc(label)}</span>`;
   }
 
   function buildRichPdfHtml() {
     const data = getReportData();
     const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
     const obs = clean(observationText || window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
+    const logo = assetUrl("logo%20(2).png") || assetUrl("app.ico");
     const rowsHtml = data.rows.map((r, index) => {
       const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
       return `
@@ -92,46 +88,55 @@
 <style>
   @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-  body { margin:0; background:#ffffff; font-family:Arial, Helvetica, sans-serif; color:#111827; }
-  .page { width:100%; max-width:820px; margin:0 auto; background:#fff; border:1px solid #111827; border-radius:8px; overflow:hidden; }
-  .app-head { background:#111827 !important; color:white !important; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:4px solid #0b3f73; }
-  .app-title { font-size:22px; font-weight:900; line-height:1; color:#fff !important; }
+  body { margin:0; background:#f1f5f9; font-family:Arial, Helvetica, sans-serif; color:#111827; }
+  .page { width:100%; max-width:820px; margin:0 auto; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.16); border:1px solid #d8e0ea; }
+  .app-head { background:#111827 !important; color:white !important; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:4px solid #0b3f73; border-radius:14px 14px 0 0; }
+  .brand { display:flex; align-items:center; gap:14px; min-width:0; }
+  .logo-img { width:104px; height:44px; object-fit:contain; background:#111827 !important; border-radius:6px; flex:0 0 auto; }
+  .app-title { font-size:22px; font-weight:900; line-height:1; color:#fff !important; letter-spacing:.2px; }
   .app-sub { font-size:12px; margin-top:4px; color:#e5e7eb !important; }
-  .report-title { font-size:16px; font-weight:900; text-align:right; color:#fff !important; }
+  .report-title { font-size:17px; font-weight:900; text-align:right; color:#fff !important; letter-spacing:.2px; }
   .report-sub { font-size:11px; margin-top:4px; color:#d1d5db !important; text-align:right; }
-  .content { padding:12px 16px 10px; }
-  .subtitle { color:#334155; font-size:11px; font-weight:800; margin-bottom:8px; }
-  .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:7px; }
-  .meta-card { border:1px solid #dbe3ee; border-left:4px solid #0b3f73; border-radius:8px; padding:7px 9px; background:#f8fafc !important; min-height:44px; }
+  .content { padding:14px 18px 12px; }
+  .subtitle { color:#334155; font-size:11px; font-weight:800; margin-bottom:10px; }
+  .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:8px; }
+  .meta-card { border:1px solid #dbe3ee; border-left:4px solid #0b3f73; border-radius:10px; padding:8px 10px; background:#f8fafc !important; min-height:48px; }
   .label { color:#64748b; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.35px; }
-  .value { color:#111827; font-size:13px; font-weight:900; margin-top:3px; }
-  .sum-grid { margin:10px 0; display:grid; grid-template-columns: repeat(5,1fr); gap:7px; }
-  .sum-card { border:1px solid #e5e7eb; border-radius:8px; padding:7px 8px; display:flex; align-items:center; justify-content:space-between; min-height:36px; }
+  .value { color:#111827; font-size:13.5px; font-weight:900; margin-top:4px; }
+  .sum-grid { margin:11px 0; display:grid; grid-template-columns: repeat(5,1fr); gap:8px; }
+  .sum-card { border:1px solid #e5e7eb; border-radius:10px; padding:8px 9px; display:flex; align-items:center; justify-content:space-between; min-height:40px; }
   .sum-card span { color:#475569; font-size:9px; font-weight:900; text-transform:uppercase; }
-  .sum-card strong { font-size:17px; color:#0f172a; }
+  .sum-card strong { font-size:18px; color:#0f172a; }
   .sum-card.total { background:#eff6ff !important; border-color:#bfdbfe; }
   .sum-card.done { background:#f0fdf4 !important; border-color:#bbf7d0; }
   .sum-card.pending { background:#fffbeb !important; border-color:#fde68a; }
   .sum-card.notok { background:#fef2f2 !important; border-color:#fecaca; }
-  table { width:100%; border-collapse:collapse; margin-top:7px; font-size:9.3px; table-layout:fixed; border:1.4px solid #0b3f73; }
-  th { background:#0b3f73 !important; color:white !important; border:1px solid #0b3f73 !important; padding:5px 3px; text-align:left; font-size:8.8px; }
-  td { border:1px solid #d1d5db; padding:4.5px 3px; vertical-align:top; word-break:break-word; line-height:1.2; }
+  table { width:100%; border-collapse:separate; border-spacing:0; margin-top:8px; font-size:9.3px; table-layout:fixed; border:1px solid #d1d5db; border-radius:10px; overflow:hidden; }
+  th { background:#0b3f73 !important; color:white !important; border-right:1px solid rgba(255,255,255,.25); padding:6px 4px; text-align:left; font-size:8.8px; }
+  th:first-child { border-top-left-radius:10px; }
+  th:last-child { border-top-right-radius:10px; border-right:0; }
+  td { border-right:1px solid #d1d5db; border-bottom:1px solid #d1d5db; padding:5px 4px; vertical-align:top; word-break:break-word; line-height:1.22; }
   tr:nth-child(even) td { background:#f8fafc !important; }
+  td:last-child { border-right:0; }
+  tbody tr:last-child td { border-bottom:0; }
   .sr { text-align:center; }
   .point { font-weight:800; }
-  .badge { display:inline-block; padding:2px 5px; border-radius:999px; font-weight:900; font-size:7.7px; white-space:nowrap; }
-  .obs-section { margin-top:10px; border:1.2px solid #cbd5e1; border-radius:8px; padding:8px 10px 10px; break-inside:avoid; }
-  .section-head { color:#0f172a; font-size:11.5px; font-weight:900; margin-bottom:6px; }
+  .badge { display:inline-block; padding:2.5px 6px; border-radius:999px; border:1px solid; font-weight:900; font-size:7.7px; white-space:nowrap; }
+  .obs-section { margin-top:12px; border:1.2px solid #dbe3ee; border-radius:10px; padding:9px 12px 12px; break-inside:avoid; background:#ffffff !important; }
+  .section-head { color:#0f172a; font-size:12px; font-weight:900; margin-bottom:6px; }
   .observation-text { font-size:10px; line-height:1.4; padding:3px 0 6px; }
-  .line { height:17px; border-bottom:1px solid #94a3b8; }
-  .foot { padding:7px 16px 10px; color:#64748b; font-size:8.7px; display:flex; justify-content:space-between; }
+  .line { height:18px; border-bottom:1px solid #94a3b8; }
+  .foot { padding:8px 18px 12px; color:#64748b; font-size:8.7px; display:flex; justify-content:space-between; }
   .empty-row { text-align:center; color:#64748b; padding:14px; }
 </style>
 </head>
 <body>
   <div class="page">
     <div class="app-head">
-      <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
+      <div class="brand">
+        <img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" />
+        <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
+      </div>
       <div><div class="report-title">Quality Checkpoint Report</div><div class="report-sub">Planned + completed checkpoints</div></div>
     </div>
     <div class="content">
@@ -236,18 +241,6 @@
     sendRichPdfQualityReport();
   }
 
-  function patchObservationStorage() {
-    const btn = document.getElementById("addQualityObservationBtn");
-    if (!btn || btn.__qrObsPatched) return;
-    btn.__qrObsPatched = true;
-    btn.addEventListener("click", () => {
-      setTimeout(() => {
-        // Existing prompt stores internally in the first patch. This keeps new patch synced if user uses our later download/send.
-        if (typeof window.__SPWT_QUALITY_REPORT_OBSERVATION !== "string") window.__SPWT_QUALITY_REPORT_OBSERVATION = "";
-      }, 100);
-    }, true);
-  }
-
   function addStyles() {
     if (document.getElementById("qualityReportDownloadButtonStyles")) return;
     const style = document.createElement("style");
@@ -259,7 +252,6 @@
   function init() {
     addStyles();
     wireDownloadButton();
-    patchObservationStorage();
   }
 
   document.addEventListener("click", interceptSendClick, true);
