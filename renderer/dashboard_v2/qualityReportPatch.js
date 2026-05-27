@@ -253,20 +253,70 @@
     }
   }
 
+  function addQualityReportButtonStyles() {
+    if (document.getElementById("qualityReportButtonStyles")) return;
+    const style = document.createElement("style");
+    style.id = "qualityReportButtonStyles";
+    style.textContent = `
+      .quality-report-actions {
+        align-items: center;
+        justify-content: flex-end;
+        margin-left: auto;
+      }
+      .quality-report-actions .qr-action-btn {
+        border: 0;
+        border-radius: 10px;
+        padding: 7px 11px;
+        min-height: 32px;
+        font-size: 12px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: .1px;
+        cursor: pointer;
+        transition: transform .14s ease, box-shadow .14s ease, opacity .14s ease;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, .08);
+        white-space: nowrap;
+      }
+      .quality-report-actions .qr-action-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(15, 23, 42, .13);
+      }
+      .quality-report-actions .qr-action-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 5px 10px rgba(15, 23, 42, .10);
+      }
+      .quality-report-actions .qr-action-secondary {
+        background: #e5e7eb;
+        color: #111827;
+      }
+      .quality-report-actions .qr-action-primary {
+        background: #0b3f73;
+        color: #ffffff;
+      }
+      .quality-report-actions .qr-action-send {
+        background: #f97316;
+        color: #ffffff;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function addButtons() {
     const heads = Array.from(document.querySelectorAll(".panel-head"));
     const target = heads.find(h => clean(h.querySelector("h2")?.textContent) === "Quality Point Checklist");
     if (!target || target.querySelector("#printQualityReportBtn")) return;
 
+    addQualityReportButtonStyles();
+
     const actions = document.createElement("div");
     actions.className = "quality-report-actions";
     actions.style.display = "flex";
-    actions.style.gap = "8px";
+    actions.style.gap = "6px";
     actions.style.flexWrap = "wrap";
     actions.innerHTML = `
-      <button class="dash-btn" id="addQualityObservationBtn" type="button">Add Observation</button>
-      <button class="dash-btn primary" id="printQualityReportBtn" type="button">Print Quality Report</button>
-      <button class="dash-btn" id="sendQualityReportBtn" type="button">Send Quality Report</button>
+      <button class="qr-action-btn qr-action-secondary" id="addQualityObservationBtn" type="button">Add Observation</button>
+      <button class="qr-action-btn qr-action-primary" id="printQualityReportBtn" type="button">Print Quality Report</button>
+      <button class="qr-action-btn qr-action-send" id="sendQualityReportBtn" type="button">Send Quality Report</button>
     `;
     target.appendChild(actions);
     document.getElementById("addQualityObservationBtn")?.addEventListener("click", addObservation);
