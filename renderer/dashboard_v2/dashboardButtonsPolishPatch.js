@@ -3,6 +3,7 @@
 
 (function () {
   const REQUEST_TIMEOUT_MS = 20000;
+  const LS_PREFIX = "spwt_quality_observation_";
   let lastSavedObservation = "";
   let loadedMachineNo = "";
 
@@ -14,6 +15,15 @@
     } catch (err) {
       return "";
     }
+  }
+  function storageKey(machineNo) { return LS_PREFIX + clean(machineNo).toUpperCase(); }
+  function saveLocalObservation(machineNo, observation) {
+    if (!machineNo) return;
+    try { localStorage.setItem(storageKey(machineNo), clean(observation)); } catch (err) {}
+  }
+  function loadLocalObservation(machineNo) {
+    if (!machineNo) return "";
+    try { return clean(localStorage.getItem(storageKey(machineNo)) || ""); } catch (err) { return ""; }
   }
 
   async function requestJson(path, options = {}) {
@@ -193,6 +203,13 @@
     return clean(payload.data?.observation || "");
   }
 
+  function syncObservationState(machineNo, observation) {
+    lastSavedObservation = clean(observation);
+    loadedMachineNo = clean(machineNo);
+    window.__SPWT_QUALITY_REPORT_OBSERVATION = lastSavedObservation;
+    saveLocalObservation(machineNo, lastSavedObservation);
+  }
+
   function wireObservationButtons() {
     const textarea = document.getElementById("qualityReportObservationText");
     const saveBtn = document.getElementById("saveQualityObservationBtn");
@@ -206,26 +223,45 @@
         setStatus("Select machine first.", "error");
         return;
       }
+      const typedObservation = clean(textarea.value);
+      syncObservationState(machineNo, typedObservation);
       try {
         saveBtn.disabled = true;
         setStatus("Saving observation...");
-        lastSavedObservation = await saveObservationToDb(machineNo, clean(textarea.value));
-        loadedMachineNo = machineNo;
-        window.__SPWT_QUALITY_REPORT_OBSERVATION = lastSavedObservation;
-        setStatus(lastSavedObservation ? "Observation saved to DB." : "Observation cleared in DB.");
+        const saved = await saveObservationToDb(machineNo, typedObservation);
+        syncObservationState(machineNo, saved);
+        textarea.value = saved;
+        setStatus(saved ? "Observation saved to DB." : "Observation cleared in DB.");
         setTimeout(() => setStatus(""), 2500);
       } catch (err) {
-        setStatus("Save failed: " + (err?.message || err), "error");
+        setStatus("DB save failed. Local copy kept: " + (err?.message || err), "error");
       } finally {
         saveBtn.disabled = false;
       }
     });
 
-    clearBtn.addEventListener("click", async () => {
+    clearBtn.addEventListener("click", () => {
       textarea.value = "";
+      const machineNo = getMachineNo();
+      if (machineNo) syncObservationState(machineNo, "");
       textarea.focus();
       setStatus("Click Save Observation to clear in DB.");
     });
+  }
+
+  async function loadAndShowObservation(machineNo, textarea) {
+    const localValue = loadLocalObservation(machineNo);
+    if (localValue) {
+      syncObservationState(machineNo, localValue);
+      textarea.value = localValue;
+    }
+
+    setStatus("Loading saved observation...");
+    const dbValue = await loadObservationFromDb(machineNo);
+    syncObservationState(machineNo, dbValue || localValue);
+    textarea.value = window.__SPWT_QUALITY_REPORT_OBSERVATION || "";
+    setStatus(textarea.value ? "Saved observation loaded." : "No saved observation for this machine.");
+    setTimeout(() => setStatus(""), 2000);
   }
 
   async function openObservationBox() {
@@ -239,21 +275,35 @@
     box.classList.add("open");
     if (machineLine) machineLine.textContent = machineNo ? `Machine: ${machineNo}` : "Select machine first";
 
+    if (!machineNo || machineNo.toLowerCase() === "select machine") {
+      setStatus("Select machine first.", "error");
+      setTimeout(() => textarea.focus(), 80);
+      return;
+    }
+
+    textarea.value = loadLocalObservation(machineNo) || window.__SPWT_QUALITY_REPORT_OBSERVATION || lastSavedObservation || textarea.value || "";
+
     try {
-      if (machineNo && machineNo !== loadedMachineNo) {
-        setStatus("Loading saved observation...");
-        lastSavedObservation = await loadObservationFromDb(machineNo);
-        loadedMachineNo = machineNo;
-        window.__SPWT_QUALITY_REPORT_OBSERVATION = lastSavedObservation;
-        setStatus(lastSavedObservation ? "Saved observation loaded." : "No saved observation for this machine.");
-        setTimeout(() => setStatus(""), 2000);
-      }
-      textarea.value = window.__SPWT_QUALITY_REPORT_OBSERVATION || lastSavedObservation || "";
+      await loadAndShowObservation(machineNo, textarea);
     } catch (err) {
-      setStatus("Load failed: " + (err?.message || err), "error");
+      setStatus("DB load failed. Showing local copy.", "error");
+      const localValue = loadLocalObservation(machineNo);
+      syncObservationState(machineNo, localValue || textarea.value || "");
+      textarea.value = window.__SPWT_QUALITY_REPORT_OBSERVATION || "";
     }
 
     setTimeout(() => textarea.focus(), 80);
+  }
+
+  function refreshOpenObservationBox() {
+    const box = document.getElementById("qualityReportObservationBox");
+    if (!box?.classList?.contains("open")) return;
+    const textarea = document.getElementById("qualityReportObservationText");
+    const machineNo = getMachineNo();
+    if (textarea && machineNo) {
+      const value = loadLocalObservation(machineNo) || window.__SPWT_QUALITY_REPORT_OBSERVATION || lastSavedObservation || textarea.value || "";
+      textarea.value = value;
+    }
   }
 
   function interceptObservationButton(e) {
@@ -266,6 +316,7 @@
   function init() {
     addButtonStyles();
     ensureObservationBox();
+    refreshOpenObservationBox();
   }
 
   document.addEventListener("click", interceptObservationButton, true);
