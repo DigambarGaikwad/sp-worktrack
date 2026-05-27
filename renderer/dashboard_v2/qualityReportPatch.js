@@ -23,7 +23,7 @@
   }
   function assetUrl(fileName) {
     try {
-      return new URL(`../assets/${fileName}`, window.location.href).href;
+      return new URL(`../../assets/${fileName}`, window.location.href).href;
     } catch (err) {
       return "";
     }
@@ -94,13 +94,16 @@
         <div class="line"></div>
         <div class="line"></div>
         <div class="line"></div>
+        <div class="line"></div>
+        <div class="line"></div>
+        <div class="line"></div>
       </section>`;
   }
 
   function buildReportHtml() {
     const data = getReportData();
     const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
-    const logo = assetUrl("logo (2).png") || assetUrl("app.ico");
+    const logo = assetUrl("logo%20(2).png") || assetUrl("app.ico");
     const rowsHtml = data.rows.map((r, index) => {
       const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
       return `
@@ -122,55 +125,55 @@
 <meta charset="UTF-8" />
 <title>SP WorkTrack Quality Report</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm; }
+  @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing: border-box; }
   body { margin:0; background:#eef2f7; font-family:Arial, Helvetica, sans-serif; color:#111827; }
-  .page { max-width: 1180px; margin: 16px auto; background:white; border-radius:14px; overflow:hidden; box-shadow:0 8px 28px rgba(15,23,42,.16); }
-  .app-head { background:#111827; color:white; padding:16px 26px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
-  .brand { display:flex; align-items:center; gap:18px; }
-  .logo-img { width:112px; height:48px; object-fit:contain; background:#0f172a; border-radius:4px; }
-  .app-title { font-size:25px; font-weight:800; line-height:1; letter-spacing:.2px; }
-  .app-sub { font-size:14px; margin-top:5px; opacity:.92; }
-  .report-chip { border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:8px 13px; font-size:12px; color:#e5e7eb; white-space:nowrap; }
-  .content { padding:22px 26px 18px; }
-  .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:14px; margin-bottom:12px; }
-  .report-title { font-size:26px; font-weight:800; margin:0 0 4px; letter-spacing:.4px; }
-  .subtitle { color:#64748b; font-size:13px; font-weight:700; }
-  .meta-grid { display:grid; grid-template-columns: 1.05fr 1.25fr 1.25fr 1.15fr; gap:10px; margin-top:12px; }
-  .meta-card { border:1px solid #e5e7eb; border-left:4px solid #0b3f73; border-radius:10px; padding:10px 12px; background:#f8fafc; min-height:64px; }
-  .label { color:#64748b; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; }
-  .value { color:#111827; font-size:17px; font-weight:800; margin-top:6px; }
-  .sum-grid { margin:14px 0 14px; display:grid; grid-template-columns: repeat(5,1fr); gap:10px; }
-  .sum-card { border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff; display:flex; align-items:center; justify-content:space-between; min-height:52px; }
-  .sum-card strong { font-size:23px; color:#0f172a; }
-  .sum-card span { color:#64748b; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.35px; }
+  .page { max-width: 820px; margin: 12px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.14); }
+  .app-head { background:#111827; color:white; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  .logo-img { width:92px; height:40px; object-fit:contain; background:#0f172a; border-radius:4px; flex:0 0 auto; }
+  .app-title { font-size:20px; font-weight:800; line-height:1; letter-spacing:.15px; }
+  .app-sub { font-size:12px; margin-top:4px; opacity:.92; }
+  .header-report-title { font-size:15px; font-weight:800; text-align:right; letter-spacing:.2px; white-space:nowrap; }
+  .header-report-sub { font-size:10.5px; color:#cbd5e1; margin-top:4px; text-align:right; }
+  .content { padding:16px 18px 12px; }
+  .subtitle { color:#64748b; font-size:11.2px; font-weight:700; margin-bottom:10px; }
+  .meta-grid { display:grid; grid-template-columns: 1fr 1.35fr; gap:8px; margin-top:8px; }
+  .meta-card { border:1px solid #e5e7eb; border-left:3px solid #0b3f73; border-radius:8px; padding:7px 9px; background:#f8fafc; min-height:46px; }
+  .label { color:#64748b; font-size:9.8px; font-weight:800; text-transform:uppercase; letter-spacing:.32px; }
+  .value { color:#111827; font-size:13px; font-weight:800; margin-top:4px; line-height:1.2; }
+  .sum-grid { margin:10px 0 10px; display:grid; grid-template-columns: repeat(5,1fr); gap:7px; }
+  .sum-card { border:1px solid #e5e7eb; border-radius:8px; padding:7px 8px; background:#fff; display:flex; align-items:center; justify-content:space-between; min-height:38px; }
+  .sum-card strong { font-size:18px; color:#0f172a; }
+  .sum-card span { color:#64748b; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.25px; }
   .sum-card.total { background:#eff6ff; border-color:#bfdbfe; }
   .sum-card.done { background:#f0fdf4; border-color:#bbf7d0; }
   .sum-card.pending { background:#fffbeb; border-color:#fde68a; }
   .sum-card.notok { background:#fef2f2; border-color:#fecaca; }
-  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:11.3px; table-layout:fixed; }
-  th { background:#0b3f73; color:white; padding:8px 7px; text-align:left; font-size:11px; letter-spacing:.2px; }
-  td { border:1px solid #e5e7eb; padding:7px; vertical-align:top; word-break:break-word; }
+  table { width:100%; border-collapse:collapse; margin-top:7px; font-size:9.4px; table-layout:fixed; }
+  th { background:#0b3f73; color:white; padding:5.5px 4px; text-align:left; font-size:9.2px; letter-spacing:.1px; }
+  td { border:1px solid #e5e7eb; padding:5px 4px; vertical-align:top; word-break:break-word; line-height:1.25; }
   tr:nth-child(even) td { background:#f8fafc; }
-  .sr { width:38px; text-align:center; }
+  .sr { text-align:center; }
   .point { font-weight:700; }
-  .badge { display:inline-block; padding:4px 9px; border-radius:999px; font-weight:800; font-size:10.5px; white-space:nowrap; }
-  .empty-row { text-align:center; color:#64748b; padding:18px; }
-  .obs-section { margin-top:16px; border:1px solid #dbe3ee; border-radius:10px; padding:10px 12px 12px; break-inside:avoid; }
-  .section-head { color:#0f172a; font-size:13px; font-weight:800; margin-bottom:8px; }
-  .observation-text { font-size:12px; color:#111827; padding:6px 0 8px; line-height:1.45; }
-  .line { height:24px; border-bottom:1px solid #cbd5e1; }
-  .foot { padding:10px 26px 16px; color:#64748b; font-size:10.5px; display:flex; justify-content:space-between; gap:14px; }
-  .no-print { padding:10px 26px; display:flex; justify-content:flex-end; gap:8px; }
-  .print-btn { border:0; background:#0b3f73; color:white; border-radius:8px; padding:9px 14px; font-weight:800; cursor:pointer; }
+  .badge { display:inline-block; padding:2.5px 5px; border-radius:999px; font-weight:800; font-size:8.4px; white-space:nowrap; }
+  .empty-row { text-align:center; color:#64748b; padding:14px; }
+  .obs-section { margin-top:12px; border:1px solid #dbe3ee; border-radius:8px; padding:8px 10px 10px; break-inside:avoid; }
+  .section-head { color:#0f172a; font-size:11.5px; font-weight:800; margin-bottom:5px; }
+  .observation-text { font-size:10.5px; color:#111827; padding:4px 0 6px; line-height:1.35; }
+  .line { height:18px; border-bottom:1px solid #cbd5e1; }
+  .foot { padding:8px 18px 12px; color:#64748b; font-size:9.2px; display:flex; justify-content:space-between; gap:10px; }
+  .no-print { padding:8px 18px; display:flex; justify-content:flex-end; gap:8px; }
+  .print-btn { border:0; background:#0b3f73; color:white; border-radius:7px; padding:8px 12px; font-weight:800; cursor:pointer; }
   @media print {
     body { background:white; }
     .page { margin:0; max-width:none; box-shadow:none; border-radius:0; }
     .no-print { display:none; }
-    .content { padding:16px 18px 10px; }
-    .app-head { padding:13px 18px; }
-    .meta-grid, .sum-grid { gap:7px; }
-    th, td { padding:5.5px; }
+    .content { padding:12px 10px 8px; }
+    .app-head { padding:10px 12px; }
+    .meta-grid, .sum-grid { gap:5px; }
+    th, td { padding:4px 3.5px; }
+    .line { height:17px; }
   }
 </style>
 </head>
@@ -181,12 +184,10 @@
         <img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" />
         <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
       </div>
-      <div class="report-chip">Quality Report</div>
+      <div><div class="header-report-title">Quality Checkpoint Report</div><div class="header-report-sub">Planned + completed checkpoints</div></div>
     </div>
     <div class="content">
-      <div class="title-row">
-        <div><h1 class="report-title">Quality Checkpoint Report</h1><div class="subtitle">Planned + completed quality checkpoints with status, result and responsible person</div></div>
-      </div>
+      <div class="subtitle">Status, result, done by and done date are captured from production entries.</div>
       <div class="meta-grid">
         <div class="meta-card"><div class="label">Machine No</div><div class="value">${esc(data.machineNo)}</div></div>
         <div class="meta-card"><div class="label">Machine Category</div><div class="value">${esc(data.machineCategory)}</div></div>
@@ -194,19 +195,19 @@
         <div class="meta-card"><div class="label">Generated On</div><div class="value">${esc(nowText())}</div></div>
       </div>
       <div class="sum-grid">
-        <div class="sum-card total"><span>Total Points</span><strong>${data.summary.total}</strong></div>
+        <div class="sum-card total"><span>Total</span><strong>${data.summary.total}</strong></div>
         <div class="sum-card done"><span>Done</span><strong>${data.summary.done}</strong></div>
         <div class="sum-card pending"><span>Pending</span><strong>${data.summary.pending}</strong></div>
         <div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div>
         <div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div>
       </div>
       <table>
-        <thead><tr><th style="width:38px;">Sr</th><th style="width:18%;">Point</th><th style="width:14%;">Dept</th><th style="width:18%;">Sub Work</th><th style="width:10%;">Status</th><th style="width:14%;">Result / Reading</th><th style="width:16%;">Done By</th><th style="width:10%;">Done Date</th></tr></thead>
+        <thead><tr><th style="width:28px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:18%;">Sub Work</th><th style="width:9%;">Status</th><th style="width:10%;">Result</th><th style="width:16%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
       ${buildRuledLines()}
     </div>
-    <div class="foot"><span>Generated from SP WorkTrack quality checkpoint data.</span><span>Status, result, done by and done date are captured from production entries.</span></div>
+    <div class="foot"><span>Generated from SP WorkTrack quality checkpoint data.</span><span>View-only report.</span></div>
     <div class="no-print"><button class="print-btn" onclick="window.print()">Print / Save PDF</button></div>
   </div>
 </body>
@@ -215,7 +216,7 @@
 
   function printQualityReport() {
     const html = buildReportHtml();
-    const win = window.open("", "_blank", "width=1200,height=850");
+    const win = window.open("", "_blank", "width=850,height=900");
     if (!win) return alert("Popup blocked. Allow popups for SP WorkTrack.");
     win.document.open();
     win.document.write(html);
