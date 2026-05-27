@@ -6,6 +6,8 @@ const { getEmailStatus, sendTestEmail } = require("../services/emailService");
 const {
   getQualityReportRecipients,
   saveQualityReportRecipients,
+  getQualityReportObservation,
+  saveQualityReportObservation,
   sendQualityReport
 } = require("../services/qualityReportEmailService");
 const { generatePdfFromHtml } = require("../services/pdfReportService");
@@ -54,6 +56,26 @@ router.post("/quality-report/recipients", async (req, res) => {
   } catch (err) {
     console.error("POST /api/email/quality-report/recipients failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save quality report recipients.", details: err.details || null });
+  }
+});
+
+router.get("/quality-report/observation", async (req, res) => {
+  try {
+    const data = await getQualityReportObservation(req.query?.machineNo || "");
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/email/quality-report/observation failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load quality report observation.", details: err.details || null });
+  }
+});
+
+router.post("/quality-report/observation", async (req, res) => {
+  try {
+    const data = await saveQualityReportObservation(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/email/quality-report/observation failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save quality report observation.", details: err.details || null });
   }
 });
 
