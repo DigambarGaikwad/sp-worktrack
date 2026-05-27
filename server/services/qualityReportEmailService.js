@@ -38,11 +38,13 @@ async function findSettingRecord() {
 }
 
 function normalizeRecipient(r = {}, index = 0) {
+  const type = clean(r.type || r.recipientType || "to").toLowerCase() === "cc" ? "cc" : "to";
   return {
     id: clean(r.id || `R${index + 1}`),
     name: clean(r.name || r.recipientName),
     email: clean(r.email || r.emailId),
     role: clean(r.role || r.department || r.designation),
+    type,
     active: r.active !== false
   };
 }
@@ -79,39 +81,45 @@ async function saveQualityReportRecipients(raw = {}) {
   return data;
 }
 
-function getTargetEmails({ to = "", recipients = [] } = {}) {
-  const manualTo = clean(to);
-  const rawTargets = manualTo
-    ? manualTo.split(/[;,]/).map(clean).filter(Boolean)
-    : recipients.filter((r) => r.active && r.email).map((r) => clean(r.email));
+function splitManualEmails(value = "") {
+  return clean(value).split(/[;,]/).map(clean).filter(Boolean);
+}
 
-  const valid = [];
+function buildTargets({ to = "", cc = "", recipients = [] } = {}) {
+  const active = recipients.filter((r) => r.active && r.email);
+  const rawTo = clean(to) ? splitManualEmails(to) : active.filter((r) => r.type !== "cc").map((r) => clean(r.email));
+  const rawCc = clean(cc) ? splitManualEmails(cc) : active.filter((r) => r.type === "cc").map((r) => clean(r.email));
+
   const invalid = [];
-  rawTargets.forEach((email) => {
-    if (isValidEmail(email)) valid.push(email);
-    else invalid.push(email);
-  });
+  const validTo = [];
+  const validCc = [];
+
+  rawTo.forEach((email) => isValidEmail(email) ? validTo.push(email) : invalid.push(email));
+  rawCc.forEach((email) => isValidEmail(email) ? validCc.push(email) : invalid.push(email));
+
+  const toSet = new Set(validTo.map((e) => e.toLowerCase()));
+  const ccFiltered = validCc.filter((email) => !toSet.has(email.toLowerCase()));
 
   return {
-    valid: Array.from(new Set(valid)),
+    to: Array.from(new Set(validTo)),
+    cc: Array.from(new Set(ccFiltered)),
     invalid: Array.from(new Set(invalid))
   };
 }
 
-async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "", pdfHtml = "" } = {}) {
+async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "", cc = "", pdfHtml = "" } = {}) {
   const recipientsData = await getQualityReportRecipients();
-  const targets = getTargetEmails({ to, recipients: recipientsData.recipients });
+  const targets = buildTargets({ to, cc, recipients: recipientsData.recipients });
 
-  if (!targets.valid.length) {
+  if (!targets.to.length) {
     const err = new Error(targets.invalid.length
-      ? `No valid quality report recipient found. Invalid: ${targets.invalid.join(", ")}`
-      : "No active quality report recipients found. Add recipients in Admin screen.");
+      ? `No valid main recipient found. Invalid: ${targets.invalid.join(", ")}`
+      : "No active main recipient found. Add at least one Main Recipient in Admin screen.");
     err.status = 400;
     throw err;
   }
 
   const subject = `SP WorkTrack Quality Report - ${clean(machineNo) || "Machine"}${period ? " - " + period : ""}`;
-  const results = [];
   const attachments = [];
 
   if (clean(pdfHtml || html)) {
@@ -134,18 +142,23 @@ async function sendQualityReport({ machineNo = "", machineCategory = "", period 
     </div>
   `;
 
-  for (const email of targets.valid) {
-    const result = await sendEmail({
-      to: email,
-      subject,
-      text: bodyText,
-      html: bodyHtml,
-      attachments
-    });
-    results.push({ email, ...result });
-  }
+  const result = await sendEmail({
+    to: targets.to.join(", "),
+    cc: targets.cc.join(", "),
+    subject,
+    text: bodyText,
+    html: bodyHtml,
+    attachments
+  });
 
-  return { sent: results.length, attachmentCount: attachments.length, skippedInvalidRecipients: targets.invalid, results };
+  return {
+    sent: result.accepted?.length || targets.to.length,
+    mainRecipients: targets.to,
+    ccRecipients: targets.cc,
+    attachmentCount: attachments.length,
+    skippedInvalidRecipients: targets.invalid,
+    results: [{ email: targets.to.join(", "), cc: targets.cc.join(", "), ...result }]
+  };
 }
 
 module.exports = {
