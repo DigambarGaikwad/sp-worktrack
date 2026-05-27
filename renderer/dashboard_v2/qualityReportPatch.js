@@ -126,54 +126,56 @@
 <title>SP WorkTrack Quality Report</title>
 <style>
   @page { size: A4 portrait; margin: 8mm; }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   body { margin:0; background:#eef2f7; font-family:Arial, Helvetica, sans-serif; color:#111827; }
-  .page { max-width: 820px; margin: 12px auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.14); }
-  .app-head { background:#111827; color:white; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
-  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
-  .logo-img { width:92px; height:40px; object-fit:contain; background:#0f172a; border-radius:4px; flex:0 0 auto; }
-  .app-title { font-size:20px; font-weight:800; line-height:1; letter-spacing:.15px; }
-  .app-sub { font-size:12px; margin-top:4px; opacity:.92; }
-  .header-report-title { font-size:15px; font-weight:800; text-align:right; letter-spacing:.2px; white-space:nowrap; }
-  .header-report-sub { font-size:10.5px; color:#cbd5e1; margin-top:4px; text-align:right; }
-  .content { padding:16px 18px 12px; }
-  .subtitle { color:#64748b; font-size:11.2px; font-weight:700; margin-bottom:10px; }
-  .meta-grid { display:grid; grid-template-columns: 1fr 1.35fr; gap:8px; margin-top:8px; }
-  .meta-card { border:1px solid #e5e7eb; border-left:3px solid #0b3f73; border-radius:8px; padding:7px 9px; background:#f8fafc; min-height:46px; }
-  .label { color:#64748b; font-size:9.8px; font-weight:800; text-transform:uppercase; letter-spacing:.32px; }
-  .value { color:#111827; font-size:13px; font-weight:800; margin-top:4px; line-height:1.2; }
-  .sum-grid { margin:10px 0 10px; display:grid; grid-template-columns: repeat(5,1fr); gap:7px; }
-  .sum-card { border:1px solid #e5e7eb; border-radius:8px; padding:7px 8px; background:#fff; display:flex; align-items:center; justify-content:space-between; min-height:38px; }
-  .sum-card strong { font-size:18px; color:#0f172a; }
-  .sum-card span { color:#64748b; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.25px; }
-  .sum-card.total { background:#eff6ff; border-color:#bfdbfe; }
-  .sum-card.done { background:#f0fdf4; border-color:#bbf7d0; }
-  .sum-card.pending { background:#fffbeb; border-color:#fde68a; }
-  .sum-card.notok { background:#fef2f2; border-color:#fecaca; }
-  table { width:100%; border-collapse:collapse; margin-top:7px; font-size:9.4px; table-layout:fixed; }
-  th { background:#0b3f73; color:white; padding:5.5px 4px; text-align:left; font-size:9.2px; letter-spacing:.1px; }
-  td { border:1px solid #e5e7eb; padding:5px 4px; vertical-align:top; word-break:break-word; line-height:1.25; }
-  tr:nth-child(even) td { background:#f8fafc; }
+  .page { max-width: 820px; margin: 12px auto; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.14); }
+  .app-head { background:#111827 !important; color:#ffffff !important; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .brand { display:flex; align-items:center; gap:11px; min-width:0; }
+  .logo-img { width:84px; height:36px; object-fit:contain; background:#0f172a; border-radius:4px; flex:0 0 auto; }
+  .app-title { font-size:18px; font-weight:800; line-height:1; letter-spacing:.15px; color:#ffffff !important; }
+  .app-sub { font-size:11px; margin-top:3px; opacity:.95; color:#ffffff !important; }
+  .header-report-title { font-size:14px; font-weight:800; text-align:right; letter-spacing:.2px; white-space:nowrap; color:#ffffff !important; }
+  .header-report-sub { font-size:10px; color:#d1d5db !important; margin-top:3px; text-align:right; }
+  .content { padding:12px 16px 10px; }
+  .subtitle { color:#475569; font-size:10.5px; font-weight:700; margin-bottom:7px; }
+  .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:6px; margin-top:6px; }
+  .meta-card { border:1px solid #dbe3ee; border-left:3px solid #0b3f73; border-radius:7px; padding:5px 8px; background:#f8fafc !important; min-height:38px; }
+  .label { color:#64748b; font-size:8.8px; font-weight:800; text-transform:uppercase; letter-spacing:.28px; }
+  .value { color:#111827; font-size:12px; font-weight:800; margin-top:3px; line-height:1.15; }
+  .sum-grid { margin:8px 0 8px; display:grid; grid-template-columns: repeat(5,1fr); gap:6px; }
+  .sum-card { border:1px solid #e5e7eb; border-radius:7px; padding:5px 7px; background:#ffffff !important; display:flex; align-items:center; justify-content:space-between; min-height:32px; }
+  .sum-card strong { font-size:16px; color:#0f172a; }
+  .sum-card span { color:#64748b; font-size:8.6px; font-weight:800; text-transform:uppercase; letter-spacing:.2px; }
+  .sum-card.total { background:#eff6ff !important; border-color:#bfdbfe; }
+  .sum-card.done { background:#f0fdf4 !important; border-color:#bbf7d0; }
+  .sum-card.pending { background:#fffbeb !important; border-color:#fde68a; }
+  .sum-card.notok { background:#fef2f2 !important; border-color:#fecaca; }
+  table { width:100%; border-collapse:collapse; margin-top:6px; font-size:9.1px; table-layout:fixed; }
+  th { background:#0b3f73 !important; color:#ffffff !important; padding:4.8px 3px; text-align:left; font-size:8.8px; letter-spacing:.05px; }
+  td { border:1px solid #e5e7eb; padding:4.4px 3px; vertical-align:top; word-break:break-word; line-height:1.18; color:#111827; }
+  tr:nth-child(even) td { background:#f8fafc !important; }
   .sr { text-align:center; }
   .point { font-weight:700; }
-  .badge { display:inline-block; padding:2.5px 5px; border-radius:999px; font-weight:800; font-size:8.4px; white-space:nowrap; }
+  .badge { display:inline-block; padding:2px 4px; border-radius:999px; font-weight:800; font-size:7.8px; white-space:nowrap; }
   .empty-row { text-align:center; color:#64748b; padding:14px; }
-  .obs-section { margin-top:12px; border:1px solid #dbe3ee; border-radius:8px; padding:8px 10px 10px; break-inside:avoid; }
-  .section-head { color:#0f172a; font-size:11.5px; font-weight:800; margin-bottom:5px; }
-  .observation-text { font-size:10.5px; color:#111827; padding:4px 0 6px; line-height:1.35; }
-  .line { height:18px; border-bottom:1px solid #cbd5e1; }
-  .foot { padding:8px 18px 12px; color:#64748b; font-size:9.2px; display:flex; justify-content:space-between; gap:10px; }
-  .no-print { padding:8px 18px; display:flex; justify-content:flex-end; gap:8px; }
-  .print-btn { border:0; background:#0b3f73; color:white; border-radius:7px; padding:8px 12px; font-weight:800; cursor:pointer; }
+  .obs-section { margin-top:10px; border:1px solid #dbe3ee; border-radius:8px; padding:7px 9px 9px; break-inside:avoid; }
+  .section-head { color:#0f172a; font-size:11px; font-weight:800; margin-bottom:5px; }
+  .observation-text { font-size:10px; color:#111827; padding:4px 0 6px; line-height:1.35; }
+  .line { height:17px; border-bottom:1px solid #cbd5e1; }
+  .foot { padding:7px 16px 10px; color:#64748b; font-size:8.8px; display:flex; justify-content:space-between; gap:8px; }
+  .no-print { padding:8px 16px; display:flex; justify-content:flex-end; gap:8px; }
+  .print-btn { border:0; background:#0b3f73 !important; color:#ffffff !important; border-radius:7px; padding:8px 12px; font-weight:800; cursor:pointer; }
   @media print {
-    body { background:white; }
+    body { background:#ffffff !important; }
     .page { margin:0; max-width:none; box-shadow:none; border-radius:0; }
     .no-print { display:none; }
-    .content { padding:12px 10px 8px; }
-    .app-head { padding:10px 12px; }
-    .meta-grid, .sum-grid { gap:5px; }
-    th, td { padding:4px 3.5px; }
-    .line { height:17px; }
+    .content { padding:10px 8px 7px; }
+    .app-head { padding:9px 10px; }
+    .meta-grid, .sum-grid { gap:4px; }
+    .meta-card { min-height:34px; padding:4px 6px; }
+    .value { font-size:11.2px; }
+    th, td { padding:3.8px 3px; }
+    .line { height:16px; }
   }
 </style>
 </head>
@@ -202,7 +204,7 @@
         <div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div>
       </div>
       <table>
-        <thead><tr><th style="width:28px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:18%;">Sub Work</th><th style="width:9%;">Status</th><th style="width:10%;">Result</th><th style="width:16%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead>
+        <thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:19%;">Sub Work</th><th style="width:8%;">Status</th><th style="width:8%;">Result</th><th style="width:18%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
       ${buildRuledLines()}
