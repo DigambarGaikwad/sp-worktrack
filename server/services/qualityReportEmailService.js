@@ -1,0 +1,105 @@
+// server/services/qualityReportEmailService.js
+// Stores quality report email recipients and sends report emails.
+
+const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
+const { sendEmail } = require("./emailService");
+
+const COLLECTION = "admin_settings";
+const KEY = "quality_report_recipients_json";
+
+function clean(value) { return String(value ?? "").trim(); }
+
+function safeJsonParse(value, fallback) {
+  try {
+    const parsed = JSON.parse(value || "");
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function isMissingCollectionError(err) {
+  return err?.status === 404 || /missing collection context/i.test(String(err?.message || ""));
+}
+
+async function findSettingRecord() {
+  try {
+    const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
+      method: "GET",
+      query: { page: 1, perPage: 1, filter: `setting_key="${KEY}"` }
+    });
+    return Array.isArray(result.items) ? result.items[0] || null : null;
+  } catch (err) {
+    if (isMissingCollectionError(err)) return null;
+    throw err;
+  }
+}
+
+function normalizeRecipient(r = {}, index = 0) {
+  return {
+    id: clean(r.id || `R${index + 1}`),
+    name: clean(r.name || r.recipientName),
+    email: clean(r.email || r.emailId),
+    role: clean(r.role || r.department || r.designation),
+    active: r.active !== false
+  };
+}
+
+function normalizeRecipients(value) {
+  const list = Array.isArray(value?.recipients) ? value.recipients : Array.isArray(value) ? value : [];
+  return list.map(normalizeRecipient).filter((r) => r.email);
+}
+
+async function getQualityReportRecipients() {
+  const rec = await findSettingRecord();
+  const parsed = safeJsonParse(rec?.setting_value, { recipients: [] });
+  return { recipients: normalizeRecipients(parsed) };
+}
+
+async function saveQualityReportRecipients(raw = {}) {
+  const data = { recipients: normalizeRecipients(raw) };
+  const rec = await findSettingRecord();
+  const body = { setting_key: KEY, setting_value: JSON.stringify(data) };
+
+  if (rec?.id) {
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
+  } else {
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
+  }
+
+  return data;
+}
+
+async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "" } = {}) {
+  const recipientsData = await getQualityReportRecipients();
+  const activeRecipients = recipientsData.recipients.filter((r) => r.active && r.email);
+  const manualTo = clean(to);
+  const targets = manualTo ? manualTo.split(/[;,]/).map(clean).filter(Boolean) : activeRecipients.map((r) => r.email);
+
+  if (!targets.length) {
+    const err = new Error("No active quality report recipients found. Add recipients in Admin screen.");
+    err.status = 400;
+    throw err;
+  }
+
+  const subject = `SP WorkTrack Quality Report - ${clean(machineNo) || "Machine"}${period ? " - " + period : ""}`;
+  const results = [];
+
+  for (const email of targets) {
+    const result = await sendEmail({
+      to: email,
+      subject,
+      text: text || `SP WorkTrack Quality Report\nMachine: ${machineNo}\nCategory: ${machineCategory}\nPeriod: ${period}`,
+      html
+    });
+    results.push({ email, ...result });
+  }
+
+  return { sent: results.length, results };
+}
+
+module.exports = {
+  getQualityReportRecipients,
+  saveQualityReportRecipients,
+  sendQualityReport
+};
