@@ -1,9 +1,8 @@
 // renderer/dashboard_v2/qualityReportDownloadPatch.js
-// Adds Download Report button and sends/downloads premium PDF styled quality report.
+// Adds Download Report button and sends/downloads stable styled quality report PDF.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 60000;
-  let observationText = "";
 
   function apiBaseUrl() { return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030"; }
   function clean(value) { return String(value ?? "").trim(); }
@@ -15,10 +14,6 @@
   }
   function nowText() { return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
   function safeFilePart(value) { return clean(value || "Report").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "Report"; }
-  function assetUrl(fileName) {
-    try { return new URL(`../../assets/${fileName}`, window.location.href).href; }
-    catch (err) { return ""; }
-  }
 
   function getCurrentQualityRows() {
     try {
@@ -60,11 +55,10 @@
     return `<span class="badge" style="background:${bg};color:${color};border-color:${color};">${esc(label)}</span>`;
   }
 
-  function buildRichPdfHtml() {
+  function buildStablePdfHtml() {
     const data = getReportData();
     const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
-    const obs = clean(observationText || window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
-    const logo = assetUrl("logo%20(2).png") || assetUrl("app.ico");
+    const obs = clean(window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
     const rowsHtml = data.rows.map((r, index) => {
       const status = clean(r.status) || (clean(r.value) ? "DONE" : "PENDING");
       return `
@@ -73,8 +67,8 @@
           <td class="point">${esc(r.point || r.qualityPoint || "-")}</td>
           <td>${esc(r.department || "-")}</td>
           <td>${esc(r.subwork || r.subWork || "-")}</td>
-          <td>${badge(status, r.value)}</td>
-          <td>${esc(r.value || r.readingStatus || "-")}</td>
+          <td class="status-cell">${badge(status, r.value)}</td>
+          <td class="result-cell">${esc(r.value || r.readingStatus || "-")}</td>
           <td>${esc(r.empName || r.doneByName || r.empCode || "-")}</td>
           <td>${esc(displayDate(r.workDate || r.doneDate))}</td>
         </tr>`;
@@ -88,55 +82,52 @@
 <style>
   @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-  body { margin:0; background:#f1f5f9; font-family:Arial, Helvetica, sans-serif; color:#111827; }
-  .page { width:100%; max-width:820px; margin:0 auto; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,.16); border:1px solid #d8e0ea; }
-  .app-head { background:#111827 !important; color:white !important; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:4px solid #0b3f73; border-radius:14px 14px 0 0; }
-  .brand { display:flex; align-items:center; gap:14px; min-width:0; }
-  .logo-img { width:104px; height:44px; object-fit:contain; background:#111827 !important; border-radius:6px; flex:0 0 auto; }
-  .app-title { font-size:22px; font-weight:900; line-height:1; color:#fff !important; letter-spacing:.2px; }
+  body { margin:0; background:#ffffff; font-family:Arial, Helvetica, sans-serif; color:#111827; }
+  .page { width:100%; max-width:820px; margin:0 auto; background:#fff; border:1px solid #111827; border-radius:12px; overflow:hidden; }
+  .app-head { background:#111827 !important; color:white !important; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:4px solid #0b3f73; border-radius:12px 12px 0 0; }
+  .app-title { font-size:22px; font-weight:900; line-height:1; color:#fff !important; }
   .app-sub { font-size:12px; margin-top:4px; color:#e5e7eb !important; }
-  .report-title { font-size:17px; font-weight:900; text-align:right; color:#fff !important; letter-spacing:.2px; }
+  .report-title { font-size:16px; font-weight:900; text-align:right; color:#fff !important; }
   .report-sub { font-size:11px; margin-top:4px; color:#d1d5db !important; text-align:right; }
-  .content { padding:14px 18px 12px; }
-  .subtitle { color:#334155; font-size:11px; font-weight:800; margin-bottom:10px; }
-  .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:8px; }
-  .meta-card { border:1px solid #dbe3ee; border-left:4px solid #0b3f73; border-radius:10px; padding:8px 10px; background:#f8fafc !important; min-height:48px; }
+  .content { padding:12px 16px 10px; }
+  .subtitle { color:#334155; font-size:11px; font-weight:800; margin-bottom:8px; }
+  .meta-grid { display:grid; grid-template-columns: 1fr 1.25fr; gap:7px; }
+  .meta-card { border:1px solid #dbe3ee; border-left:4px solid #0b3f73; border-radius:8px; padding:7px 9px; background:#f8fafc !important; min-height:44px; }
   .label { color:#64748b; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.35px; }
-  .value { color:#111827; font-size:13.5px; font-weight:900; margin-top:4px; }
-  .sum-grid { margin:11px 0; display:grid; grid-template-columns: repeat(5,1fr); gap:8px; }
-  .sum-card { border:1px solid #e5e7eb; border-radius:10px; padding:8px 9px; display:flex; align-items:center; justify-content:space-between; min-height:40px; }
+  .value { color:#111827; font-size:13px; font-weight:900; margin-top:3px; }
+  .sum-grid { margin:10px 0; display:grid; grid-template-columns: repeat(5,1fr); gap:7px; }
+  .sum-card { border:1px solid #e5e7eb; border-radius:8px; padding:7px 8px; display:flex; align-items:center; justify-content:space-between; min-height:36px; }
   .sum-card span { color:#475569; font-size:9px; font-weight:900; text-transform:uppercase; }
-  .sum-card strong { font-size:18px; color:#0f172a; }
+  .sum-card strong { font-size:17px; color:#0f172a; }
   .sum-card.total { background:#eff6ff !important; border-color:#bfdbfe; }
   .sum-card.done { background:#f0fdf4 !important; border-color:#bbf7d0; }
   .sum-card.pending { background:#fffbeb !important; border-color:#fde68a; }
   .sum-card.notok { background:#fef2f2 !important; border-color:#fecaca; }
-  table { width:100%; border-collapse:separate; border-spacing:0; margin-top:8px; font-size:9.3px; table-layout:fixed; border:1px solid #d1d5db; border-radius:10px; overflow:hidden; }
-  th { background:#0b3f73 !important; color:white !important; border-right:1px solid rgba(255,255,255,.25); padding:6px 4px; text-align:left; font-size:8.8px; }
+  table { width:100%; border-collapse:separate; border-spacing:0; margin-top:7px; font-size:8.6px; table-layout:fixed; border:1px solid #d1d5db; border-radius:10px; overflow:hidden; }
+  th { background:#0b3f73 !important; color:white !important; border-right:1px solid rgba(255,255,255,.25); padding:5px 3px; text-align:left; font-size:8.2px; }
   th:first-child { border-top-left-radius:10px; }
   th:last-child { border-top-right-radius:10px; border-right:0; }
-  td { border-right:1px solid #d1d5db; border-bottom:1px solid #d1d5db; padding:5px 4px; vertical-align:top; word-break:break-word; line-height:1.22; }
+  td { border-right:1px solid #d1d5db; border-bottom:1px solid #d1d5db; padding:4px 3px; vertical-align:top; word-break:break-word; line-height:1.18; }
   tr:nth-child(even) td { background:#f8fafc !important; }
   td:last-child { border-right:0; }
   tbody tr:last-child td { border-bottom:0; }
   .sr { text-align:center; }
   .point { font-weight:800; }
-  .badge { display:inline-block; padding:2.5px 6px; border-radius:999px; border:1px solid; font-weight:900; font-size:7.7px; white-space:nowrap; }
-  .obs-section { margin-top:12px; border:1.2px solid #dbe3ee; border-radius:10px; padding:9px 12px 12px; break-inside:avoid; background:#ffffff !important; }
-  .section-head { color:#0f172a; font-size:12px; font-weight:900; margin-bottom:6px; }
+  .status-cell { text-align:center; }
+  .result-cell { text-align:center; }
+  .badge { display:inline-block; padding:2px 4px; border-radius:999px; border:1px solid; font-weight:900; font-size:6.9px; white-space:nowrap; max-width:100%; }
+  .obs-section { margin-top:10px; border:1.2px solid #dbe3ee; border-radius:10px; padding:8px 10px 10px; break-inside:avoid; background:#ffffff !important; }
+  .section-head { color:#0f172a; font-size:11.5px; font-weight:900; margin-bottom:6px; }
   .observation-text { font-size:10px; line-height:1.4; padding:3px 0 6px; }
-  .line { height:18px; border-bottom:1px solid #94a3b8; }
-  .foot { padding:8px 18px 12px; color:#64748b; font-size:8.7px; display:flex; justify-content:space-between; }
+  .line { height:17px; border-bottom:1px solid #94a3b8; }
+  .foot { padding:7px 16px 10px; color:#64748b; font-size:8.7px; display:flex; justify-content:space-between; }
   .empty-row { text-align:center; color:#64748b; padding:14px; }
 </style>
 </head>
 <body>
   <div class="page">
     <div class="app-head">
-      <div class="brand">
-        <img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" />
-        <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
-      </div>
+      <div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div>
       <div><div class="report-title">Quality Checkpoint Report</div><div class="report-sub">Planned + completed checkpoints</div></div>
     </div>
     <div class="content">
@@ -154,7 +145,7 @@
         <div class="sum-card done"><span>OK</span><strong>${data.summary.ok}</strong></div>
         <div class="sum-card notok"><span>Not OK</span><strong>${data.summary.notOk}</strong></div>
       </div>
-      <table><thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:19%;">Sub Work</th><th style="width:8%;">Status</th><th style="width:8%;">Result</th><th style="width:18%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+      <table><thead><tr><th style="width:26px;">Sr</th><th style="width:20%;">Point</th><th style="width:13%;">Dept</th><th style="width:18%;">Sub Work</th><th style="width:10%;">Status</th><th style="width:9%;">Result</th><th style="width:16%;">Done By</th><th style="width:14%;">Done Date</th></tr></thead><tbody>${rowsHtml}</tbody></table>
       <section class="obs-section"><div class="section-head">Observations / Deviations / Remarks</div>${obs ? `<div class="observation-text">${esc(obs).replace(/\n/g, "<br>")}</div>` : ""}<div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></section>
     </div>
     <div class="foot"><span>Generated from SP WorkTrack quality checkpoint data.</span><span>View-only report.</span></div>
@@ -168,7 +159,7 @@
     const res = await fetch(`${apiBaseUrl()}/api/email/quality-report/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineNo: data.machineNo, pdfHtml: buildRichPdfHtml() })
+      body: JSON.stringify({ machineNo: data.machineNo, pdfHtml: buildStablePdfHtml() })
     });
     if (!res.ok) {
       const payload = await res.json().catch(() => null);
@@ -207,7 +198,7 @@
     btn.addEventListener("click", downloadQualityReport);
   }
 
-  async function sendRichPdfQualityReport() {
+  async function sendStablePdfQualityReport() {
     const data = getReportData();
     const html = `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>SP WorkTrack Quality Report</h2><p><b>Machine:</b> ${esc(data.machineNo)}</p><p><b>Category:</b> ${esc(data.machineCategory)}</p><p><b>Period:</b> ${esc(displayDate(data.fromDate))} to ${esc(displayDate(data.toDate))}</p><p>Please find attached PDF report.</p></div>`;
     try {
@@ -222,7 +213,7 @@
           machineCategory: data.machineCategory,
           period: `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`,
           html,
-          pdfHtml: buildRichPdfHtml()
+          pdfHtml: buildStablePdfHtml()
         })
       });
       clearTimeout(timer);
@@ -238,7 +229,7 @@
     if (!e.target?.closest?.("#sendQualityReportBtn")) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    sendRichPdfQualityReport();
+    sendStablePdfQualityReport();
   }
 
   function addStyles() {
