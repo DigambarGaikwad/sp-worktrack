@@ -4,9 +4,7 @@
 
 const nodemailer = require("nodemailer");
 
-function clean(value) {
-  return String(value ?? "").trim();
-}
+function clean(value) { return String(value ?? "").trim(); }
 
 function getSmtpConfig() {
   return {
@@ -41,10 +39,10 @@ function createTransporter() {
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
-    auth: {
-      user: cfg.user,
-      pass: cfg.pass
-    }
+    auth: { user: cfg.user, pass: cfg.pass },
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 20000)
   });
 }
 
@@ -75,12 +73,17 @@ async function sendEmail({ to, cc = "", bcc = "", subject = "", text = "", html 
   if (Array.isArray(attachments) && attachments.length) message.attachments = attachments;
   if (!message.text && !message.html) message.text = "SP WorkTrack notification.";
 
-  const result = await transporter.sendMail(message);
-  return {
-    messageId: result.messageId || "",
-    accepted: result.accepted || [],
-    rejected: result.rejected || []
-  };
+  try {
+    const result = await transporter.sendMail(message);
+    return { messageId: result.messageId || "", accepted: result.accepted || [], rejected: result.rejected || [] };
+  } catch (err) {
+    const error = new Error(err?.message || "Email send failed.");
+    error.status = 502;
+    error.details = { reasonCode: "SMTP_SEND_FAILED", code: err?.code || "", command: err?.command || "" };
+    throw error;
+  } finally {
+    try { transporter.close(); } catch (err) {}
+  }
 }
 
 async function sendTestEmail(to) {
@@ -94,8 +97,7 @@ async function sendTestEmail(to) {
         <h2>SP WorkTrack SMTP Test Successful</h2>
         <p>This email was sent from <b>SP WorkTrack</b>.</p>
         <p><b>Time:</b> ${now}</p>
-      </div>
-    `
+      </div>`
   });
 }
 
@@ -111,8 +113,4 @@ function getEmailStatus() {
   };
 }
 
-module.exports = {
-  getEmailStatus,
-  sendEmail,
-  sendTestEmail
-};
+module.exports = { getEmailStatus, sendEmail, sendTestEmail };
