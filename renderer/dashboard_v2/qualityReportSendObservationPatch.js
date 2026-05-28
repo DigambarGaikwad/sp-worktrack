@@ -1,8 +1,10 @@
 // renderer/dashboard_v2/qualityReportSendObservationPatch.js
 // Ensures Send Quality Report uses the same polished report HTML as Print Report, including observation text.
+// Adds safe timeout/loading state so the app does not freeze on email failure.
 
 (function () {
-  const REQUEST_TIMEOUT_MS = 60000;
+  const REQUEST_TIMEOUT_MS = 25000;
+  let isSending = false;
 
   function apiBaseUrl() { return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030"; }
   function clean(value) { return String(value ?? "").trim(); }
@@ -24,10 +26,32 @@
 
   function syncObservationBeforeSend() {
     const textarea = document.getElementById("qualityReportObservationText");
-    if (textarea) {
-      window.__SPWT_QUALITY_REPORT_OBSERVATION = clean(textarea.value);
+    if (textarea) window.__SPWT_QUALITY_REPORT_OBSERVATION = clean(textarea.value);
+    return clean(window.SPWT_GET_QUALITY_REPORT_OBSERVATION?.() || window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
+  }
+
+  function setSendBusy(value, message = "") {
+    const btn = document.getElementById("sendQualityReportBtn");
+    if (!btn) return;
+    if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent || "Send Quality Report";
+    btn.disabled = Boolean(value);
+    btn.textContent = value ? (message || "Sending...") : btn.dataset.originalText;
+  }
+
+  function showSendStatus(message, type = "") {
+    let el = document.getElementById("qualityReportSendStatus");
+    const actions = document.querySelector(".quality-report-actions");
+    if (!el && actions) {
+      el = document.createElement("span");
+      el.id = "qualityReportSendStatus";
+      el.style.fontSize = "12px";
+      el.style.fontWeight = "800";
+      el.style.marginLeft = "6px";
+      actions.appendChild(el);
     }
-    return clean(window.__SPWT_QUALITY_REPORT_OBSERVATION || "");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
   }
 
   async function requestSend(payload) {
@@ -43,43 +67,49 @@
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.ok) throw new Error(body?.message || `API error ${res.status}`);
       return body;
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("Email send timed out. Check SMTP/network and try again.");
+      throw err;
     } finally {
       clearTimeout(timer);
     }
   }
 
   async function sendQualityReportWithObservation() {
-    const data = getReportData();
-    const observation = syncObservationBeforeSend();
-
-    if (typeof window.SPWT_BUILD_QUALITY_REPORT_HTML !== "function") {
-      alert("Report builder is not ready. Please reopen the dashboard and try again.");
-      return;
-    }
-
-    const pdfHtml = window.SPWT_BUILD_QUALITY_REPORT_HTML();
-    const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
-    const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.5;">
-        <h2>SP WorkTrack Quality Report</h2>
-        <p><b>Machine:</b> ${esc(data.machineNo)}</p>
-        <p><b>Category:</b> ${esc(data.machineCategory)}</p>
-        <p><b>Period:</b> ${esc(period)}</p>
-        ${observation ? `<p><b>Observation:</b><br>${esc(observation).replace(/\n/g, "<br>")}</p>` : ""}
-        <p>Please find attached PDF report.</p>
-      </div>`;
+    if (isSending) return;
+    isSending = true;
+    setSendBusy(true, "Sending...");
+    showSendStatus("Preparing report...");
 
     try {
-      await requestSend({
-        machineNo: data.machineNo,
-        machineCategory: data.machineCategory,
-        period,
-        html,
-        pdfHtml
-      });
-      alert("Quality report email sent successfully with observation in PDF attachment.");
+      const data = getReportData();
+      const observation = syncObservationBeforeSend();
+
+      if (typeof window.SPWT_BUILD_QUALITY_REPORT_HTML !== "function") {
+        throw new Error("Report builder is not ready. Please reopen the dashboard and try again.");
+      }
+
+      const pdfHtml = window.SPWT_BUILD_QUALITY_REPORT_HTML();
+      const period = `${displayDate(data.fromDate)} to ${displayDate(data.toDate)}`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;line-height:1.5;">
+          <h2>SP WorkTrack Quality Report</h2>
+          <p><b>Machine:</b> ${esc(data.machineNo)}</p>
+          <p><b>Category:</b> ${esc(data.machineCategory)}</p>
+          <p><b>Period:</b> ${esc(period)}</p>
+          ${observation ? `<p><b>Observation:</b><br>${esc(observation).replace(/\n/g, "<br>")}</p>` : ""}
+          <p>Please find attached PDF report.</p>
+        </div>`;
+
+      showSendStatus("Sending email...");
+      await requestSend({ machineNo: data.machineNo, machineCategory: data.machineCategory, period, html, pdfHtml });
+      showSendStatus("Email sent successfully.", "success");
+      setTimeout(() => showSendStatus(""), 3500);
     } catch (err) {
-      alert("Send quality report failed: " + (err?.message || err));
+      showSendStatus("Send failed: " + (err?.message || err), "error");
+    } finally {
+      isSending = false;
+      setSendBusy(false);
     }
   }
 
