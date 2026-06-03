@@ -1,5 +1,5 @@
 // server/services/maintenanceService.js
-// Admin Maintenance service: backup, cleanup, employee entry deletion, old sheet import placeholder.
+// Admin Maintenance service: backup, restore, cleanup, employee entry deletion, old sheet import placeholder.
 
 const fs = require("fs");
 const path = require("path");
@@ -9,6 +9,7 @@ function clean(value) { return String(value ?? "").trim(); }
 function toNumber(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function todayStamp() { return new Date().toISOString().replace(/[:.]/g, "-"); }
+function backupDir() { return path.resolve(process.cwd(), "backups"); }
 
 const MASTER_COLLECTIONS = [
   "employees",
@@ -33,6 +34,26 @@ const SETUP_CLEAR_COLLECTIONS = [
 ];
 
 const TRANSACTION_COLLECTIONS = [
+  "production_entries",
+  "production_entry_lines",
+  "booking_logs",
+  "booking_status",
+  "quality_logs",
+  "attendance"
+];
+
+const RESTORE_ORDER = [
+  "admin_settings",
+  "machine_types",
+  "departments",
+  "employees",
+  "machines",
+  "shifts",
+  "loss_reasons",
+  "root_areas",
+  "subworks",
+  "booking_points",
+  "quality_points",
   "production_entries",
   "production_entry_lines",
   "booking_logs",
@@ -85,10 +106,7 @@ async function listRecords(collectionName, { filter = "", perPage = 200 } = {}) 
   let page = 1;
   while (true) {
     try {
-      const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
-        method: "GET",
-        query: { page, perPage, filter }
-      });
+      const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, { method: "GET", query: { page, perPage, filter } });
       const items = Array.isArray(result.items) ? result.items : [];
       all.push(...items);
       const totalPages = Number(result.totalPages || 1);
@@ -104,10 +122,7 @@ async function listRecords(collectionName, { filter = "", perPage = 200 } = {}) 
 
 async function countRecords(collectionName, filter = "") {
   try {
-    const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, {
-      method: "GET",
-      query: { page: 1, perPage: 1, filter }
-    });
+    const result = await pocketBaseRequest(`/api/collections/${collectionName}/records`, { method: "GET", query: { page: 1, perPage: 1, filter } });
     return Number(result.totalItems || 0);
   } catch (err) {
     if (isMissingCollectionError(err)) return 0;
@@ -135,6 +150,44 @@ async function deleteByFilter(collectionName, filter = "") {
 
 async function createRecord(collectionName, body) {
   return pocketBaseRequest(`/api/collections/${collectionName}/records`, { method: "POST", body });
+}
+
+function cleanRestoreRecord(record = {}) {
+  const copy = { ...record };
+  delete copy.id;
+  delete copy.collectionId;
+  delete copy.collectionName;
+  delete copy.expand;
+  delete copy.created;
+  delete copy.updated;
+  return copy;
+}
+
+function safeBackupFileName(fileName) {
+  const name = path.basename(clean(fileName));
+  if (!/^spwt-db-backup-.*\.json$/i.test(name)) {
+    const err = new Error("Invalid backup file name.");
+    err.status = 400;
+    throw err;
+  }
+  return name;
+}
+
+function readBackupFile(fileName) {
+  const name = safeBackupFileName(fileName);
+  const filePath = path.join(backupDir(), name);
+  if (!fs.existsSync(filePath)) {
+    const err = new Error("Backup file not found in local backups folder.");
+    err.status = 404;
+    throw err;
+  }
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!parsed || typeof parsed !== "object" || !parsed.collections) {
+    const err = new Error("Backup file format is invalid.");
+    err.status = 400;
+    throw err;
+  }
+  return { filePath, data: parsed };
 }
 
 function bookingKey(log) {
@@ -196,12 +249,64 @@ async function backupDb({ includeMaster = true, includeTransactions = true } = {
   if (includeTransactions !== false) collections.push(...TRANSACTION_COLLECTIONS);
   const data = { createdAt: new Date().toISOString(), collections: {} };
   for (const collection of collections) data.collections[collection] = await listRecords(collection, { perPage: 500 });
-  const dir = path.resolve(process.cwd(), "backups");
+  const dir = backupDir();
   fs.mkdirSync(dir, { recursive: true });
   const fileName = `spwt-db-backup-${todayStamp()}.json`;
   const filePath = path.join(dir, fileName);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
   return { fileName, filePath, collections: Object.fromEntries(Object.entries(data.collections).map(([k, v]) => [k, v.length])) };
+}
+
+function listBackupFiles() {
+  const dir = backupDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const files = fs.readdirSync(dir)
+    .filter(name => /^spwt-db-backup-.*\.json$/i.test(name))
+    .map((name) => {
+      const filePath = path.join(dir, name);
+      const stat = fs.statSync(filePath);
+      let createdAt = "";
+      let counts = {};
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        createdAt = clean(parsed.createdAt);
+        counts = Object.fromEntries(Object.entries(parsed.collections || {}).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]));
+      } catch (err) {}
+      return { fileName: name, sizeBytes: stat.size, modifiedAt: stat.mtime.toISOString(), createdAt, counts };
+    })
+    .sort((a, b) => clean(b.createdAt || b.modifiedAt).localeCompare(clean(a.createdAt || a.modifiedAt)));
+  return { folder: dir, files };
+}
+
+async function restoreBackup({ fileName = "", mode = "replace" } = {}) {
+  const { data } = readBackupFile(fileName);
+  const collections = data.collections || {};
+  const collectionNames = RESTORE_ORDER.filter(name => Array.isArray(collections[name]));
+
+  if (mode !== "replace") {
+    const err = new Error("Only replace restore mode is supported currently.");
+    err.status = 400;
+    throw err;
+  }
+
+  const backupBeforeRestore = await backupDb({ includeMaster: true, includeTransactions: true });
+
+  const deleted = [];
+  for (const collection of [...collectionNames].reverse()) {
+    deleted.push(await deleteByFilter(collection, ""));
+  }
+
+  const restored = [];
+  for (const collection of collectionNames) {
+    let created = 0;
+    for (const record of collections[collection]) {
+      await createRecord(collection, cleanRestoreRecord(record));
+      created += 1;
+    }
+    restored.push({ collection, created });
+  }
+
+  return { restoredFrom: safeBackupFileName(fileName), safetyBackupBeforeRestore: backupBeforeRestore.fileName, deleted, restored };
 }
 
 async function previewDeleteByEmployee(params = {}) {
@@ -290,6 +395,8 @@ async function importOldSheetData() {
 
 module.exports = {
   backupDb,
+  listBackupFiles,
+  restoreBackup,
   previewDeleteByEmployee,
   deleteByEmployee,
   previewClearTransactions,
