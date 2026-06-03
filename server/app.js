@@ -11,6 +11,7 @@ const productionRoutes = require("./routes/productionRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const emailRoutes = require("./routes/emailRoutes");
 const backupRoutes = require("./routes/backupRoutes");
+const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const { startBackupScheduler } = require("./services/backupScheduler");
 
 dotenv.config();
@@ -32,6 +33,7 @@ app.use("/api/production", productionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/backup", backupRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({
