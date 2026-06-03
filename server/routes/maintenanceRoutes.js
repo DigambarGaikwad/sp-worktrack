@@ -12,12 +12,41 @@ const {
   clearSetupData,
   importOldSheetData
 } = require("../services/maintenanceService");
+const {
+  requestMaintenanceOtp,
+  verifyMaintenanceOtp,
+  requireMaintenanceOtp
+} = require("../services/maintenanceOtpService");
 
 const router = express.Router();
 
 function handleError(res, err, fallback) {
   res.status(err.status || 500).json({ ok: false, message: err.message || fallback, details: err.details || null });
 }
+
+function assertOtp(body, action) {
+  requireMaintenanceOtp({ requestToken: body?.otpRequestToken || body?.requestToken, otp: body?.otp, action });
+}
+
+router.post("/otp/request", async (req, res) => {
+  try {
+    const data = await requestMaintenanceOtp(req.body?.action || "maintenance_action");
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/otp/request failed:", err);
+    handleError(res, err, "Failed to send maintenance OTP.");
+  }
+});
+
+router.post("/otp/verify", async (req, res) => {
+  try {
+    const data = verifyMaintenanceOtp(req.body?.otpRequestToken || req.body?.requestToken, req.body?.otp, req.body?.action || "maintenance_action");
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/otp/verify failed:", err);
+    handleError(res, err, "Failed to verify maintenance OTP.");
+  }
+});
 
 router.post("/backup-db", async (req, res) => {
   try {
@@ -41,6 +70,7 @@ router.post("/employee-delete/preview", async (req, res) => {
 
 router.post("/employee-delete/confirm", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "employee_delete");
     const data = await deleteByEmployee(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
@@ -61,6 +91,7 @@ router.post("/clear-transactions/preview", async (req, res) => {
 
 router.post("/clear-transactions/confirm", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "clear_transactions");
     const data = await clearTransactions(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
@@ -81,6 +112,7 @@ router.post("/clear-setup/preview", async (req, res) => {
 
 router.post("/clear-setup/confirm", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "clear_setup");
     const data = await clearSetupData(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
@@ -91,6 +123,7 @@ router.post("/clear-setup/confirm", async (req, res) => {
 
 router.post("/import-old-sheet", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "import_old_sheet");
     const data = await importOldSheetData(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
