@@ -68,10 +68,7 @@ function normalizeRecipients(value) {
 }
 
 function safeFilePart(value) {
-  return clean(value || "Report")
-    .replace(/[^a-z0-9_-]+/gi, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 80) || "Report";
+  return clean(value || "Report").replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "Report";
 }
 
 async function getQualityReportRecipients() {
@@ -91,11 +88,7 @@ async function getQualityReportObservation(machineNo = "") {
   const rec = await findSettingRecord(OBSERVATIONS_KEY);
   const parsed = safeJsonParse(rec?.setting_value, { observations: {} });
   const item = parsed?.observations?.[key] || {};
-  return {
-    machineNo: clean(machineNo),
-    observation: clean(item.observation || item.text || ""),
-    updatedAt: clean(item.updatedAt || "")
-  };
+  return { machineNo: clean(machineNo), observation: clean(item.observation || item.text || ""), updatedAt: clean(item.updatedAt || "") };
 }
 
 async function saveQualityReportObservation({ machineNo = "", observation = "" } = {}) {
@@ -105,16 +98,10 @@ async function saveQualityReportObservation({ machineNo = "", observation = "" }
     err.status = 400;
     throw err;
   }
-
   const rec = await findSettingRecord(OBSERVATIONS_KEY);
   const parsed = safeJsonParse(rec?.setting_value, { observations: {} });
   const observations = parsed.observations && typeof parsed.observations === "object" ? parsed.observations : {};
-  observations[key] = {
-    machineNo: clean(machineNo),
-    observation: clean(observation),
-    updatedAt: new Date().toISOString()
-  };
-
+  observations[key] = { machineNo: clean(machineNo), observation: clean(observation), updatedAt: new Date().toISOString() };
   await saveSettingJson(OBSERVATIONS_KEY, { observations });
   return await getQualityReportObservation(machineNo);
 }
@@ -127,82 +114,39 @@ function buildTargets({ to = "", cc = "", recipients = [] } = {}) {
   const active = recipients.filter((r) => r.active && r.email);
   const rawTo = clean(to) ? splitManualEmails(to) : active.filter((r) => r.type !== "cc").map((r) => clean(r.email));
   const rawCc = clean(cc) ? splitManualEmails(cc) : active.filter((r) => r.type === "cc").map((r) => clean(r.email));
-
   const invalid = [];
   const validTo = [];
   const validCc = [];
-
   rawTo.forEach((email) => isValidEmail(email) ? validTo.push(email) : invalid.push(email));
   rawCc.forEach((email) => isValidEmail(email) ? validCc.push(email) : invalid.push(email));
-
   const toSet = new Set(validTo.map((e) => e.toLowerCase()));
   const ccFiltered = validCc.filter((email) => !toSet.has(email.toLowerCase()));
-
-  return {
-    to: Array.from(new Set(validTo)),
-    cc: Array.from(new Set(ccFiltered)),
-    invalid: Array.from(new Set(invalid))
-  };
+  return { to: Array.from(new Set(validTo)), cc: Array.from(new Set(ccFiltered)), invalid: Array.from(new Set(invalid)) };
 }
 
 async function sendQualityReport({ machineNo = "", machineCategory = "", period = "", html = "", text = "", to = "", cc = "", pdfHtml = "" } = {}) {
   const recipientsData = await getQualityReportRecipients();
   const targets = buildTargets({ to, cc, recipients: recipientsData.recipients });
-
   if (!targets.to.length) {
-    const err = new Error(targets.invalid.length
-      ? `No valid main recipient found. Invalid: ${targets.invalid.join(", ")}`
-      : "No active main recipient found. Add at least one Main Recipient in Admin screen.");
+    const err = new Error(targets.invalid.length ? `No valid main recipient found. Invalid: ${targets.invalid.join(", ")}` : "No active main recipient found. Add at least one Main Recipient in Admin screen.");
     err.status = 400;
     throw err;
   }
 
   const subject = `SP WorkTrack Quality Report - ${clean(machineNo) || "Machine"}${period ? " - " + period : ""}`;
   const attachments = [];
-
   if (clean(pdfHtml || html)) {
     const pdfBuffer = await generatePdfFromHtml(pdfHtml || html);
-    attachments.push({
-      filename: `Quality_Report_${safeFilePart(machineNo)}.pdf`,
-      content: pdfBuffer,
-      contentType: "application/pdf"
-    });
+    attachments.push({ filename: `Quality_Report_${safeFilePart(machineNo)}.pdf`, content: pdfBuffer, contentType: "application/pdf" });
   }
-
   const bodyText = text || `SP WorkTrack Quality Report\nMachine: ${machineNo}\nCategory: ${machineCategory}\nPeriod: ${period}\n\nPDF report is attached.`;
-  const bodyHtml = html || `
-    <div style="font-family:Arial,sans-serif;line-height:1.5;">
-      <h2>SP WorkTrack Quality Report</h2>
-      <p><b>Machine:</b> ${clean(machineNo)}</p>
-      <p><b>Category:</b> ${clean(machineCategory)}</p>
-      <p><b>Period:</b> ${clean(period)}</p>
-      <p>Please find attached PDF report.</p>
-    </div>
-  `;
+  const bodyHtml = html || `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>SP WorkTrack Quality Report</h2><p><b>Machine:</b> ${clean(machineNo)}</p><p><b>Category:</b> ${clean(machineCategory)}</p><p><b>Period:</b> ${clean(period)}</p><p>Please find attached PDF report.</p></div>`;
 
-  const result = await sendEmail({
-    to: targets.to.join(", "),
-    cc: targets.cc.join(", "),
-    subject,
-    text: bodyText,
-    html: bodyHtml,
-    attachments
-  });
+  const primaryTo = targets.to[0];
+  const copied = Array.from(new Set([...targets.to.slice(1), ...targets.cc]));
+  const result = await sendEmail({ to: primaryTo, cc: copied.join(", "), subject, text: bodyText, html: bodyHtml, attachments });
 
-  return {
-    sent: result.accepted?.length || targets.to.length,
-    mainRecipients: targets.to,
-    ccRecipients: targets.cc,
-    attachmentCount: attachments.length,
-    skippedInvalidRecipients: targets.invalid,
-    results: [{ email: targets.to.join(", "), cc: targets.cc.join(", "), ...result }]
-  };
+  return { sent: result.accepted?.length || targets.to.length, mainRecipients: targets.to, ccRecipients: targets.cc, attachmentCount: attachments.length, skippedInvalidRecipients: targets.invalid, results: [{ email: primaryTo, cc: copied.join(", "), ...result }] };
 }
 
-module.exports = {
-  getQualityReportRecipients,
-  saveQualityReportRecipients,
-  getQualityReportObservation,
-  saveQualityReportObservation,
-  sendQualityReport
-};
+module.exports = { getQualityReportRecipients, saveQualityReportRecipients, getQualityReportObservation, saveQualityReportObservation, sendQualityReport };
