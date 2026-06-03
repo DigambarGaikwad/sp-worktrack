@@ -4,6 +4,8 @@
 const express = require("express");
 const {
   backupDb,
+  listBackupFiles,
+  restoreBackup,
   previewDeleteByEmployee,
   deleteByEmployee,
   previewClearTransactions,
@@ -55,6 +57,27 @@ router.post("/backup-db", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/backup-db failed:", err);
     handleError(res, err, "DB backup failed.");
+  }
+});
+
+router.post("/backups/list", async (req, res) => {
+  try {
+    const data = listBackupFiles();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/backups/list failed:", err);
+    handleError(res, err, "Failed to list backup files.");
+  }
+});
+
+router.post("/restore-backup", async (req, res) => {
+  try {
+    assertOtp(req.body || {}, "restore_backup");
+    const data = await restoreBackup(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/restore-backup failed:", err);
+    handleError(res, err, "Restore backup failed.");
   }
 });
 
