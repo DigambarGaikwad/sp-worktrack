@@ -8,6 +8,8 @@ const {
   deleteByEmployee,
   previewClearTransactions,
   clearTransactions,
+  previewClearSetupData,
+  clearSetupData,
   importOldSheetData
 } = require("../services/maintenanceService");
 
@@ -64,6 +66,26 @@ router.post("/clear-transactions/confirm", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/clear-transactions/confirm failed:", err);
     handleError(res, err, "Clear transaction data failed.");
+  }
+});
+
+router.post("/clear-setup/preview", async (req, res) => {
+  try {
+    const data = await previewClearSetupData(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/clear-setup/preview failed:", err);
+    handleError(res, err, "Clear setup data preview failed.");
+  }
+});
+
+router.post("/clear-setup/confirm", async (req, res) => {
+  try {
+    const data = await clearSetupData(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/clear-setup/confirm failed:", err);
+    handleError(res, err, "Clear setup data failed.");
   }
 });
 
