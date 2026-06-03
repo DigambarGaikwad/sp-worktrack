@@ -12,6 +12,7 @@
   "server": "node server/app.js",
   "db:setup": "node server/db/setupPocketBaseSchema.js",
   "db:seed": "node server/db/seedFromAdminOverrides.js",
+  "import:v1": "node server/scripts/importV1SheetToDb.js",
   "dist": "electron-builder"
 },
   "devDependencies": {
@@ -24,7 +25,8 @@
     "express": "^5.2.1",
     "jspdf": "^4.1.0",
     "nodemailer": "^7.0.11",
-    "puppeteer": "^23.11.1"
+    "puppeteer": "^23.11.1",
+    "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "com.sopan.spworktrack",
