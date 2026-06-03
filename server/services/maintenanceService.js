@@ -16,7 +16,7 @@ const MASTER_COLLECTIONS = [
   "shifts",
   "loss_reasons",
   "root_areas",
-  "machine_categories",
+  "machine_types",
   "departments",
   "subworks",
   "admin_settings"
@@ -39,22 +39,35 @@ const DELETE_BY_EMP_COLLECTIONS = [
   "attendance"
 ];
 
+const DATE_FIELD_BY_COLLECTION = {
+  production_entries: "work_date",
+  production_entry_lines: "work_date",
+  booking_logs: "work_date",
+  booking_status: "last_work_date",
+  quality_logs: "work_date",
+  attendance: "work_date"
+};
+
 function isMissingCollectionError(err) {
   return err?.status === 404 || /missing collection context|collection not found/i.test(String(err?.message || ""));
 }
 
-function buildDateFilter({ fromDate = "", toDate = "" } = {}) {
+function buildDateFilter({ fromDate = "", toDate = "" } = {}, dateField = "work_date") {
   const parts = [];
-  if (clean(fromDate)) parts.push(`work_date >= "${pbEscape(fromDate)}"`);
-  if (clean(toDate)) parts.push(`work_date <= "${pbEscape(toDate)}"`);
+  if (clean(fromDate)) parts.push(`${dateField} >= "${pbEscape(fromDate)}"`);
+  if (clean(toDate)) parts.push(`${dateField} <= "${pbEscape(toDate)}"`);
   return parts;
 }
 
-function buildEmployeeDateFilter({ empCode = "", fromDate = "", toDate = "" } = {}) {
+function buildEmployeeDateFilter({ empCode = "", fromDate = "", toDate = "" } = {}, collectionName = "") {
   const parts = [];
   if (clean(empCode)) parts.push(`emp_code = "${pbEscape(empCode)}"`);
-  parts.push(...buildDateFilter({ fromDate, toDate }));
+  parts.push(...buildDateFilter({ fromDate, toDate }, DATE_FIELD_BY_COLLECTION[collectionName] || "work_date"));
   return parts.join(" && ");
+}
+
+function buildCollectionDateFilter(params = {}, collectionName = "") {
+  return buildDateFilter(params, DATE_FIELD_BY_COLLECTION[collectionName] || "work_date").join(" && ");
 }
 
 async function listRecords(collectionName, { filter = "", perPage = 200 } = {}) {
@@ -88,7 +101,10 @@ async function countRecords(collectionName, filter = "") {
     return Number(result.totalItems || 0);
   } catch (err) {
     if (isMissingCollectionError(err)) return 0;
-    throw err;
+    const error = new Error(`${collectionName}: ${err.message || "PocketBase count failed"}`);
+    error.status = err.status || 500;
+    error.details = err.details || null;
+    throw error;
   }
 }
 
@@ -112,12 +128,7 @@ async function createRecord(collectionName, body) {
 }
 
 function bookingKey(log) {
-  return [
-    clean(log.machine_no),
-    clean(log.department_name),
-    clean(log.subwork_name),
-    clean(log.point_name)
-  ].map(x => x.toLowerCase()).join("|");
+  return [clean(log.machine_no), clean(log.department_name), clean(log.subwork_name), clean(log.point_name)].map(x => x.toLowerCase()).join("|");
 }
 
 async function rebuildBookingStatus() {
@@ -145,7 +156,6 @@ async function rebuildBookingStatus() {
       last_emp_code: "",
       last_emp_name: ""
     };
-
     current.standard_minutes = current.standard_minutes || toNumber(log.original_minutes, 0);
     current.consumed_minutes += toNumber(log.standard_consumed, 0);
     const logDate = clean(log.work_date);
@@ -164,12 +174,7 @@ async function rebuildBookingStatus() {
     const consumed = toNumber(item.consumed_minutes, 0);
     const remaining = Math.max(0, standard - consumed);
     const completion = standard > 0 ? Math.min(100, (consumed / standard) * 100) : 0;
-    await createRecord("booking_status", {
-      ...item,
-      remaining_minutes: remaining,
-      completion_percent: Number(completion.toFixed(2)),
-      status: remaining <= 0 ? "DONE" : consumed > 0 ? "PARTIAL" : "PENDING"
-    });
+    await createRecord("booking_status", { ...item, remaining_minutes: remaining, completion_percent: Number(completion.toFixed(2)), status: remaining <= 0 ? "DONE" : consumed > 0 ? "PARTIAL" : "PENDING" });
     rebuilt += 1;
   }
   return { rebuilt, sourceLogs: logs.length };
@@ -179,12 +184,8 @@ async function backupDb({ includeMaster = true, includeTransactions = true } = {
   const collections = [];
   if (includeMaster !== false) collections.push(...MASTER_COLLECTIONS);
   if (includeTransactions !== false) collections.push(...TRANSACTION_COLLECTIONS);
-
   const data = { createdAt: new Date().toISOString(), collections: {} };
-  for (const collection of collections) {
-    data.collections[collection] = await listRecords(collection, { perPage: 500 });
-  }
-
+  for (const collection of collections) data.collections[collection] = await listRecords(collection, { perPage: 500 });
   const dir = path.resolve(process.cwd(), "backups");
   fs.mkdirSync(dir, { recursive: true });
   const fileName = `spwt-db-backup-${todayStamp()}.json`;
@@ -200,11 +201,15 @@ async function previewDeleteByEmployee(params = {}) {
     err.status = 400;
     throw err;
   }
-  const filter = buildEmployeeDateFilter(params);
   const counts = {};
-  for (const collection of DELETE_BY_EMP_COLLECTIONS) counts[collection] = await countRecords(collection, filter);
+  const filters = {};
+  for (const collection of DELETE_BY_EMP_COLLECTIONS) {
+    const filter = buildEmployeeDateFilter(params, collection);
+    filters[collection] = filter;
+    counts[collection] = await countRecords(collection, filter);
+  }
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  return { empCode, fromDate: clean(params.fromDate), toDate: clean(params.toDate), filter, counts, total };
+  return { empCode, fromDate: clean(params.fromDate), toDate: clean(params.toDate), filters, counts, total };
 }
 
 async function deleteByEmployee(params = {}) {
@@ -216,17 +221,21 @@ async function deleteByEmployee(params = {}) {
     throw err;
   }
   const results = [];
-  for (const collection of DELETE_BY_EMP_COLLECTIONS) results.push(await deleteByFilter(collection, preview.filter));
+  for (const collection of DELETE_BY_EMP_COLLECTIONS) results.push(await deleteByFilter(collection, preview.filters[collection] || ""));
   const bookingRebuild = await rebuildBookingStatus();
   return { ...preview, deleted: results, bookingRebuild };
 }
 
 async function previewClearTransactions(params = {}) {
-  const filter = buildDateFilter(params).join(" && ");
   const counts = {};
-  for (const collection of TRANSACTION_COLLECTIONS) counts[collection] = await countRecords(collection, filter);
+  const filters = {};
+  for (const collection of TRANSACTION_COLLECTIONS) {
+    const filter = buildCollectionDateFilter(params, collection);
+    filters[collection] = filter;
+    counts[collection] = await countRecords(collection, filter);
+  }
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  return { fromDate: clean(params.fromDate), toDate: clean(params.toDate), filter, counts, total };
+  return { fromDate: clean(params.fromDate), toDate: clean(params.toDate), filters, counts, total };
 }
 
 async function clearTransactions(params = {}) {
@@ -238,7 +247,7 @@ async function clearTransactions(params = {}) {
   }
   const preview = await previewClearTransactions(params);
   const results = [];
-  for (const collection of TRANSACTION_COLLECTIONS) results.push(await deleteByFilter(collection, preview.filter));
+  for (const collection of TRANSACTION_COLLECTIONS) results.push(await deleteByFilter(collection, preview.filters[collection] || ""));
   return { ...preview, deleted: results };
 }
 
@@ -249,11 +258,4 @@ async function importOldSheetData() {
   throw err;
 }
 
-module.exports = {
-  backupDb,
-  previewDeleteByEmployee,
-  deleteByEmployee,
-  previewClearTransactions,
-  clearTransactions,
-  importOldSheetData
-};
+module.exports = { backupDb, previewDeleteByEmployee, deleteByEmployee, previewClearTransactions, clearTransactions, importOldSheetData };
