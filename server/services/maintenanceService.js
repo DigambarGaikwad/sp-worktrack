@@ -22,6 +22,16 @@ const MASTER_COLLECTIONS = [
   "admin_settings"
 ];
 
+const SETUP_CLEAR_COLLECTIONS = [
+  "quality_points",
+  "booking_points",
+  "subworks",
+  "departments",
+  "machine_types",
+  "machines",
+  "employees"
+];
+
 const TRANSACTION_COLLECTIONS = [
   "production_entries",
   "production_entry_lines",
@@ -251,6 +261,26 @@ async function clearTransactions(params = {}) {
   return { ...preview, deleted: results };
 }
 
+async function previewClearSetupData() {
+  const counts = {};
+  for (const collection of SETUP_CLEAR_COLLECTIONS) counts[collection] = await countRecords(collection, "");
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  return { collections: SETUP_CLEAR_COLLECTIONS, counts, total };
+}
+
+async function clearSetupData(params = {}) {
+  const confirmText = clean(params.confirmText || params.confirm);
+  if (confirmText !== "MASTER") {
+    const err = new Error('Type MASTER to confirm setup/master data deletion.');
+    err.status = 400;
+    throw err;
+  }
+  const preview = await previewClearSetupData();
+  const results = [];
+  for (const collection of SETUP_CLEAR_COLLECTIONS) results.push(await deleteByFilter(collection, ""));
+  return { ...preview, deleted: results };
+}
+
 async function importOldSheetData() {
   const err = new Error("Old sheet import requires column mapping. Upload/export V1 sheet first, then run migration mapping.");
   err.status = 501;
@@ -258,4 +288,13 @@ async function importOldSheetData() {
   throw err;
 }
 
-module.exports = { backupDb, previewDeleteByEmployee, deleteByEmployee, previewClearTransactions, clearTransactions, importOldSheetData };
+module.exports = {
+  backupDb,
+  previewDeleteByEmployee,
+  deleteByEmployee,
+  previewClearTransactions,
+  clearTransactions,
+  previewClearSetupData,
+  clearSetupData,
+  importOldSheetData
+};
