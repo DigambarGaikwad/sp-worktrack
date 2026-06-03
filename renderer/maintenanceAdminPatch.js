@@ -83,6 +83,8 @@
             #tabMaintenance th { text-align:left; padding:6px; background:#0b3f73; color:white; }
             #tabMaintenance td { padding:6px; border-bottom:1px solid #e5e7eb; }
             #tabMaintenance .danger-note { color:#b91c1c; font-weight:800; }
+            #tabMaintenance .confirm-input { margin-top:8px; max-width:240px; border:2px solid #ef4444!important; font-weight:900; letter-spacing:.5px; }
+            #tabMaintenance .confirm-label { margin-top:8px; display:block; font-weight:900; color:#b91c1c; }
             @media(max-width:900px){ #tabMaintenance .maintenance-grid{grid-template-columns:1fr;} }
           </style>
 
@@ -102,8 +104,10 @@
                 <div class="field"><label>To Date</label><input id="clearToDate" class="admin-input" type="date" /></div>
               </div>
               <button class="btn grey" id="previewClearTransactionsBtn" type="button">Preview Clear Count</button>
+              <label class="confirm-label">Type CLEAR here to confirm</label>
+              <input id="clearConfirmText" class="admin-input confirm-input" placeholder="CLEAR" autocomplete="off" />
               <button class="btn red" id="confirmClearTransactionsBtn" type="button">Clear Transaction Data</button>
-              <div class="small-hint danger-note">Confirm popup requires typing CLEAR.</div>
+              <div class="small-hint danger-note">This action deletes transaction data. Backup first.</div>
               <div id="clearTransactionsResult"></div>
             </div>
 
@@ -116,8 +120,10 @@
                 <div class="field"><label>To Date</label><input id="deleteEmpToDate" class="admin-input" type="date" /></div>
               </div>
               <button class="btn grey" id="previewDeleteEmployeeBtn" type="button">Preview Employee Count</button>
+              <label class="confirm-label">Type DELETE here to confirm</label>
+              <input id="deleteEmpConfirmText" class="admin-input confirm-input" placeholder="DELETE" autocomplete="off" />
               <button class="btn red" id="confirmDeleteEmployeeBtn" type="button">Delete Employee Entries</button>
-              <div class="small-hint danger-note">Confirm popup requires typing DELETE.</div>
+              <div class="small-hint danger-note">This action deletes selected employee entries. Backup first.</div>
               <div id="deleteEmployeeResult"></div>
             </div>
 
@@ -184,11 +190,12 @@
     if (confirmClearBtn && !confirmClearBtn.__wired) {
       confirmClearBtn.__wired = true;
       confirmClearBtn.addEventListener("click", () => run(async () => {
-        const confirmText = prompt('Type CLEAR to delete transaction data. Backup first.');
-        if (confirmText !== "CLEAR") return status("Clear cancelled.");
+        const confirmText = clean(document.getElementById("clearConfirmText")?.value);
+        if (confirmText !== "CLEAR") return status("Type CLEAR in the red confirmation box first.", "error");
         status("Clearing transaction data...");
         const data = await requestJson("/api/maintenance/clear-transactions/confirm", { ...readClearPayload(), confirmText });
         renderCounts("clearTransactionsResult", { counts: Object.fromEntries((data.deleted || []).map(x => [x.collection, x.deleted])) });
+        document.getElementById("clearConfirmText").value = "";
         status("Transaction data cleared.", "success");
       }));
     }
@@ -208,11 +215,12 @@
     if (confirmEmpBtn && !confirmEmpBtn.__wired) {
       confirmEmpBtn.__wired = true;
       confirmEmpBtn.addEventListener("click", () => run(async () => {
-        const confirmText = prompt('Type DELETE to delete this employee entries. Backup first.');
-        if (confirmText !== "DELETE") return status("Delete cancelled.");
+        const confirmText = clean(document.getElementById("deleteEmpConfirmText")?.value);
+        if (confirmText !== "DELETE") return status("Type DELETE in the red confirmation box first.", "error");
         status("Deleting employee entries and rebuilding booking status...");
         const data = await requestJson("/api/maintenance/employee-delete/confirm", { ...readEmpPayload(), confirmText });
         renderCounts("deleteEmployeeResult", { counts: Object.fromEntries((data.deleted || []).map(x => [x.collection, x.deleted])) });
+        document.getElementById("deleteEmpConfirmText").value = "";
         status(`Employee entries deleted. Booking status rebuilt: ${data.bookingRebuild?.rebuilt || 0}`, "success");
       }));
     }
