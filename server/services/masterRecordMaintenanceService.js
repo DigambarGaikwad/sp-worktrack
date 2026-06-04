@@ -1,5 +1,5 @@
 // server/services/masterRecordMaintenanceService.js
-// Lists and removes one selected master record at a time from approved PocketBase collections.
+// Lists and removes selected master/setup records from approved PocketBase collections.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
@@ -25,7 +25,7 @@ function isMissingCollectionError(err) {
 function assertTarget(collection) {
   const name = clean(collection);
   if (!TARGETS[name]) {
-    const err = new Error("This master type is not allowed for individual deletion.");
+    const err = new Error("This master type is not allowed for deletion.");
     err.status = 400;
     throw err;
   }
@@ -90,26 +90,46 @@ async function listMasterDeleteOptions() {
   return { groups };
 }
 
+async function removeAllRecordsInCollection(collection) {
+  const records = await listRecords(collection);
+  let deleted = 0;
+
+  for (const record of records) {
+    if (!record?.id) continue;
+    await removeRecord(collection, record.id);
+    deleted += 1;
+  }
+
+  return deleted;
+}
+
 async function removeSelectedMasterRecord(params = {}) {
   const collection = assertTarget(params.collection);
   const id = clean(params.id || params.recordId);
   const confirmText = clean(params.confirmText || params.confirm);
+  const deleteAll = params.deleteAll === true || clean(params.deleteMode).toLowerCase() === "all";
 
-  if (!id) {
-    const err = new Error("Select a record to delete.");
+  if (confirmText !== "DELETE") {
+    const err = new Error('Type DELETE to confirm master record deletion.');
     err.status = 400;
     throw err;
   }
-  if (confirmText !== "DELETE") {
-    const err = new Error('Type DELETE to confirm individual master record deletion.');
-    err.status = 400;
-    throw err;
+
+  if (!id || deleteAll) {
+    const deleted = await removeAllRecordsInCollection(collection);
+    return {
+      collection,
+      title: TARGETS[collection].title,
+      mode: "all",
+      deleted,
+      item: { label: `All ${TARGETS[collection].title}` }
+    };
   }
 
   const record = await getRecord(collection, id);
   const item = formatItem(collection, record);
   await removeRecord(collection, id);
-  return { collection, title: TARGETS[collection].title, deleted: 1, item };
+  return { collection, title: TARGETS[collection].title, mode: "single", deleted: 1, item };
 }
 
 module.exports = { listMasterDeleteOptions, removeSelectedMasterRecord };
