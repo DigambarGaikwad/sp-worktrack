@@ -13,3 +13,5 @@ google_apps_script/.clasp.json
 local-tools/
 pb_data/
 pb_migrations/
+
+backups/
