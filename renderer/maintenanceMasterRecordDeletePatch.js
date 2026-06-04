@@ -1,5 +1,6 @@
 // renderer/maintenanceMasterRecordDeletePatch.js
-// Adds Maintenance option to permanently delete one selected master/setup record.
+// Adds Maintenance option to permanently delete one selected master/setup record,
+// or all records under a selected master type when no specific record is selected.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 45000;
@@ -67,15 +68,24 @@
       if (hint) hint.textContent = "";
       return;
     }
-    select.innerHTML = `<option value="">Select specific record</option>` + (group.items || []).map(item => `<option value="${esc(item.id)}">${esc(item.label)}${item.details ? ` — ${esc(item.details)}` : ""}</option>`).join("");
-    if (hint) hint.textContent = `${group.count || 0} record(s) found in ${group.title}.`;
+    select.innerHTML = `<option value="">All records in ${esc(group.title)}</option>` + (group.items || []).map(item => `<option value="${esc(item.id)}">${esc(item.label)}${item.details ? ` — ${esc(item.details)}` : ""}</option>`).join("");
+    if (hint) hint.textContent = `${group.count || 0} record(s) found. Keep Specific Record blank to delete ALL records in ${group.title}.`;
   }
 
   function showSelectionDetails() {
+    const group = selectedGroup();
     const item = selectedItem();
     const host = document.getElementById("masterDeleteSelectedDetails");
     if (!host) return;
-    host.innerHTML = item ? `<b>Selected:</b> ${esc(item.label)}${item.details ? `<br><span class="small-hint">${esc(item.details)}</span>` : ""}` : "";
+
+    if (!group) {
+      host.innerHTML = "";
+      return;
+    }
+
+    host.innerHTML = item
+      ? `<b>Selected record:</b> ${esc(item.label)}${item.details ? `<br><span class="small-hint">${esc(item.details)}</span>` : ""}`
+      : `<b class="danger-note">No specific record selected:</b> This will delete ALL ${esc(group.title)} records (${esc(group.count || 0)}).`;
   }
 
   function ensureBox() {
@@ -86,19 +96,19 @@
     box.className = "maintenance-box";
     box.id = "masterRecordDeleteBox";
     box.innerHTML = `
-      <div class="maintenance-title">6. Delete Individual Master Record</div>
-      <div class="small-hint">Permanently deletes one selected setup/master record only.</div>
-      <div class="small-hint danger-note">Use this for unnecessary duplicate records. Backup first. Existing historical production logs are not removed.</div>
+      <div class="maintenance-title">6. Delete Master Records</div>
+      <div class="small-hint">Delete one selected record, or delete all records under selected master type when Specific Record is blank.</div>
+      <div class="small-hint danger-note">Backup first. Existing historical production logs are not removed.</div>
       <button class="btn grey" id="reloadMasterDeleteOptionsBtn" type="button">Load Master Records</button>
       <div class="grid-2" style="margin-top:10px;">
         <div class="field"><label>Master Type</label><select id="masterDeleteTypeSelect" class="admin-select"><option value="">Load records first</option></select></div>
-        <div class="field"><label>Specific Record</label><select id="masterDeleteRecordSelect" class="admin-select"><option value="">Select master type first</option></select></div>
+        <div class="field"><label>Specific Record (optional)</label><select id="masterDeleteRecordSelect" class="admin-select"><option value="">Select master type first</option></select></div>
       </div>
       <div class="small-hint" id="masterDeleteRecordHint"></div>
       <div class="small-hint" id="masterDeleteSelectedDetails"></div>
       <label class="confirm-label">Type DELETE here to confirm</label>
       <input id="masterDeleteConfirmText" class="admin-input confirm-input" placeholder="DELETE" autocomplete="off" />
-      <button class="btn red" id="confirmMasterRecordDeleteBtn" type="button">Delete Selected Record</button>
+      <button class="btn red" id="confirmMasterRecordDeleteBtn" type="button">Delete Master Record(s)</button>
       <div id="masterRecordDeleteResult"></div>
     `;
     grid.appendChild(box);
@@ -112,6 +122,7 @@
       groups = Array.isArray(data.groups) ? data.groups : [];
       fillTypeSelect();
       fillRecordSelect();
+      showSelectionDetails();
       showStatus("Master records loaded.", "success");
     } catch (err) {
       showStatus(err?.message || String(err), "error");
@@ -128,7 +139,7 @@
       if (!requestToken || !otp) throw new Error("Maintenance OTP details missing. Request OTP again.");
 
       btn.disabled = true;
-      showStatus("Deleting selected master record...");
+      showStatus(pendingDelete.deleteAll ? "Deleting all selected master type records..." : "Deleting selected master record...");
       const data = await requestJson("/api/maintenance/master-records/delete", {
         ...pendingDelete,
         action: DELETE_ACTION,
@@ -137,7 +148,12 @@
         otp
       });
       window.SPWT_CLOSE_MAINTENANCE_OTP?.();
-      showStatus(`Deleted from ${data.title || data.collection}: ${data.item?.label || "selected record"}.`, "success");
+
+      const msg = data.mode === "all"
+        ? `Deleted ${data.deleted || 0} record(s) from ${data.title || data.collection}.`
+        : `Deleted from ${data.title || data.collection}: ${data.item?.label || "selected record"}.`;
+      showStatus(msg, "success");
+
       pendingDelete = null;
       const input = document.getElementById("masterDeleteConfirmText");
       if (input) input.value = "";
@@ -155,13 +171,20 @@
       const item = selectedItem();
       const confirmText = clean(document.getElementById("masterDeleteConfirmText")?.value);
       if (!group) throw new Error("Select master type first.");
-      if (!item) throw new Error("Select specific record first.");
       if (confirmText !== "DELETE") throw new Error("Type DELETE in the confirmation box first.");
       if (typeof window.SPWT_REQUEST_MAINTENANCE_OTP !== "function") throw new Error("Maintenance OTP UI is not loaded. Restart app and try again.");
 
-      pendingDelete = { collection: group.collection, id: item.id, confirmText };
+      const deleteAll = !item;
+      pendingDelete = {
+        collection: group.collection,
+        id: item?.id || "",
+        confirmText,
+        deleteAll,
+        deleteMode: deleteAll ? "all" : "single"
+      };
+
       btn.disabled = true;
-      showStatus("Sending Maintenance OTP...");
+      showStatus(deleteAll ? `Sending OTP to delete ALL ${group.title} records...` : "Sending Maintenance OTP...");
       await window.SPWT_REQUEST_MAINTENANCE_OTP(DELETE_ACTION);
       showStatus("OTP sent. Enter OTP and click Verify & Continue.");
     } catch (err) {
