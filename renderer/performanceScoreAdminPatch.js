@@ -47,6 +47,11 @@
     return String(value ?? "").replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
   }
 
+  function fmt(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Number(n.toFixed(1)) : 0;
+  }
+
   function numberValue(id, fallback) {
     const n = Number(document.getElementById(id)?.value);
     return Number.isFinite(n) ? n : fallback;
@@ -78,6 +83,36 @@
     el.style.fontWeight = "900";
   }
 
+  function summaryCard(label, value, note, color) {
+    return `<div class="mini-metric" style="border-left:4px solid ${color};">
+      <div class="mini-label">${esc(label)}</div>
+      <div class="mini-value">${esc(value)}</div>
+      <div class="small-hint">${esc(note)}</div>
+    </div>`;
+  }
+
+  function updateLiveSummary() {
+    const r = readRules();
+    const positiveTotal = fmt(r.productivityWeight + r.utilizationWeight + r.efficiencyWeight + r.attendanceWeight);
+    const samplePenalty = fmt((2 * r.unplannedAbsentPenaltyPerDay) + (2 * r.reworkPenaltyPerHour) + (5 * r.otherWorkPenaltyPerHour));
+    const sampleScore = fmt(Math.max(r.minScore, Math.min(r.maxScore, positiveTotal - samplePenalty)));
+
+    const el = document.getElementById("scoreRulesLiveSummary");
+    if (!el) return;
+
+    el.innerHTML = `
+      <div class="emp-metrics" style="margin-top:10px;">
+        ${summaryCard("Positive Marks Total", positiveTotal, "Productivity + Utilization + Efficiency + Attendance", "#15803d")}
+        ${summaryCard("Score Limit", `${fmt(r.minScore)} to ${fmt(r.maxScore)}`, "Final score cannot go below/above this range", "#2563eb")}
+        ${summaryCard("Leave Rule", `${fmt(r.plannedLeaveAllowedPerYear)} planned days/year free`, `Extra planned leave: -${fmt(r.plannedExtraPenaltyPerDay)} / day`, "#f59e0b")}
+        ${summaryCard("Unplanned Leave", `-${fmt(r.unplannedAbsentPenaltyPerDay)} / day`, "Direct penalty for unplanned absence", "#b91c1c")}
+      </div>
+      <div class="small-hint" style="margin-top:10px;font-weight:900;color:#0b3f73;">
+        Example: If positive marks are ${positiveTotal}, and employee has 2 unplanned leave + 2 rework hours + 5 other work hours, penalty is ${samplePenalty}; example score = ${sampleScore}.
+      </div>
+    `;
+  }
+
   function ensureUi() {
     const controlsCard = document.querySelector("#tabControls .admin-controls-card") || document.getElementById("tabControls");
     if (!controlsCard || document.getElementById("scoreRulesBox")) return;
@@ -89,6 +124,7 @@
     box.innerHTML = `
       <div class="section-title">Performance Score Rules</div>
       <div class="small-hint">Control how score is calculated in People Dashboard. Positive marks increase score; penalties reduce score.</div>
+      <div id="scoreRulesLiveSummary"></div>
       <div class="grid-2" style="margin-top:10px;">
         ${FIELDS.map(([id, label, min, max, step]) => `
           <div class="field">
@@ -97,8 +133,10 @@
           </div>
         `).join("")}
       </div>
-      <div class="small-hint" style="margin-top:8px;">
-        Formula: Productivity + Utilization + Efficiency + Attendance - Rework - Other Work - Unplanned Leave - Planned Leave - Extra Planned Leave.
+      <div class="small-hint" style="margin-top:8px;line-height:1.5;">
+        Actual formula per employee:<br>
+        Score = Productivity Marks + Utilization Marks + Efficiency Marks + Attendance Marks - Rework Penalty - Other Work Penalty - Unplanned Leave Penalty - Planned Leave Penalty - Extra Planned Leave Penalty.<br>
+        Example: Productivity 80% with cap 120% and 45 marks gives 80/120 × 45 = 30 marks.
       </div>
       <div class="row admin-controls-actions">
         <button class="btn green" id="saveScoreRulesBtn" type="button">Save Score Rules</button>
@@ -110,6 +148,7 @@
     controlsCard.insertAdjacentElement("afterend", box);
     document.getElementById("saveScoreRulesBtn")?.addEventListener("click", saveRules);
     document.getElementById("resetScoreRulesBtn")?.addEventListener("click", () => fillRules(DEFAULT_RULES));
+    FIELDS.forEach(([id]) => document.getElementById(`scoreRule_${id}`)?.addEventListener("input", updateLiveSummary));
     loadRules();
   }
 
@@ -118,6 +157,7 @@
       const input = document.getElementById(`scoreRule_${id}`);
       if (input) input.value = String(rules[id] ?? DEFAULT_RULES[id] ?? 0);
     });
+    updateLiveSummary();
   }
 
   function readRules() {
