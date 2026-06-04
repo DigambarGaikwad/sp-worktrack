@@ -86,8 +86,12 @@ function getGeneralShiftMinutes(shifts) {
   return general ? calculateShiftMinutes(general) : 0;
 }
 
+function employeeDailyMinutes(emp, fallbackMinutes) {
+  return num(emp.availableMinutesDay ?? emp.available_minutes_day, 0) || fallbackMinutes || 465;
+}
+
 function personBase(emp = {}) {
-  return { code: clean(emp.code || emp.emp_code), name: clean(emp.name || emp.full_name || emp.emp_name || emp.code || emp.emp_code), masterDepartment: clean(emp.department), designation: clean(emp.designation), available: 0, actual: 0, standard: 0, normalAvailable: 0, normalStandard: 0, overtimeActual: 0, overtimeStandard: 0, rework: 0, other: 0, majorLoss: 0, entries: 0, presentDates: new Set(), deptMinutes: new Map() };
+  return { code: clean(emp.code || emp.emp_code), name: clean(emp.name || emp.full_name || emp.emp_name || emp.code || emp.emp_code), masterDepartment: clean(emp.department), designation: clean(emp.designation), availableMinutesDay: num(emp.availableMinutesDay ?? emp.available_minutes_day, 0), available: 0, actual: 0, standard: 0, normalAvailable: 0, normalStandard: 0, overtimeActual: 0, overtimeStandard: 0, rework: 0, other: 0, majorLoss: 0, entries: 0, presentDates: new Set(), deptMinutes: new Map() };
 }
 
 function preferredDepartment(person) {
@@ -103,7 +107,6 @@ function scorePart(percent, weight, capPct) {
 
 function scorePerson(metrics, rules) {
   if (metrics.availableHours <= 0) return { score: 0, positive: 0, penalties: 0, details: {} };
-
   const details = {
     productivity: scorePart(metrics.productivityPct, rules.productivityWeight, rules.productivityCapPct),
     utilization: scorePart(metrics.utilizationPct, rules.utilizationWeight, rules.utilizationCapPct),
@@ -115,7 +118,6 @@ function scorePerson(metrics, rules) {
     plannedAbsentPenalty: Number((clamp(metrics.plannedAbsentDays, 0, 366) * num(rules.plannedAbsentPenaltyPerDay, 0)).toFixed(1)),
     plannedExtraPenalty: Number((Math.max(0, num(metrics.plannedLeaveYearDays, 0) - num(rules.plannedLeaveAllowedPerYear, 0)) * num(rules.plannedExtraPenaltyPerDay, 0)).toFixed(1))
   };
-
   const positive = Number((details.productivity + details.utilization + details.efficiency + details.attendance).toFixed(1));
   const penalties = Number((details.reworkPenalty + details.otherWorkPenalty + details.unplannedAbsentPenalty + details.plannedAbsentPenalty + details.plannedExtraPenalty).toFixed(1));
   const score = Number(clamp(positive - penalties, rules.minScore, rules.maxScore).toFixed(1));
@@ -137,7 +139,7 @@ function makeOutputPerson(person, absenceStats, workingDays, scoreRules) {
   const attendancePct = pct(person.presentDates.size, workingDays.length);
   const scoreResult = scorePerson({ productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, availableHours, plannedAbsentDays, unplannedAbsentDays, plannedLeaveYearDays }, scoreRules);
 
-  return { code: person.code, name: person.name || person.code || "Unknown", department: preferredDepartment(person), score: scoreResult.score, scoreBreakdown: scoreResult, scoreInputs: { productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, plannedAbsentDays, unplannedAbsentDays, absentDays, plannedLeaveYearDays }, yesterdayProductivityPct: productivityPct, monthProductivityPct: productivityPct, overtimeHours: hours(person.overtimeActual), absentDays, plannedAbsentDays, unplannedAbsentDays, plannedLeaveYearDays, normalProductivityPct: pct(person.normalStandard, person.normalAvailable), overtimeProductivityPct: pct(person.overtimeStandard, person.overtimeActual), efficiencyPct, reworkHours, otherWorkHours, presentDays: person.presentDates.size, availableHours, utilizedHours: hours(person.actual), standardOutputHours: hours(person.standard), badges: [] };
+  return { code: person.code, name: person.name || person.code || "Unknown", department: preferredDepartment(person), designation: person.designation, availableMinutesDay: person.availableMinutesDay, score: scoreResult.score, scoreBreakdown: scoreResult, scoreInputs: { productivityPct, utilizationPct, efficiencyPct, attendancePct, reworkHours, otherWorkHours, plannedAbsentDays, unplannedAbsentDays, absentDays, plannedLeaveYearDays }, yesterdayProductivityPct: productivityPct, monthProductivityPct: productivityPct, overtimeHours: hours(person.overtimeActual), absentDays, plannedAbsentDays, unplannedAbsentDays, plannedLeaveYearDays, normalProductivityPct: pct(person.normalStandard, person.normalAvailable), overtimeProductivityPct: pct(person.overtimeStandard, person.overtimeActual), efficiencyPct, reworkHours, otherWorkHours, presentDays: person.presentDates.size, availableHours, utilizedHours: hours(person.actual), standardOutputHours: hours(person.standard), badges: [] };
 }
 
 function addUnique(list, value) { const v = clean(value); if (v && !list.includes(v)) list.push(v); }
@@ -159,22 +161,13 @@ function buildPresenceLists(activeEmployees, attendanceByDate, dates, deptFilter
   const presentMap = new Map(), absentMap = new Map();
   employees.forEach((e) => { const k = empKey(e.code, e.name); presentMap.set(k, { ...e, presentDates: [] }); absentMap.set(k, { ...e, absentDates: [] }); });
   dates.forEach((d) => { const set = attendanceByDate.get(d) || new Set(); employees.forEach((e) => { const k = empKey(e.code, e.name); if (set.has(k)) presentMap.get(k).presentDates.push(d); else absentMap.get(k).absentDates.push(d); }); });
-  const present = Array.from(presentMap.values()).filter((x) => x.presentDates.length > 0).map((x) => ({ code: x.code, name: x.name || x.code, department: x.department || "-", shift: "General", days: x.presentDates.length, presentDates: x.presentDates })).sort((a, b) => b.days - a.days || clean(a.name).localeCompare(clean(b.name)));
-  const absent = Array.from(absentMap.values()).filter((x) => x.absentDates.length > 0).map((x) => ({ code: x.code, name: x.name || x.code, department: x.department || "-", shift: "General", days: x.absentDates.length, absentDates: x.absentDates })).sort((a, b) => b.days - a.days || clean(a.name).localeCompare(clean(b.name)));
+  const present = Array.from(presentMap.values()).filter((x) => x.presentDates.length > 0).map((x) => ({ code: x.code, name: x.name || x.code, department: x.department || "-", availableMinutesDay: x.availableMinutesDay, shift: "General", days: x.presentDates.length, presentDates: x.presentDates })).sort((a, b) => b.days - a.days || clean(a.name).localeCompare(clean(b.name)));
+  const absent = Array.from(absentMap.values()).filter((x) => x.absentDates.length > 0).map((x) => ({ code: x.code, name: x.name || x.code, department: x.department || "-", availableMinutesDay: x.availableMinutesDay, shift: "General", days: x.absentDates.length, absentDates: x.absentDates })).sort((a, b) => b.days - a.days || clean(a.name).localeCompare(clean(b.name)));
   return { present, absent };
 }
 
 function normalizePlannedAbsences(rows) {
-  return (Array.isArray(rows) ? rows : []).map((r) => ({
-    code: clean(r.emp_code || r.empCode).toLowerCase(),
-    name: clean(r.emp_name || r.empName).toLowerCase(),
-    department: clean(r.department),
-    from: clean(r.from_date || r.fromDate),
-    to: clean(r.to_date || r.toDate || r.from_date || r.fromDate),
-    reason: clean(r.reason),
-    remark: clean(r.remark),
-    status: clean(r.status || "Planned")
-  })).filter((r) => (r.code || r.name) && r.from && !["cancelled", "canceled", "deleted"].includes(r.status.toLowerCase()));
+  return (Array.isArray(rows) ? rows : []).map((r) => ({ code: clean(r.emp_code || r.empCode).toLowerCase(), name: clean(r.emp_name || r.empName).toLowerCase(), department: clean(r.department), from: clean(r.from_date || r.fromDate), to: clean(r.to_date || r.toDate || r.from_date || r.fromDate), reason: clean(r.reason), remark: clean(r.remark), status: clean(r.status || "Planned") })).filter((r) => (r.code || r.name) && r.from && !["cancelled", "canceled", "deleted"].includes(r.status.toLowerCase()));
 }
 
 function isPlannedAbsent(emp, date, plannedAbsences) {
@@ -213,13 +206,8 @@ function absenceStatsForScoring(absentRows, plannedAbsences, activeEmployees, ye
       map.set(key, num(map.get(key), 0) + 1);
     });
   });
-
   const employeesByCode = new Map();
-  activeEmployees.forEach((e) => {
-    if (e.code) employeesByCode.set(e.code.toLowerCase(), empKey(e.code, e.name));
-    if (e.name) employeesByCode.set(e.name.toLowerCase(), empKey(e.code, e.name));
-  });
-
+  activeEmployees.forEach((e) => { if (e.code) employeesByCode.set(e.code.toLowerCase(), empKey(e.code, e.name)); if (e.name) employeesByCode.set(e.name.toLowerCase(), empKey(e.code, e.name)); });
   plannedAbsences.forEach((p) => {
     const key = employeesByCode.get(p.code) || employeesByCode.get(p.name) || p.code || p.name;
     const from = p.from < `${year}-01-01` ? `${year}-01-01` : p.from;
@@ -230,7 +218,6 @@ function absenceStatsForScoring(absentRows, plannedAbsences, activeEmployees, ye
     let d = new Date(fy, fm - 1, fd), end = new Date(ty, tm - 1, td);
     while (d <= end) { if (d.getDay() !== 0) plannedYear.set(key, num(plannedYear.get(key), 0) + 1); d = addDays(d, 1); }
   });
-
   return { planned, unplanned, plannedYear };
 }
 
@@ -277,8 +264,17 @@ async function getPeopleDashboard(params = {}) {
     listAll("planned_absences", { perPage: 5000 }).catch(() => [])
   ]);
 
-  const activeEmployees = employeesRaw.filter((e) => isActive(e.active)).map((e) => ({ code: clean(e.emp_code), name: clean(e.full_name), department: clean(e.department) || "-", designation: clean(e.designation) })).filter((e) => e.code || e.name);
-  const peopleMap = new Map(); activeEmployees.forEach((e) => peopleMap.set(empKey(e.code, e.name), personBase(e)));
+  const generalShiftMinutes = getGeneralShiftMinutes(shiftsRaw) || 465;
+  const activeEmployees = employeesRaw.filter((e) => isActive(e.active)).map((e) => ({ code: clean(e.emp_code), name: clean(e.full_name), department: clean(e.department) || "-", designation: clean(e.designation), availableMinutesDay: num(e.available_minutes_day, 0) || generalShiftMinutes })).filter((e) => e.code || e.name);
+  const scopedActiveEmployees = activeEmployees.filter((e) => deptFilter === "All" || clean(e.department) === deptFilter).filter((e) => employeeFilter === "All" || clean(e.name || e.code) === employeeFilter);
+  const peopleMap = new Map();
+  activeEmployees.forEach((e) => {
+    const p = personBase(e);
+    p.availableMinutesDay = employeeDailyMinutes(e, generalShiftMinutes);
+    p.available = selectedWorkingDays.length * p.availableMinutesDay;
+    p.normalAvailable = p.available;
+    peopleMap.set(empKey(e.code, e.name), p);
+  });
 
   const selectedEntries = entriesRaw.filter((entry) => inRange(entry.work_date, range)).filter((entry) => shiftFilter === "All" || clean(entry.shift_name || entry.shift_code) === shiftFilter).filter((entry) => employeeFilter === "All" || clean(entry.emp_name || entry.emp_code) === employeeFilter);
   const entrySet = new Set(selectedEntries.map((e) => clean(e.entry_no)).filter(Boolean));
@@ -286,17 +282,18 @@ async function getPeopleDashboard(params = {}) {
 
   selectedEntries.forEach((entry) => {
     const key = empKey(entry.emp_code, entry.emp_name);
-    if (!peopleMap.has(key)) peopleMap.set(key, personBase({ code: entry.emp_code, name: entry.emp_name }));
+    if (!peopleMap.has(key)) peopleMap.set(key, personBase({ code: entry.emp_code, name: entry.emp_name, availableMinutesDay: generalShiftMinutes }));
     const p = peopleMap.get(key);
-    const available = num(entry.shift_available, 0), actual = num(entry.total_actual_minutes, 0), standard = num(entry.total_standard_minutes, 0);
+    if (!p.available) { p.availableMinutesDay = p.availableMinutesDay || generalShiftMinutes; p.available = selectedWorkingDays.length * p.availableMinutesDay; p.normalAvailable = p.available; }
+    const actual = num(entry.total_actual_minutes, 0), standard = num(entry.total_standard_minutes, 0);
     const isOvertime = clean(entry.work_type).toLowerCase() === "overtime" || num(entry.flexible_shift_minutes, 0) > 0;
-    p.available += available; p.actual += actual; p.standard += standard; p.majorLoss += num(entry.major_loss_minutes, 0); p.entries += 1; p.presentDates.add(clean(entry.work_date));
-    if (isOvertime) { p.overtimeActual += actual; p.overtimeStandard += standard; } else { p.normalAvailable += available; p.normalStandard += standard; }
+    p.actual += actual; p.standard += standard; p.majorLoss += num(entry.major_loss_minutes, 0); p.entries += 1; p.presentDates.add(clean(entry.work_date));
+    if (isOvertime) { p.overtimeActual += actual; p.overtimeStandard += standard; } else { p.normalStandard += standard; }
   });
 
   selectedLines.forEach((line) => {
     const key = empKey(line.emp_code, line.emp_name);
-    if (!peopleMap.has(key)) peopleMap.set(key, personBase({ code: line.emp_code, name: line.emp_name }));
+    if (!peopleMap.has(key)) peopleMap.set(key, personBase({ code: line.emp_code, name: line.emp_name, availableMinutesDay: generalShiftMinutes }));
     const p = peopleMap.get(key);
     const actual = num(line.actual_minutes, 0), dept = clean(line.department_name || line.department_code || "-"), nature = clean(line.work_nature || "Normal").toLowerCase();
     p.deptMinutes.set(dept, num(p.deptMinutes.get(dept), 0) + actual);
@@ -310,8 +307,7 @@ async function getPeopleDashboard(params = {}) {
   const absentBreakdown = splitAbsentRowsByPlan(presence.absent, plannedAbsences);
   const monthAbsence = absencePctForRange(activeEmployees, attendanceRaw, range, shiftFilter, deptFilter, employeeFilter);
   const scoringAbsence = absenceStatsForScoring(presence.absent, plannedAbsences, activeEmployees, safeYear(range.year) || Number(clean(range.from).slice(0, 4)) || new Date().getFullYear());
-  const generalShiftMinutes = getGeneralShiftMinutes(shiftsRaw);
-  const manpowerAvailableMinutes = presence.present.reduce((sum, p) => sum + num(p.days, 0), 0) * generalShiftMinutes;
+  const manpowerAvailableMinutes = scopedActiveEmployees.reduce((sum, e) => sum + selectedWorkingDays.length * employeeDailyMinutes(e, generalShiftMinutes), 0);
 
   let people = Array.from(peopleMap.values()).map((p) => makeOutputPerson(p, scoringAbsence, selectedWorkingDays, activeScoreRules));
   if (deptFilter !== "All") people = people.filter((p) => clean(p.department) === deptFilter);
@@ -358,11 +354,12 @@ async function getPeopleDashboard(params = {}) {
   departmentsRaw.filter((d) => isActive(d.active)).forEach((d) => addUnique(departmentsForFilter, d.department_name || d.department_code || d.name));
   departmentsForFilter.sort((a, b) => a.localeCompare(b));
   const employeesForFilter = activeEmployees.map((e) => e.name || e.code).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  const employeeDetails = activeEmployees.map((e) => ({ code: e.code, name: e.name, department: e.department, availableMinutesDay: employeeDailyMinutes(e, generalShiftMinutes) }));
   const years = yearsFromDates(entriesRaw, linesRaw, attendanceRaw);
   const topPeriod = people.find((p) => num(p.score) > 0) || null;
   const topMonth = people.filter((p) => num(p.score) > 0).slice(0, 3).map((p, idx) => ({ ...p, badges: [`Selected Rank ${idx + 1}`] }));
 
-  return { ok: true, source: "pocketbase", period, range, selectedYear: params.year || "", selectedMonth: params.month || "", filterOptions: { shifts, departments: departmentsForFilter, employees: employeesForFilter, years, months: Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: monthName(i + 1) })) }, scoreRules: activeScoreRules, kpis, topYesterday: topPeriod ? { ...topPeriod, badges: ["Selected Period Topper"] } : null, topMonth, presentList: presence.present, yesterdayAbsent: presence.absent, monthAbsent: presence.absent, plannedAbsent: absentBreakdown.plannedAbsent, unplannedAbsent: absentBreakdown.unplannedAbsent, employees: people, departments, insights: buildInsights(kpis, departments, people, range.label), meta: { service: "peopleDashboardServiceV6", generatedAt: new Date().toISOString(), dateFilterMode: range.mode, selectedWorkingDates: selectedWorkingDays, generalShiftMinutes, counts: { employees: activeEmployees.length, selectedEntries: selectedEntries.length, selectedLines: selectedLines.length, attendance: attendanceRaw.length, plannedAbsences: plannedAbsencesRaw.length } } };
+  return { ok: true, source: "pocketbase", period, range, selectedYear: params.year || "", selectedMonth: params.month || "", filterOptions: { shifts, departments: departmentsForFilter, employees: employeesForFilter, employeeDetails, years, months: Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: monthName(i + 1) })) }, scoreRules: activeScoreRules, kpis, topYesterday: topPeriod ? { ...topPeriod, badges: ["Selected Period Topper"] } : null, topMonth, presentList: presence.present, yesterdayAbsent: presence.absent, monthAbsent: presence.absent, plannedAbsent: absentBreakdown.plannedAbsent, unplannedAbsent: absentBreakdown.unplannedAbsent, employees: people, departments, insights: buildInsights(kpis, departments, people, range.label), meta: { service: "peopleDashboardServiceV6", generatedAt: new Date().toISOString(), dateFilterMode: range.mode, selectedWorkingDates: selectedWorkingDays, generalShiftMinutes, capacitySource: "employee_available_minutes_day", counts: { employees: activeEmployees.length, selectedEntries: selectedEntries.length, selectedLines: selectedLines.length, attendance: attendanceRaw.length, plannedAbsences: plannedAbsencesRaw.length } } };
 }
 
 module.exports = { getPeopleDashboard };
