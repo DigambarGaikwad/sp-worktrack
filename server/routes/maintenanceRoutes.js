@@ -1,4 +1,4 @@
-// server/routes/maintenanceRoutes.js
+﻿// server/routes/maintenanceRoutes.js
 // Admin Maintenance API routes.
 
 const express = require("express");
@@ -18,6 +18,10 @@ const {
   listMasterDeleteOptions,
   removeSelectedMasterRecord
 } = require("../services/masterRecordMaintenanceService");
+const {
+  previewEmptyDatabase,
+  emptyDatabase
+} = require("../services/emptyDbMaintenanceService");
 const {
   requestMaintenanceOtp,
   verifyMaintenanceOtp,
@@ -169,6 +173,26 @@ router.post("/master-records/delete", async (req, res) => {
   }
 });
 
+router.post("/empty-db/preview", async (req, res) => {
+  try {
+    const data = await previewEmptyDatabase();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/empty-db/preview failed:", err);
+    handleError(res, err, "Empty database preview failed.");
+  }
+});
+
+router.post("/empty-db/confirm", async (req, res) => {
+  try {
+    const data = await emptyDatabase(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/empty-db/confirm failed:", err);
+    handleError(res, err, "Empty database failed.");
+  }
+});
+
 router.post("/import-old-sheet", async (req, res) => {
   try {
     assertOtp(req.body || {}, "import_old_sheet");
@@ -181,3 +205,6 @@ router.post("/import-old-sheet", async (req, res) => {
 });
 
 module.exports = router;
+
+
+

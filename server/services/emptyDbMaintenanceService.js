@@ -1,10 +1,6 @@
-// server/services/emptyDbMaintenanceService.js
-// Full fresh-start cleanup service. Keeps admin_settings so PIN/recovery settings remain.
-
-const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
+﻿const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 const EMPTY_DB_COLLECTIONS = [
-  // transaction data
   "production_entry_lines",
   "production_entries",
   "booking_logs",
@@ -13,7 +9,6 @@ const EMPTY_DB_COLLECTIONS = [
   "attendance",
   "planned_absences",
 
-  // setup/master data
   "quality_points",
   "booking_points",
   "subworks",
@@ -65,6 +60,7 @@ async function countCollection(collectionName) {
       method: "GET",
       query: { page: 1, perPage: 1 }
     });
+
     return Number(result.totalItems || 0);
   } catch (err) {
     if (isMissingCollectionError(err)) return 0;
@@ -78,9 +74,11 @@ async function deleteCollection(collectionName) {
 
   for (const row of rows) {
     if (!row?.id) continue;
+
     await pocketBaseRequest(`/api/collections/${collectionName}/records/${row.id}`, {
       method: "DELETE"
     });
+
     deleted += 1;
   }
 
