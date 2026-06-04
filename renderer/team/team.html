@@ -30,6 +30,16 @@
               <option value="yesterday" selected>Period: Yesterday</option>
               <option value="month">This Month</option>
               <option value="last7">Last 7 Days</option>
+              <option value="selectedMonth">Selected Month</option>
+              <option value="selectedYear">Selected Year</option>
+            </select>
+
+            <select class="people-select" id="yearFilter">
+              <option value="">Year: Current</option>
+            </select>
+
+            <select class="people-select" id="monthFilter">
+              <option value="">Month: Current</option>
             </select>
 
             <select class="people-select" id="shiftFilter">
@@ -53,7 +63,7 @@
         <section class="section-card">
           <h2 class="section-title">Recognition & Performance Highlights</h2>
           <div class="section-subtitle">
-            Top performer of selected period and top 3 performers of the month. Same employee can carry both badges.
+            Top performer of selected period and top 3 performers of the selected range. Same employee can carry both badges.
           </div>
 
           <div class="recognition-grid" id="recognitionGrid"></div>
@@ -71,7 +81,7 @@
         <section class="section-card">
           <h2 class="section-title">Individual Performance Tracker</h2>
           <div class="section-subtitle">
-            Sorted by performance score. Shows selected period and month-to-date performance.
+            Sorted by performance score. Shows selected period performance from DB data.
           </div>
 
           <div class="employee-grid" id="employeePerformanceGrid"></div>
@@ -92,25 +102,25 @@
             <div class="absent-list" id="yesterdayAbsentList"></div>
 
             <div class="absent-note">
-              This list helps supervisors understand immediate manpower impact before planning daily work allocation.
+              This list helps supervisors understand manpower impact before planning work allocation.
             </div>
           </div>
 
           <div class="absent-card">
             <div class="absent-card-head">
               <div>
-                <div class="absent-title">Month Absent List</div>
+                <div class="absent-title">Selected Range Absent Summary</div>
                 <div class="section-subtitle" style="margin-bottom:0;">
-                  Month-to-date absence summary from day 1
+                  Absence summary for selected month/year/date range
                 </div>
               </div>
-              <div class="absent-count">MTD View</div>
+              <div class="absent-count">Range View</div>
             </div>
 
             <div class="absent-list" id="monthAbsentList"></div>
 
             <div class="absent-note">
-              Month absent list supports manpower planning, reliability review, and department capacity risk visibility.
+              Absence list supports manpower planning, reliability review, and department capacity risk visibility.
             </div>
           </div>
         </section>
