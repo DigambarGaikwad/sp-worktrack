@@ -1,4 +1,4 @@
-// server/scripts/importV1SheetToDb.js
+﻿// server/scripts/importV1SheetToDb.js
 // One-time migration from SP WorkTrack V1 Excel export to PocketBase DB.
 // Usage:
 //   npm install
@@ -129,9 +129,9 @@ function getStandardMinutesForLogRow(row) {
 
 function logRowToLine(row, entryNo, lineNo) {
   const workDate = excelDateToYmd(row[1]);
-  const category = clean(row[14]);
-  const dept = clean(row[15]);
-  const sub = clean(row[16]);
+  const category = clean(row[14]) || "Unknown";
+  const dept = clean(row[15]) || "Unmapped Department";
+  const sub = clean(row[16]) || "Unmapped Sub Work";
   const nature = clean(row[17] || "Normal") || "Normal";
   const std = getStandardMinutesForLogRow(row);
   const actual = toNumber(row[21], 0);
@@ -216,7 +216,7 @@ async function importMasters(wb, apply, summary) {
   const logRows = rows(wb, "LOG_2026").slice(1);
   for (const row of logRows) {
     const machineNo = clean(row[13]);
-    const category = clean(row[14]);
+    const category = clean(row[14]) || "Unknown";
     if (machineNo && category && !machineMap.has(machineNo)) machineMap.set(machineNo, category);
   }
   for (const [machineNo, category] of machineMap) {
@@ -333,7 +333,34 @@ async function importProduction(wb, apply, summary) {
     }, apply, productionCounter);
 
     const lineCounter = bump(summary, "production_entry_lines");
-    for (const line of lines) await create("production_entry_lines", line, apply, lineCounter);
+    for (const line of lines) {
+  try {
+    if (!clean(line.subwork_name)) {
+      line.subwork_name = "Unmapped Sub Work";
+      line.subwork_code = "unmapped_sub_work";
+    }
+    if (!clean(line.department_name)) {
+      line.department_name = "Unmapped Department";
+      line.department_code = "unmapped_department";
+    }
+    if (!clean(line.machine_category)) {
+      line.machine_category = "Unknown";
+      line.machine_type_code = "Unknown";
+    }
+    await create("production_entry_lines", line, apply, lineCounter);
+  } catch (err) {
+    lineCounter.skipped += 1;
+    console.warn("Skipped V1 production line:", {
+      entry_no: line.entry_no,
+      line_no: line.line_no,
+      machine_no: line.machine_no,
+      department_name: line.department_name,
+      subwork_name: line.subwork_name,
+      reason: err.message,
+      details: err.details || null
+    });
+  }
+}
   }
 }
 
@@ -364,3 +391,4 @@ main().catch((err) => {
   console.error("V1 import failed:", err);
   process.exit(1);
 });
+
