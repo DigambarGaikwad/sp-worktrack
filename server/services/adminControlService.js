@@ -6,10 +6,30 @@ const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const COLLECTION = "admin_settings";
 const CONTROL_KEY = "admin_controls_json";
 
+const DEFAULT_SCORE_RULES = {
+  productivityWeight: 45,
+  utilizationWeight: 20,
+  efficiencyWeight: 15,
+  attendanceWeight: 20,
+  productivityCapPct: 120,
+  utilizationCapPct: 100,
+  efficiencyCapPct: 120,
+  attendanceCapPct: 100,
+  reworkPenaltyPerHour: 1,
+  otherWorkPenaltyPerHour: 0.3,
+  unplannedAbsentPenaltyPerDay: 2,
+  plannedAbsentPenaltyPerDay: 0,
+  plannedLeaveAllowedPerYear: 12,
+  plannedExtraPenaltyPerDay: 0.5,
+  minScore: 0,
+  maxScore: 100
+};
+
 const DEFAULT_CONTROLS = {
   overrunReasonEnabled: true,
   overrunReasonLimitPct: 120,
-  bookingExtraReasonEnabled: true
+  bookingExtraReasonEnabled: true,
+  performanceScoreRules: DEFAULT_SCORE_RULES
 };
 
 function clean(value) {
@@ -60,7 +80,33 @@ async function findSettingRecord(key) {
   }
 }
 
+function normalizePerformanceScoreRules(raw = {}) {
+  return {
+    productivityWeight: numberInRange(raw.productivityWeight, DEFAULT_SCORE_RULES.productivityWeight, 0, 100),
+    utilizationWeight: numberInRange(raw.utilizationWeight, DEFAULT_SCORE_RULES.utilizationWeight, 0, 100),
+    efficiencyWeight: numberInRange(raw.efficiencyWeight, DEFAULT_SCORE_RULES.efficiencyWeight, 0, 100),
+    attendanceWeight: numberInRange(raw.attendanceWeight, DEFAULT_SCORE_RULES.attendanceWeight, 0, 100),
+    productivityCapPct: numberInRange(raw.productivityCapPct, DEFAULT_SCORE_RULES.productivityCapPct, 1, 300),
+    utilizationCapPct: numberInRange(raw.utilizationCapPct, DEFAULT_SCORE_RULES.utilizationCapPct, 1, 300),
+    efficiencyCapPct: numberInRange(raw.efficiencyCapPct, DEFAULT_SCORE_RULES.efficiencyCapPct, 1, 300),
+    attendanceCapPct: numberInRange(raw.attendanceCapPct, DEFAULT_SCORE_RULES.attendanceCapPct, 1, 100),
+    reworkPenaltyPerHour: numberInRange(raw.reworkPenaltyPerHour, DEFAULT_SCORE_RULES.reworkPenaltyPerHour, 0, 50),
+    otherWorkPenaltyPerHour: numberInRange(raw.otherWorkPenaltyPerHour, DEFAULT_SCORE_RULES.otherWorkPenaltyPerHour, 0, 50),
+    unplannedAbsentPenaltyPerDay: numberInRange(raw.unplannedAbsentPenaltyPerDay, DEFAULT_SCORE_RULES.unplannedAbsentPenaltyPerDay, 0, 50),
+    plannedAbsentPenaltyPerDay: numberInRange(raw.plannedAbsentPenaltyPerDay, DEFAULT_SCORE_RULES.plannedAbsentPenaltyPerDay, 0, 50),
+    plannedLeaveAllowedPerYear: numberInRange(raw.plannedLeaveAllowedPerYear, DEFAULT_SCORE_RULES.plannedLeaveAllowedPerYear, 0, 366),
+    plannedExtraPenaltyPerDay: numberInRange(raw.plannedExtraPenaltyPerDay, DEFAULT_SCORE_RULES.plannedExtraPenaltyPerDay, 0, 50),
+    minScore: numberInRange(raw.minScore, DEFAULT_SCORE_RULES.minScore, 0, 100),
+    maxScore: numberInRange(raw.maxScore, DEFAULT_SCORE_RULES.maxScore, 1, 150)
+  };
+}
+
 function normalizeAdminControls(raw = {}) {
+  const mergedScoreRules = {
+    ...DEFAULT_SCORE_RULES,
+    ...(raw.performanceScoreRules || raw.scoreRules || {})
+  };
+
   return {
     overrunReasonEnabled: bool(raw.overrunReasonEnabled, DEFAULT_CONTROLS.overrunReasonEnabled),
     overrunReasonLimitPct: numberInRange(
@@ -69,7 +115,8 @@ function normalizeAdminControls(raw = {}) {
       100,
       300
     ),
-    bookingExtraReasonEnabled: bool(raw.bookingExtraReasonEnabled, DEFAULT_CONTROLS.bookingExtraReasonEnabled)
+    bookingExtraReasonEnabled: bool(raw.bookingExtraReasonEnabled, DEFAULT_CONTROLS.bookingExtraReasonEnabled),
+    performanceScoreRules: normalizePerformanceScoreRules(mergedScoreRules)
   };
 }
 
@@ -79,9 +126,23 @@ async function getAdminControls() {
   return normalizeAdminControls(saved);
 }
 
+async function getPerformanceScoreRules() {
+  const controls = await getAdminControls();
+  return controls.performanceScoreRules || normalizePerformanceScoreRules();
+}
+
 async function saveAdminControls(raw = {}) {
-  const controls = normalizeAdminControls(raw.controls || raw.data || raw);
+  const incoming = raw.controls || raw.data || raw;
   const rec = await findSettingRecord(CONTROL_KEY);
+  const current = normalizeAdminControls(safeJsonParse(rec?.setting_value, DEFAULT_CONTROLS));
+  const controls = normalizeAdminControls({
+    ...current,
+    ...incoming,
+    performanceScoreRules: {
+      ...(current.performanceScoreRules || DEFAULT_SCORE_RULES),
+      ...(incoming.performanceScoreRules || incoming.scoreRules || {})
+    }
+  });
   const body = {
     setting_key: CONTROL_KEY,
     setting_value: JSON.stringify(controls)
@@ -104,7 +165,10 @@ async function saveAdminControls(raw = {}) {
 
 module.exports = {
   DEFAULT_CONTROLS,
+  DEFAULT_SCORE_RULES,
   getAdminControls,
+  getPerformanceScoreRules,
   saveAdminControls,
-  normalizeAdminControls
+  normalizeAdminControls,
+  normalizePerformanceScoreRules
 };
