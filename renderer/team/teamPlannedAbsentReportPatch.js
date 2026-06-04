@@ -21,9 +21,7 @@
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
       return payload;
-    } finally {
-      clearTimeout(timer);
-    }
+    } finally { clearTimeout(timer); }
   }
 
   function setStatus(message, type = "info") {
@@ -70,25 +68,23 @@
     return v;
   }
 
-  function calcVisibleDays(row, range) {
-    const from = clampDate(row.from_date, range.from, range.to);
-    const to = clampDate(row.to_date || row.from_date, range.from, range.to);
-    if (!from || !to || from > to) return 0;
+  function dateList(from, to) {
+    const dates = [];
+    if (!from || !to || from > to) return dates;
     const [fy, fm, fd] = from.split("-").map(Number);
     const [ty, tm, td] = to.split("-").map(Number);
     let d = new Date(fy, fm - 1, fd);
     const end = new Date(ty, tm - 1, td);
-    let days = 0;
     while (d <= end) {
-      if (d.getDay() !== 0) days += 1;
+      if (d.getDay() !== 0) dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
       d.setDate(d.getDate() + 1);
     }
-    return days;
+    return dates;
   }
 
   function employeeMinuteMap(data) {
     const map = new Map();
-    (data.filterOptions?.employees || []).forEach(e => {
+    (data.filterOptions?.employeeDetails || []).forEach(e => {
       const key1 = clean(e.code || e.empCode || e.empId).toLowerCase();
       const key2 = clean(e.name || e.empName).toLowerCase();
       const min = Number(e.availableMinutesDay ?? e.available_minutes_day ?? 0) || 0;
@@ -111,7 +107,7 @@
     const available = Number(data.kpis?.availableHours || 0);
     const personDays = Number(data.kpis?.monthAvailablePersonDays || 0);
     if (available > 0 && personDays > 0) return Math.round((available * 60) / personDays);
-    return 465;
+    return Number(data.meta?.generalShiftMinutes || 465) || 465;
   }
 
   function employeeMinutes(row, map, fallback) {
@@ -120,9 +116,27 @@
     return Number(map.get(code) || map.get(name) || fallback || 465) || 465;
   }
 
+  function presentDateMap(data) {
+    const map = new Map();
+    (data.presentList || []).forEach(row => {
+      const code = clean(row.code || row.emp_code).toLowerCase();
+      const name = clean(row.name || row.emp_name).toLowerCase();
+      const dates = new Set(row.presentDates || []);
+      if (code) map.set(code, dates);
+      if (name) map.set(name, dates);
+    });
+    return map;
+  }
+
+  function getPresentDatesFor(row, presentMap) {
+    const code = clean(row.emp_code || row.code || row.empCode).toLowerCase();
+    const name = clean(row.emp_name || row.name || row.empName).toLowerCase();
+    return presentMap.get(code) || presentMap.get(name) || new Set();
+  }
+
   function plannedRowHtml(rows) {
-    return rows.length ? `<table><thead><tr><th>Employee</th><th>Department</th><th>Planned From</th><th>Planned To</th><th>Visible in Period</th><th>Days</th><th>Available Min/Day</th><th>Loss Hours</th><th>Reason</th><th>Remark</th><th>Status</th></tr></thead><tbody>
-      ${rows.map(r => `<tr><td><b>${esc(r.emp_name || "-")}</b><br><span style="color:#64748b;">${esc(r.emp_code || "")}</span></td><td>${esc(r.department || "-")}</td><td>${esc(r.from_date || "-")}</td><td>${esc(r.to_date || r.from_date || "-")}</td><td>${esc(r.visibleFrom)} to ${esc(r.visibleTo)}</td><td style="font-weight:900;">${esc(r.visibleDays)}</td><td>${esc(r.availableMinutesDay)}</td><td style="font-weight:900;">${esc(r.lossHours)}</td><td>${esc(r.reason || "-")}</td><td>${esc(r.remark || "-")}</td><td>${esc(r.status || "Planned")}</td></tr>`).join("")}
+    return rows.length ? `<table><thead><tr><th>Employee</th><th>Department</th><th>Planned From</th><th>Planned To</th><th>Absent Dates Counted</th><th>Ignored Present Dates</th><th>Days</th><th>Available Min/Day</th><th>Loss Hours</th><th>Reason</th><th>Remark</th><th>Status</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td><b>${esc(r.emp_name || "-")}</b><br><span style="color:#64748b;">${esc(r.emp_code || "")}</span></td><td>${esc(r.department || "-")}</td><td>${esc(r.from_date || "-")}</td><td>${esc(r.to_date || r.from_date || "-")}</td><td>${esc((r.countedDates || []).join(", ") || "-")}</td><td>${esc((r.ignoredPresentDates || []).join(", ") || "-")}</td><td style="font-weight:900;">${esc(r.visibleDays)}</td><td>${esc(r.availableMinutesDay)}</td><td style="font-weight:900;">${esc(r.lossHours)}</td><td>${esc(r.reason || "-")}</td><td>${esc(r.remark || "-")}</td><td>${esc(r.status || "Planned")}</td></tr>`).join("")}
     </tbody></table>` : `<div class="empty">No planned absence found in selected period.</div>`;
   }
 
@@ -143,48 +157,28 @@
     const plannedLossHours = n(plannedRows.reduce((s, r) => s + Number(r.lossHours || 0), 0));
     const unplannedLossHours = n(unplannedRows.reduce((s, r) => s + Number(r.lossHours || 0), 0));
     const lossHours = n(plannedLossHours + unplannedLossHours);
+    const ignoredPresentDays = plannedRows.reduce((s, r) => s + Number((r.ignoredPresentDates || []).length), 0);
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8" />
-<title>Absent Report</title>
-<style>
-  body{font-family:Arial,sans-serif;margin:0;background:#f3f6fb;color:#111827;}
-  .page{max-width:1180px;margin:24px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.12);}
-  .actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;}.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;}.print{background:#15803d;color:#fff;}.close{background:#e5e7eb;color:#111827;}
-  .head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #e5e7eb;padding-bottom:14px;}.title{font-size:26px;font-weight:900;color:#0b3f73;}.sub{color:#64748b;margin-top:4px;}.count{font-size:30px;font-weight:900;color:#b91c1c;text-align:right;}.count small{display:block;font-size:12px;color:#64748b;}
-  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0;}.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc;}.kpi-label{font-size:12px;color:#64748b;font-weight:800;}.kpi-value{font-size:22px;font-weight:900;margin-top:4px;}.green{color:#15803d}.red{color:#b91c1c}.orange{color:#b45309}
-  h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-top:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;font-size:12px;}td{padding:9px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top;}.empty{padding:18px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b;font-weight:800;text-align:center;}
-  @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;border-radius:0}.actions{display:none}.grid{grid-template-columns:repeat(5,1fr)}}
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="actions"><button class="btn print" onclick="window.print()">Print Report</button><button class="btn close" onclick="window.close()">Close</button></div>
-  <div class="head">
-    <div><div class="title">Absent Report</div><div class="sub">${esc(title)}</div><div class="sub">Generated: ${esc(new Date().toLocaleString("en-IN"))}</div></div>
-    <div class="count">${esc(totalAbsentDays)}<small>Total Absent Days</small></div>
-  </div>
-  <div class="grid">
-    <div class="kpi"><div class="kpi-label">Planned Absent Days</div><div class="kpi-value green">${esc(plannedDays)}</div></div>
-    <div class="kpi"><div class="kpi-label">Unplanned Absent Days</div><div class="kpi-value red">${esc(unplannedDays)}</div></div>
-    <div class="kpi"><div class="kpi-label">% Planned Absent</div><div class="kpi-value green">${esc(pct(plannedDays, totalPersonDays))}%</div></div>
-    <div class="kpi"><div class="kpi-label">% Unplanned Absent</div><div class="kpi-value red">${esc(pct(unplannedDays, totalPersonDays))}%</div></div>
-    <div class="kpi"><div class="kpi-label">% Total Absent</div><div class="kpi-value orange">${esc(pct(totalAbsentDays, totalPersonDays))}%</div></div>
-    <div class="kpi"><div class="kpi-label">Planned Loss Hours</div><div class="kpi-value green">${esc(plannedLossHours)}</div></div>
-    <div class="kpi"><div class="kpi-label">Unplanned Loss Hours</div><div class="kpi-value red">${esc(unplannedLossHours)}</div></div>
-    <div class="kpi"><div class="kpi-label">Absent Capacity Loss Hours</div><div class="kpi-value red">${esc(lossHours)}</div></div>
-    <div class="kpi"><div class="kpi-label">Total Person Days</div><div class="kpi-value">${esc(totalPersonDays)}</div></div>
-    <div class="kpi"><div class="kpi-label">Fallback Minutes/Day</div><div class="kpi-value">${esc(fallbackMinutes(data))}</div></div>
-  </div>
-  <h2>Planned Absent</h2>
-  ${plannedRowHtml(plannedRows)}
-  <h2>Unplanned Absent</h2>
-  ${unplannedRowHtml(unplannedRows)}
-</div>
-</body>
-</html>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Absent Report</title><style>
+      body{font-family:Arial,sans-serif;margin:0;background:#f3f6fb;color:#111827;}.page{max-width:1220px;margin:24px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.12);} .actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;}.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;}.print{background:#15803d;color:#fff;}.close{background:#e5e7eb;color:#111827;}.head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #e5e7eb;padding-bottom:14px;}.title{font-size:26px;font-weight:900;color:#0b3f73;}.sub{color:#64748b;margin-top:4px;}.count{font-size:30px;font-weight:900;color:#b91c1c;text-align:right;}.count small{display:block;font-size:12px;color:#64748b;}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0;}.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc;}.kpi-label{font-size:12px;color:#64748b;font-weight:800;}.kpi-value{font-size:22px;font-weight:900;margin-top:4px;}.green{color:#15803d}.red{color:#b91c1c}.orange{color:#b45309}.blue{color:#2563eb}h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-top:20px;}table{width:100%;border-collapse:collapse;margin-top:10px;}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;font-size:12px;}td{padding:9px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top;}.empty{padding:18px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b;font-weight:800;text-align:center;}@media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;border-radius:0}.actions{display:none}.grid{grid-template-columns:repeat(5,1fr)}}
+    </style></head><body><div class="page">
+      <div class="actions"><button class="btn print" onclick="window.print()">Print Report</button><button class="btn close" onclick="window.close()">Close</button></div>
+      <div class="head"><div><div class="title">Absent Report</div><div class="sub">${esc(title)}</div><div class="sub">Rule: Present entry overrides planned absent.</div><div class="sub">Generated: ${esc(new Date().toLocaleString("en-IN"))}</div></div><div class="count">${esc(totalAbsentDays)}<small>Total Absent Days</small></div></div>
+      <div class="grid">
+        <div class="kpi"><div class="kpi-label">Planned Absent Days</div><div class="kpi-value green">${esc(plannedDays)}</div></div>
+        <div class="kpi"><div class="kpi-label">Unplanned Absent Days</div><div class="kpi-value red">${esc(unplannedDays)}</div></div>
+        <div class="kpi"><div class="kpi-label">Ignored Present Dates</div><div class="kpi-value blue">${esc(ignoredPresentDays)}</div></div>
+        <div class="kpi"><div class="kpi-label">% Planned Absent</div><div class="kpi-value green">${esc(pct(plannedDays, totalPersonDays))}%</div></div>
+        <div class="kpi"><div class="kpi-label">% Unplanned Absent</div><div class="kpi-value red">${esc(pct(unplannedDays, totalPersonDays))}%</div></div>
+        <div class="kpi"><div class="kpi-label">% Total Absent</div><div class="kpi-value orange">${esc(pct(totalAbsentDays, totalPersonDays))}%</div></div>
+        <div class="kpi"><div class="kpi-label">Planned Loss Hours</div><div class="kpi-value green">${esc(plannedLossHours)}</div></div>
+        <div class="kpi"><div class="kpi-label">Unplanned Loss Hours</div><div class="kpi-value red">${esc(unplannedLossHours)}</div></div>
+        <div class="kpi"><div class="kpi-label">Absent Capacity Loss Hours</div><div class="kpi-value red">${esc(lossHours)}</div></div>
+        <div class="kpi"><div class="kpi-label">Total Person Days</div><div class="kpi-value">${esc(totalPersonDays)}</div></div>
+      </div>
+      <h2>Planned Absent</h2>${plannedRowHtml(plannedRows)}
+      <h2>Unplanned Absent</h2>${unplannedRowHtml(unplannedRows)}
+    </div></body></html>`;
   }
 
   async function showReport() {
@@ -203,6 +197,7 @@
       const employee = clean($("employeeFilter")?.value) || "All";
       const minutesMap = employeeMinuteMap(data);
       const fallback = fallbackMinutes(data);
+      const presentMap = presentDateMap(data);
 
       const plannedRows = (Array.isArray(plannedPayload.items) ? plannedPayload.items : [])
         .filter(r => !["cancelled", "canceled", "deleted"].includes(clean(r.status).toLowerCase()))
@@ -210,10 +205,17 @@
         .filter(r => dept === "All" || clean(r.department) === dept)
         .filter(r => employee === "All" || clean(r.emp_name) === employee || clean(r.emp_code) === employee)
         .map(r => {
-          const days = calcVisibleDays(r, range);
+          const visibleFrom = clampDate(r.from_date, range.from, range.to);
+          const visibleTo = clampDate(r.to_date || r.from_date, range.from, range.to);
+          const presentDates = getPresentDatesFor(r, presentMap);
+          const allPlannedDates = dateList(visibleFrom, visibleTo);
+          const countedDates = allPlannedDates.filter(d => !presentDates.has(d));
+          const ignoredPresentDates = allPlannedDates.filter(d => presentDates.has(d));
+          const days = countedDates.length;
           const min = employeeMinutes(r, minutesMap, fallback);
-          return { ...r, visibleFrom: clampDate(r.from_date, range.from, range.to), visibleTo: clampDate(r.to_date || r.from_date, range.from, range.to), visibleDays: days, availableMinutesDay: min, lossHours: n((days * min) / 60) };
+          return { ...r, visibleFrom, visibleTo, countedDates, ignoredPresentDates, visibleDays: days, availableMinutesDay: min, lossHours: n((days * min) / 60) };
         })
+        .filter(r => Number(r.visibleDays || 0) > 0 || (r.ignoredPresentDates || []).length > 0)
         .sort((a, b) => clean(a.visibleFrom).localeCompare(clean(b.visibleFrom)) || clean(a.emp_name).localeCompare(clean(b.emp_name)));
 
       const unplannedRows = (Array.isArray(data.unplannedAbsent) ? data.unplannedAbsent : [])
@@ -242,7 +244,6 @@
   function ensureButton() {
     const anchor = $("showPerformanceReportBtn") || $("refreshPeopleBtn");
     if (!anchor || $("showAbsentReportBtn")) return;
-
     const btn = document.createElement("button");
     btn.className = "people-btn";
     btn.id = "showAbsentReportBtn";
