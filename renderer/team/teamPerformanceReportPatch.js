@@ -27,6 +27,21 @@
     }
   }
 
+  function setReportStatus(message, type = "info") {
+    let el = $("performanceReportStatus");
+    const btn = $("showPerformanceReportBtn");
+    if (!el && btn) {
+      el = document.createElement("span");
+      el.id = "performanceReportStatus";
+      el.className = "small-hint";
+      el.style.fontWeight = "900";
+      btn.insertAdjacentElement("afterend", el);
+    }
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
+  }
+
   function buildPeopleUrl(employee) {
     const period = clean($("periodFilter")?.value) || "yesterday";
     const year = clean($("yearFilter")?.value) || String(new Date().getFullYear());
@@ -146,11 +161,13 @@
     try {
       const employee = clean($("employeeFilter")?.value);
       if (!employee || employee === "All") {
-        alert("Select one employee first, then click Show Performance Report.");
-        $("employeeFilter")?.focus();
+        setReportStatus("Select one employee first.", "error");
+        $("employeeFilter")?.classList.add("entry-error");
+        setTimeout(() => $("employeeFilter")?.classList.remove("entry-error"), 1800);
         return;
       }
 
+      setReportStatus("Preparing performance report...");
       const btn = $("showPerformanceReportBtn");
       if (btn) { btn.disabled = true; btn.textContent = "Preparing Report..."; }
       const data = await requestJson(buildPeopleUrl(employee));
@@ -162,8 +179,9 @@
       w.document.open();
       w.document.write(reportHtml(data, person));
       w.document.close();
+      setReportStatus("Report opened.", "success");
     } catch (err) {
-      alert("Performance report failed: " + (err?.message || err));
+      setReportStatus("Report failed: " + (err?.message || err), "error");
     } finally {
       const btn = $("showPerformanceReportBtn");
       if (btn) { btn.disabled = false; btn.textContent = "Show Performance Report"; }
