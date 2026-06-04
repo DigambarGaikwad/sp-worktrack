@@ -15,6 +15,10 @@ const {
   importOldSheetData
 } = require("../services/maintenanceService");
 const {
+  listMasterDeleteOptions,
+  removeSelectedMasterRecord
+} = require("../services/masterRecordMaintenanceService");
+const {
   requestMaintenanceOtp,
   verifyMaintenanceOtp,
   requireMaintenanceOtp
@@ -141,6 +145,27 @@ router.post("/clear-setup/confirm", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/clear-setup/confirm failed:", err);
     handleError(res, err, "Clear setup data failed.");
+  }
+});
+
+router.post("/master-records/options", async (req, res) => {
+  try {
+    const data = await listMasterDeleteOptions();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/master-records/options failed:", err);
+    handleError(res, err, "Failed to load master record list.");
+  }
+});
+
+router.post("/master-records/delete", async (req, res) => {
+  try {
+    assertOtp(req.body || {}, "master_record_delete");
+    const data = await removeSelectedMasterRecord(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/master-records/delete failed:", err);
+    handleError(res, err, "Master record delete failed.");
   }
 });
 
