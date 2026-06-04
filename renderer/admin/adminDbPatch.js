@@ -1,6 +1,8 @@
 // renderer/admin/adminDbPatch.js
 // DB admin master-data save patch.
 // Saves current admin master data to PocketBase with login token and deactivateMissing sync mode.
+// Important: app.js wires adminSaveBtn after async loadData(), so this patch uses a capture-phase
+// click guard and late re-patching to prevent legacy local save from overriding DB save.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -8,19 +10,25 @@
 
   const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
   const REQUEST_TIMEOUT_MS = 15000;
-  const MAX_INIT_ATTEMPTS = 12;
+  const MAX_INIT_ATTEMPTS = 16;
   const INIT_RETRY_MS = 250;
   const $ = (id) => document.getElementById(id);
 
   let initAttempts = 0;
+  let dbSaveBusy = false;
 
   document.addEventListener("DOMContentLoaded", scheduleInit);
 
   function scheduleInit() {
     initAttempts += 1;
     const wired = patchSaveButton();
-    if (!wired && initAttempts < MAX_INIT_ATTEMPTS) {
-      setTimeout(scheduleInit, INIT_RETRY_MS);
+    if (!wired && initAttempts < MAX_INIT_ATTEMPTS) setTimeout(scheduleInit, INIT_RETRY_MS);
+
+    // app.js can overwrite btn.onclick after its async loadData() completes.
+    // These late passes restore label/title/onclick; capture guard below still protects click.
+    if (wired && !document.__spwtDbSaveLatePatchScheduled) {
+      document.__spwtDbSaveLatePatchScheduled = true;
+      [500, 1200, 2500, 5000].forEach((ms) => setTimeout(patchSaveButton, ms));
     }
   }
 
@@ -47,13 +55,23 @@
   function patchSaveButton() {
     const btn = $("adminSaveBtn");
     if (!btn) return false;
-    if (btn.__spwtDbSaveWired) return true;
 
-    btn.__spwtDbSaveWired = true;
     btn.type = "button";
-    btn.textContent = "Save to DB";
-    btn.title = "Save current admin masters to DB and mark deleted items inactive";
+    btn.textContent = dbSaveBusy ? "Syncing DB..." : "Save to DB";
+    btn.title = "Save current admin masters to PocketBase DB";
     btn.onclick = saveCurrentAdminStateToDb;
+    btn.__spwtDbSaveWired = true;
+
+    if (!btn.__spwtDbSaveClickGuardWired) {
+      btn.__spwtDbSaveClickGuardWired = true;
+      btn.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        saveCurrentAdminStateToDb();
+      }, true);
+    }
+
     return true;
   }
 
@@ -147,10 +165,12 @@
   }
 
   async function saveCurrentAdminStateToDb() {
+    if (dbSaveBusy) return;
     const btn = $("adminSaveBtn");
     const oldText = btn?.textContent || "Save to DB";
 
     try {
+      dbSaveBusy = true;
       if (btn) {
         btn.disabled = true;
         btn.textContent = "Syncing DB...";
@@ -181,9 +201,11 @@
       showToast(err.message || String(err), "error");
       alert("Admin DB save failed:\n\n" + (err.message || err));
     } finally {
+      dbSaveBusy = false;
       if (btn) {
         btn.disabled = false;
-        btn.textContent = oldText;
+        btn.textContent = oldText === "Syncing DB..." || oldText === "Save Changes" ? "Save to DB" : oldText;
+        btn.onclick = saveCurrentAdminStateToDb;
       }
     }
   }
