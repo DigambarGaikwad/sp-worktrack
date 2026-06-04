@@ -9,30 +9,42 @@
     injectAbsentDrilldownStyles();
     ensureAttendanceModal();
     wireAttendanceHooks();
-
     setTimeout(refreshAttendanceDrilldown, 900);
   });
 
   function wireAttendanceHooks() {
     ["periodFilter", "shiftFilter", "departmentFilter", "employeeFilter", "refreshPeopleBtn"].forEach(function (id) {
-      $(id)?.addEventListener("change", function () {
-        setTimeout(refreshAttendanceDrilldown, 900);
-      });
-      $(id)?.addEventListener("click", function () {
-        if (id === "refreshPeopleBtn") setTimeout(refreshAttendanceDrilldown, 900);
-      });
+      $(id)?.addEventListener("change", function () { setTimeout(refreshAttendanceDrilldown, 900); });
+      $(id)?.addEventListener("click", function () { if (id === "refreshPeopleBtn") setTimeout(refreshAttendanceDrilldown, 900); });
     });
 
     document.addEventListener("click", function (event) {
       const kpi = event.target.closest(".kpi-card");
       if (kpi) {
-        const label = (kpi.querySelector(".kpi-label")?.textContent || kpi.textContent || "").toLowerCase();
-        if (label.includes("present")) {
+        const label = (kpi.querySelector(".kpi-label")?.textContent || kpi.textContent || "").trim().toLowerCase();
+
+        if (label === "present") {
           openAttendanceModal("Selected Period Present List", latestPeopleData?.presentList || [], "present");
           return;
         }
-        if (label.includes("absent")) {
-          openAttendanceModal("Selected Period Absent List", getFilteredSelectedAbsent(), "absent");
+
+        if (label === "planned absent") {
+          openAttendanceModal("Planned Absent List", latestPeopleData?.plannedAbsent || [], "absent", "Planned absent employees and dates");
+          return;
+        }
+
+        if (label === "unplanned absent") {
+          openAttendanceModal("Unplanned Absent List", latestPeopleData?.unplannedAbsent || [], "absent", "Unplanned absent employees and dates");
+          return;
+        }
+
+        if (label === "absent % range") {
+          openAttendanceModal("Selected Range Absent Summary", latestPeopleData?.monthAbsent || latestPeopleData?.yesterdayAbsent || [], "absent", "All absent employees in selected range");
+          return;
+        }
+
+        if (label === "absent") {
+          openAttendanceModal("Selected Period Absent List", getFilteredSelectedAbsent(), "absent", "All absent employees in selected period");
           return;
         }
       }
@@ -46,9 +58,7 @@
         if (item) openAttendanceModal(`${item.name || "Employee"} - ${source === "present" ? "Present" : "Absent"} Dates`, [item], source === "present" ? "present" : "absent");
       }
 
-      if (event.target.matches(".absent-modal-backdrop, .absent-modal-close")) {
-        closeAttendanceModal();
-      }
+      if (event.target.matches(".absent-modal-backdrop, .absent-modal-close")) closeAttendanceModal();
     });
   }
 
@@ -58,12 +68,13 @@
         period: $("periodFilter")?.value || "yesterday",
         shift: $("shiftFilter")?.value || "All",
         department: $("departmentFilter")?.value || "All",
-        employee: $("employeeFilter")?.value || "All"
+        employee: $("employeeFilter")?.value || "All",
+        year: $("yearFilter")?.value || "",
+        month: $("monthFilter")?.value || ""
       });
 
       const res = await fetch(`${API_BASE_URL}/api/dashboard/people?${params.toString()}`);
       const payload = await res.json().catch(() => null);
-
       if (!res.ok || !payload?.ok) return;
 
       latestPeopleData = payload.data || {};
@@ -81,10 +92,14 @@
 
   function makeKpiCardsClickable() {
     document.querySelectorAll(".kpi-card").forEach(function (card) {
-      const label = (card.querySelector(".kpi-label")?.textContent || "").toLowerCase();
-      if (label.includes("present") || label.includes("absent")) {
+      const label = (card.querySelector(".kpi-label")?.textContent || "").trim().toLowerCase();
+      const clickableLabels = ["present", "absent", "planned absent", "unplanned absent", "absent % range"];
+      if (clickableLabels.includes(label)) {
         card.classList.add("attendance-kpi-clickable");
-        card.title = label.includes("present") ? "Click to view present list" : "Click to view absent list";
+        if (label === "present") card.title = "Click to view present list";
+        else if (label === "planned absent") card.title = "Click to view planned absent list";
+        else if (label === "unplanned absent") card.title = "Click to view unplanned absent list";
+        else card.title = "Click to view absent list";
       }
     });
   }
@@ -93,7 +108,6 @@
     const list = latestPeopleData?.yesterdayAbsent || [];
     const dept = $("selectedAbsentDeptFilter")?.value || "All";
     const date = $("selectedAbsentDateFilter")?.value || "All";
-
     return list.filter(function (x) {
       const deptOk = dept === "All" || (x.department || "-") === dept;
       const dates = Array.isArray(x.absentDates) ? x.absentDates : [];
@@ -109,7 +123,6 @@
 
     const departments = unique(list.map((x) => x.department || "-").filter(Boolean));
     const dates = unique(list.flatMap((x) => Array.isArray(x.absentDates) ? x.absentDates : [])).sort();
-
     const currentDept = $("selectedAbsentDeptFilter")?.value || "All";
     const currentDate = $("selectedAbsentDateFilter")?.value || "All";
     const activeDept = departments.includes(currentDept) ? currentDept : "All";
@@ -126,9 +139,7 @@
       count.textContent = `${filtered.length} Absent`;
       count.classList.add("clickable-absent-count", "graphic-click");
       count.title = "Click to view absent list";
-      count.onclick = function () {
-        openAttendanceModal("Selected Period Absent List", filtered, "absent");
-      };
+      count.onclick = function () { openAttendanceModal("Selected Period Absent List", filtered, "absent", "All absent employees in selected period"); };
     }
 
     host.innerHTML = `
@@ -146,118 +157,60 @@
       ${filtered.length ? filtered.map((a, i) => absentRow(a, i, "selected", `${Number(a.days || 1)} Day${Number(a.days || 1) === 1 ? "" : "s"}`, "absent")).join("") : emptyAbsent("No absent employees found for selected period.")}
     `;
 
-    $("selectedAbsentDeptFilter")?.addEventListener("change", function () {
-      renderSelectedPeriodAbsent(list);
-    });
-    $("selectedAbsentDateFilter")?.addEventListener("change", function () {
-      renderSelectedPeriodAbsent(list);
-    });
-    $("openSelectedAbsentBtn")?.addEventListener("click", function () {
-      openAttendanceModal("Selected Period Absent List", filtered, "absent");
-    });
+    $("selectedAbsentDeptFilter")?.addEventListener("change", function () { renderSelectedPeriodAbsent(list); });
+    $("selectedAbsentDateFilter")?.addEventListener("change", function () { renderSelectedPeriodAbsent(list); });
+    $("openSelectedAbsentBtn")?.addEventListener("click", function () { openAttendanceModal("Selected Period Absent List", filtered, "absent", "All absent employees in selected period"); });
   }
 
   function renderMonthAbsent(list) {
     const host = $("monthAbsentList");
     if (!host) return;
-
-    host.innerHTML = list.length
-      ? list.map((a, i) => absentRow(a, i, "month", `${Number(a.days || 0)} Day${Number(a.days || 0) === 1 ? "" : "s"}`, "absent")).join("")
-      : emptyAbsent("No month-to-date absence found.");
+    host.innerHTML = list.length ? list.map((a, i) => absentRow(a, i, "month", `${Number(a.days || 0)} Day${Number(a.days || 0) === 1 ? "" : "s"}`, "absent")).join("") : emptyAbsent("No month-to-date absence found.");
   }
 
   function absentRow(a, index, source, label, mode) {
     const days = Number(a.days || (Array.isArray(a.absentDates) ? a.absentDates.length : 0) || 0);
-    const metaText = source === "month"
-      ? `${a.department || "-"} • Month-to-date absence`
-      : `${a.department || "-"}`;
-
-    return `
-      <div class="absent-row absent-row-clickable">
-        <div>
-          <div class="absent-name">${escapeHtml(a.name || "-")}</div>
-          <div class="absent-meta">${escapeHtml(metaText)}</div>
-        </div>
-        <button class="absent-days absent-date-btn graphic-click ${days <= 1 ? "warning" : ""}" data-source="${escapeHtml(source)}" data-index="${index}" title="Click to view dates">
-          ${mode === "present" ? "✅" : "📅"} ${escapeHtml(label)}
-        </button>
-      </div>
-    `;
+    const metaText = source === "month" ? `${a.department || "-"} • Month-to-date absence` : `${a.department || "-"}`;
+    return `<div class="absent-row absent-row-clickable"><div><div class="absent-name">${escapeHtml(a.name || "-")}</div><div class="absent-meta">${escapeHtml(metaText)}</div></div><button class="absent-days absent-date-btn graphic-click ${days <= 1 ? "warning" : ""}" data-source="${escapeHtml(source)}" data-index="${index}" title="Click to view dates">${mode === "present" ? "✅" : "📅"} ${escapeHtml(label)}</button></div>`;
   }
 
-  function emptyAbsent(text) {
-    return `<div class="absent-row empty"><div><div class="absent-name">${escapeHtml(text)}</div></div><div class="absent-days warning">0</div></div>`;
-  }
+  function emptyAbsent(text) { return `<div class="absent-row empty"><div><div class="absent-name">${escapeHtml(text)}</div></div><div class="absent-days warning">0</div></div>`; }
 
-  function openAttendanceModal(title, list, mode) {
+  function openAttendanceModal(title, list, mode, subtitle) {
     ensureAttendanceModal();
-
     const modal = $("absentDrilldownModal");
     const titleEl = $("absentModalTitle");
     const subtitleEl = $("absentModalSubtitle");
     const body = $("absentModalBody");
-
     if (!modal || !body) return;
 
     const isPresent = mode === "present";
     titleEl.textContent = title || (isPresent ? "Present Details" : "Absent Details");
-    subtitleEl.textContent = isPresent ? "General shift present employees and dates" : "General shift absent employees and dates";
+    subtitleEl.textContent = subtitle || (isPresent ? "General shift present employees and dates" : "General shift absent employees and dates");
     modal.classList.toggle("present-mode", isPresent);
 
     const rows = Array.isArray(list) ? list : [];
     body.innerHTML = rows.length ? rows.map((item) => {
-      const dates = isPresent
-        ? (Array.isArray(item.presentDates) ? item.presentDates : [])
-        : (Array.isArray(item.absentDates) ? item.absentDates : []);
+      const dates = isPresent ? (Array.isArray(item.presentDates) ? item.presentDates : []) : (Array.isArray(item.absentDates) ? item.absentDates : []);
       const dayCount = dates.length || Number(item.days || 0);
-      return `
-        <div class="absent-modal-emp ${isPresent ? "present" : ""}">
-          <div class="absent-modal-emp-head">
-            <div>
-              <div class="absent-modal-name">${isPresent ? "✅" : "📅"} ${escapeHtml(item.name || "-")}</div>
-              <div class="absent-modal-meta">${escapeHtml(item.department || "-")} • General Shift</div>
-            </div>
-            <div class="absent-modal-pill">${dayCount} Day${dayCount === 1 ? "" : "s"}</div>
-          </div>
-          <div class="absent-date-chip-wrap">
-            ${dates.length ? dates.map((d) => `<span class="absent-date-chip ${isPresent ? "present" : ""}">${escapeHtml(formatDate(d))}</span>`).join("") : `<span class="absent-date-chip muted">No date detail available</span>`}
-          </div>
-        </div>
-      `;
+      return `<div class="absent-modal-emp ${isPresent ? "present" : ""}"><div class="absent-modal-emp-head"><div><div class="absent-modal-name">${isPresent ? "✅" : "📅"} ${escapeHtml(item.name || "-")}</div><div class="absent-modal-meta">${escapeHtml(item.department || "-")} • General Shift</div></div><div class="absent-modal-pill">${dayCount} Day${dayCount === 1 ? "" : "s"}</div></div><div class="absent-date-chip-wrap">${dates.length ? dates.map((d) => `<span class="absent-date-chip ${isPresent ? "present" : ""}">${escapeHtml(formatDate(d))}</span>`).join("") : `<span class="absent-date-chip muted">No date detail available</span>`}</div></div>`;
     }).join("") : `<div class="absent-modal-empty">No ${isPresent ? "present" : "absent"} data found.</div>`;
-
     modal.classList.add("show");
   }
 
-  function closeAttendanceModal() {
-    $("absentDrilldownModal")?.classList.remove("show");
-  }
+  function closeAttendanceModal() { $("absentDrilldownModal")?.classList.remove("show"); }
 
   function ensureAttendanceModal() {
     if ($("absentDrilldownModal")) return;
-
     const div = document.createElement("div");
     div.id = "absentDrilldownModal";
     div.className = "absent-modal-backdrop";
-    div.innerHTML = `
-      <div class="absent-modal-card">
-        <div class="absent-modal-head">
-          <div>
-            <div class="absent-modal-title" id="absentModalTitle">Attendance Details</div>
-            <div class="absent-modal-subtitle" id="absentModalSubtitle">General shift attendance dates</div>
-          </div>
-          <button class="absent-modal-close graphic-click">✕ Close</button>
-        </div>
-        <div class="absent-modal-body" id="absentModalBody"></div>
-      </div>
-    `;
-
+    div.innerHTML = `<div class="absent-modal-card"><div class="absent-modal-head"><div><div class="absent-modal-title" id="absentModalTitle">Attendance Details</div><div class="absent-modal-subtitle" id="absentModalSubtitle">General shift attendance dates</div></div><button class="absent-modal-close graphic-click">✕ Close</button></div><div class="absent-modal-body" id="absentModalBody"></div></div>`;
     document.body.appendChild(div);
   }
 
   function injectAbsentDrilldownStyles() {
     if ($("absentDrilldownStyles")) return;
-
     const style = document.createElement("style");
     style.id = "absentDrilldownStyles";
     style.textContent = `
@@ -298,27 +251,10 @@
       .absent-date-chip.muted, .absent-modal-empty { color:#64748b; font-weight:900; }
       @media (max-width: 800px) { .absent-mini-filter-row.two-filters { grid-template-columns:1fr; } }
     `;
-
     document.head.appendChild(style);
   }
 
-  function unique(list) {
-    return Array.from(new Set(list));
-  }
-
-  function formatDate(value) {
-    const text = String(value || "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-    const [y, m, d] = text.split("-");
-    return `${d}-${m}-${y}`;
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+  function unique(list) { return Array.from(new Set(list)); }
+  function formatDate(value) { const text = String(value || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text; const [y, m, d] = text.split("-"); return `${d}-${m}-${y}`; }
+  function escapeHtml(value) { return String(value == null ? "" : value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
 })();
