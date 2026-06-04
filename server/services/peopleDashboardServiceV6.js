@@ -1,4 +1,4 @@
-// server/services/peopleDashboardServiceV6.js
+﻿// server/services/peopleDashboardServiceV6.js
 // People Dashboard DB service with selected Month/Year filters and planned absence split.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
@@ -254,7 +254,7 @@ async function getPeopleDashboard(params = {}) {
   const presence = buildPresenceLists(activeEmployees, attendanceByDate, selectedWorkingDays, deptFilter, employeeFilter);
   const plannedAbsences = normalizePlannedAbsences(plannedAbsencesRaw);
   const absentBreakdown = splitAbsentRowsByPlan(presence.absent, plannedAbsences);
-  const monthAbsence = absencePctForRange(activeEmployees, attendanceRaw, currentMonthRange(), shiftFilter, deptFilter, employeeFilter);
+  const monthAbsence = absencePctForRange(activeEmployees, attendanceRaw, range, shiftFilter, deptFilter, employeeFilter);
   const absentMap = new Map(); presence.absent.forEach((a) => absentMap.set(a.code || a.name, num(a.days, 0)));
   const generalShiftMinutes = getGeneralShiftMinutes(shiftsRaw);
   const manpowerAvailableMinutes = presence.present.reduce((sum, p) => sum + num(p.days, 0), 0) * generalShiftMinutes;
@@ -312,3 +312,4 @@ async function getPeopleDashboard(params = {}) {
 }
 
 module.exports = { getPeopleDashboard };
+

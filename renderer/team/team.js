@@ -129,7 +129,7 @@
       ["Absent", kpis.absentEmployees, "Current period", COLORS.red],
       ["Planned Absent", kpis.plannedAbsentEmployees, `${Number(kpis.plannedAbsentDays || 0)} day(s)`, COLORS.green],
       ["Unplanned Absent", kpis.unplannedAbsentEmployees, `${Number(kpis.unplannedAbsentDays || 0)} day(s)`, COLORS.red],
-      ["Absent % Month", fmtPct(kpis.absentPctCurrentMonth), "Current month", COLORS.brown],
+      ["Absent % Range", fmtPct(kpis.absentPctCurrentMonth), "Selected month/year", COLORS.brown],
       ["Available Hours", fmtHours(kpis.availableHours), "Net shift capacity", COLORS.teal],
       ["Utilized Hours", fmtHours(kpis.utilizedHours), "Actual booked time", COLORS.purple],
       ["Std Output Hours", fmtHours(kpis.standardOutputHours), "Productive output", COLORS.orange],
@@ -269,3 +269,4 @@
   function setText(id, text) { const el = $(id); if (el) el.textContent = text; }
   function escapeHtml(value) { return String(value == null ? "" : value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
 })();
+
