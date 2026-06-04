@@ -1,4 +1,4 @@
-// server/services/peopleDashboardServiceV6.js
+﻿// server/services/peopleDashboardServiceV6.js
 // People Dashboard DB service with selected Month and Year filters.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
@@ -146,13 +146,13 @@ function buildPresenceLists(activeEmployees, attendanceByDate, dates, deptFilter
 
 function buildInsights(kpis, departments, employees, label) {
   const insights = [];
-  if (num(kpis.absentEmployees) > 0) insights.push({ icon: "👥", title: "Manpower Gap", text: `${kpis.absentEmployees} employee(s) have absence in ${label}. Check allocation before planning.` });
+  if (num(kpis.absentEmployees) > 0) insights.push({ icon: "ðŸ‘¥", title: "Manpower Gap", text: `${kpis.absentEmployees} employee(s) have absence in ${label}. Check allocation before planning.` });
   const weakDept = departments.find((d) => num(d.productivityPct) < 70 && num(d.people) > 0);
-  if (weakDept) insights.push({ icon: "📉", title: "Department Efficiency Watch", text: `${weakDept.department} is at ${weakDept.productivityPct}% productivity. Review delay, rework or support need.` });
-  if (num(kpis.reworkHours) > 0) insights.push({ icon: "⚠️", title: "Rework Visibility", text: `${kpis.reworkHours} rework hour(s) recorded in selected period.` });
+  if (weakDept) insights.push({ icon: "ðŸ“‰", title: "Department Efficiency Watch", text: `${weakDept.department} is at ${weakDept.productivityPct}% productivity. Review delay, rework or support need.` });
+  if (num(kpis.reworkHours) > 0) insights.push({ icon: "âš ï¸", title: "Rework Visibility", text: `${kpis.reworkHours} rework hour(s) recorded in selected period.` });
   const top = employees.find((e) => num(e.score) > 0);
-  if (top) insights.push({ icon: "🏆", title: "Recognition", text: `${top.name} is leading selected period with score ${top.score}.` });
-  if (!insights.length) insights.push({ icon: "ℹ️", title: "No Major Risk", text: "No major manpower or productivity issue detected for selected period." });
+  if (top) insights.push({ icon: "ðŸ†", title: "Recognition", text: `${top.name} is leading selected period with score ${top.score}.` });
+  if (!insights.length) insights.push({ icon: "â„¹ï¸", title: "No Major Risk", text: "No major manpower or productivity issue detected for selected period." });
   return insights;
 }
 
@@ -164,12 +164,13 @@ async function getPeopleDashboard(params = {}) {
   const range = selectedRange(params);
   const selectedWorkingDays = workingDates(range);
 
-  const [employeesRaw, entriesRaw, linesRaw, attendanceRaw, shiftsRaw] = await Promise.all([
+  const [employeesRaw, entriesRaw, linesRaw, attendanceRaw, shiftsRaw, departmentsRaw] = await Promise.all([
     listAll("employees", { perPage: 1000 }),
     listAll("production_entries", { perPage: 5000, sort: "-work_date" }),
     listAll("production_entry_lines", { perPage: 10000, sort: "-work_date" }),
     listAll("attendance", { perPage: 10000, sort: "-work_date" }),
-    listAll("shifts", { perPage: 500 })
+    listAll("shifts", { perPage: 500 }),
+    listAll("departments", { perPage: 1000 })
   ]);
 
   const activeEmployees = employeesRaw.filter((e) => isActive(e.active)).map((e) => ({ code: clean(e.emp_code), name: clean(e.full_name), department: clean(e.department) || "-", designation: clean(e.designation) })).filter((e) => e.code || e.name);
@@ -228,7 +229,11 @@ async function getPeopleDashboard(params = {}) {
   const kpis = { presentEmployees: presence.present.length, absentEmployees: presence.absent.length, availableHours: hours(manpowerAvailableMinutes), utilizedHours: hours(totalActual), standardOutputHours: hours(totalStandard), productivityPct: pct(totalStandard, manpowerAvailableMinutes), utilizationPct: pct(totalActual, manpowerAvailableMinutes), reworkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "rework").reduce((s, x) => s + num(x.actual_minutes, 0), 0)), otherWorkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "other").reduce((s, x) => s + num(x.actual_minutes, 0), 0)), lossHours: hours(selectedEntries.reduce((s, x) => s + num(x.major_loss_minutes, 0), 0)) };
 
   const shifts = []; shiftsRaw.forEach((s) => addUnique(shifts, s.shift_name || s.shift_code)); entriesRaw.forEach((e) => addUnique(shifts, e.shift_name || e.shift_code)); shifts.sort((a, b) => a.localeCompare(b));
-  const departmentsForFilter = []; activeEmployees.forEach((e) => addUnique(departmentsForFilter, e.department)); linesRaw.forEach((l) => addUnique(departmentsForFilter, l.department_name || l.department_code)); departmentsForFilter.sort((a, b) => a.localeCompare(b));
+  const departmentsForFilter = [];
+  departmentsRaw
+    .filter((d) => isActive(d.active))
+    .forEach((d) => addUnique(departmentsForFilter, d.department_name || d.department_code || d.name));
+  departmentsForFilter.sort((a, b) => a.localeCompare(b));
   const employeesForFilter = activeEmployees.map((e) => e.name || e.code).filter(Boolean).sort((a, b) => a.localeCompare(b));
   const years = yearsFromDates(entriesRaw, linesRaw, attendanceRaw);
   const topPeriod = people.find((p) => num(p.score) > 0) || null;
@@ -238,3 +243,5 @@ async function getPeopleDashboard(params = {}) {
 }
 
 module.exports = { getPeopleDashboard };
+
+

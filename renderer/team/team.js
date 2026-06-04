@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const CONFIG = window.SPWT_CONFIG || {};
   const WEBAPP_URL = CONFIG.SHEETS_WEBAPP_URL || "";
   const SECRET = CONFIG.SECRET || "DIGAMBAR";
@@ -187,7 +187,7 @@
     const cards = [];
 
     cards.push(winnerCard({
-      icon: "🏆",
+      icon: "ðŸ†",
       label: "Top Performer Selected Period",
       name: topYesterday?.name || "No data",
       meta: topYesterday ? personMeta(topYesterday) : "No performance entry found for selected period.",
@@ -195,7 +195,7 @@
       type: "gold"
     }));
 
-    const icons = ["🥇", "🥈", "🥉"];
+    const icons = ["ðŸ¥‡", "ðŸ¥ˆ", "ðŸ¥‰"];
     const labels = ["Top Performer Month", "2nd Performer Month", "3rd Performer Month"];
     const types = ["gold", "silver", "bronze"];
 
@@ -237,13 +237,13 @@
     setText("yesterdayAbsentCount", `${yList.length} Absent`);
 
     setHtml("yesterdayAbsentList", yList.length ? yList.map(function (a) {
-      return absentRow(a.name, `${a.department || "-"} • ${a.shift || "-"}`, "1 Day");
+      return absentRow(a.name, `${a.department || "-"} â€¢ ${a.shift || "-"}`, "1 Day");
     }).join("") : emptyAbsent("No absent employees found for selected period."));
 
     setHtml("monthAbsentList", mList.length ? mList.map(function (a) {
       return absentRow(
         a.name,
-        `${a.department || "-"} • Month-to-date absence`,
+        `${a.department || "-"} â€¢ Month-to-date absence`,
         `${Number(a.days || 0)} Day${Number(a.days || 0) === 1 ? "" : "s"}`,
         Number(a.days || 0) <= 1
       );
@@ -332,7 +332,7 @@
         <div class="dept-card" style="--accent:${color}; --pct:${barPct}%;">
           <div class="dept-name">${escapeHtml(d.department || "-")}</div>
           <div class="dept-meta">
-            ${escapeHtml(Number(d.people || 0))} people • ${escapeHtml(fmtPct(pct))} productivity • ${escapeHtml(d.status || "Review")}
+            ${escapeHtml(Number(d.people || 0))} people â€¢ ${escapeHtml(fmtPct(pct))} productivity â€¢ ${escapeHtml(d.status || "Review")}
           </div>
           <div class="progress-track"><div class="progress-fill"></div></div>
         </div>
@@ -345,14 +345,14 @@
 
     if (!insights.length) {
       insights = [
-        { icon: "ℹ️", title: "No Insights Yet", text: "Insights will appear after enough production and attendance data is available." }
+        { icon: "â„¹ï¸", title: "No Insights Yet", text: "Insights will appear after enough production and attendance data is available." }
       ];
     }
 
     setHtml("peopleInsightsGrid", insights.map(function (x) {
       return `
         <div class="insight-card">
-          <div class="insight-icon">${escapeHtml(x.icon || "ℹ️")}</div>
+          <div class="insight-icon">${escapeHtml(x.icon || "â„¹ï¸")}</div>
           <div class="insight-title">${escapeHtml(x.title || "-")}</div>
           <div class="insight-text">${escapeHtml(x.text || "-")}</div>
         </div>
@@ -375,10 +375,49 @@
 
   function showOfflineNotice(err) {
     renderInsights([{
-      icon: "⚠️",
+      icon: "âš ï¸",
       title: "Backend Not Connected Yet",
       text: "Showing sample dashboard data. Reason: " + (err && err.message ? err.message : String(err))
     }]);
+  }
+
+  function emptyPayload() {
+    return {
+      ok: true,
+      filterOptions: {
+        shifts: [],
+        departments: [],
+        employees: [],
+        years: [String(new Date().getFullYear())],
+        months: [
+          { value: 1, label: "January" }, { value: 2, label: "February" },
+          { value: 3, label: "March" }, { value: 4, label: "April" },
+          { value: 5, label: "May" }, { value: 6, label: "June" },
+          { value: 7, label: "July" }, { value: 8, label: "August" },
+          { value: 9, label: "September" }, { value: 10, label: "October" },
+          { value: 11, label: "November" }, { value: 12, label: "December" }
+        ]
+      },
+      kpis: {
+        presentEmployees: 0,
+        absentEmployees: 0,
+        availableHours: 0,
+        utilizedHours: 0,
+        standardOutputHours: 0,
+        productivityPct: 0,
+        utilizationPct: 0,
+        reworkHours: 0,
+        otherWorkHours: 0,
+        lossHours: 0
+      },
+      topYesterday: null,
+      topMonth: [],
+      yesterdayAbsent: [],
+      monthAbsent: [],
+      employees: [],
+      departments: [],
+      insights: []
+    };
   }
 
   function samplePayload() {
@@ -463,10 +502,10 @@
         { department: "Testing / Quality", people: 2, productivityPct: 88, status: "Good control" }
       ],
       insights: [
-        { icon: "⚠️", title: "Overtime Dependency", text: "Tubing has high overtime contribution this month. Review load balancing and support manpower." },
-        { icon: "📉", title: "Rework Watch", text: "Mechanical rework hours are increasing. Root area analysis is recommended." },
-        { icon: "👥", title: "Manpower Gap", text: "Welding/Fitting shows capacity gap against current workload. Cross-support may be needed." },
-        { icon: "🏆", title: "Recognition", text: "Amit Sharma appears as selected period top performer and also month top performer candidate." }
+        { icon: "âš ï¸", title: "Overtime Dependency", text: "Tubing has high overtime contribution this month. Review load balancing and support manpower." },
+        { icon: "ðŸ“‰", title: "Rework Watch", text: "Mechanical rework hours are increasing. Root area analysis is recommended." },
+        { icon: "ðŸ‘¥", title: "Manpower Gap", text: "Welding/Fitting shows capacity gap against current workload. Cross-support may be needed." },
+        { icon: "ðŸ†", title: "Recognition", text: "Amit Sharma appears as selected period top performer and also month top performer candidate." }
       ]
     };
   }
@@ -481,7 +520,7 @@
     if (p.efficiencyPct != null) parts.push("Efficiency " + fmtPct(p.efficiencyPct));
     if (p.absentDays != null) parts.push("Absent " + Number(p.absentDays || 0) + " days");
 
-    return parts.join(" • ");
+    return parts.join(" â€¢ ");
   }
 
   function badgeList(p) {
