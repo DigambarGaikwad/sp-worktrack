@@ -82,14 +82,8 @@
           </div>
 
           <div class="detail-grid-lower">
-            <div class="panel chart-panel">
-              <div class="panel-head"><div><h2>Department Std vs Actual vs Overrun</h2><p>Blue = Standard • Red = Actual • Orange = Overrun</p></div></div>
-              <div class="chart-wrap"><canvas id="deptChart"></canvas></div>
-            </div>
-            <div class="panel">
-              <div class="panel-head"><div><h2>Department Performance</h2><p>Department-wise machine progress</p></div></div>
-              <div class="table-wrap"><table><thead><tr><th>Department</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Completion</th></tr></thead><tbody id="departmentTableBody"></tbody></table></div>
-            </div>
+            <div class="panel chart-panel"><div class="panel-head"><div><h2>Department Std vs Actual vs Overrun</h2><p>Blue = Standard • Red = Actual • Orange = Overrun</p></div></div><div class="chart-wrap"><canvas id="deptChart"></canvas></div></div>
+            <div class="panel"><div class="panel-head"><div><h2>Department Performance</h2><p>Department-wise machine progress</p></div></div><div class="table-wrap"><table><thead><tr><th>Department</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Completion</th></tr></thead><tbody id="departmentTableBody"></tbody></table></div></div>
           </div>
 
           <section class="panel">
@@ -103,21 +97,12 @@
           </section>
 
           <div class="detail-grid-lower">
-            <div class="panel">
-              <div class="panel-head"><div><h2>Quality Point Checklist</h2><p>Planned + completed quality checkpoints</p></div></div>
-              <div class="table-wrap small-table"><table><thead><tr><th>Point</th><th>Status</th><th>Result</th><th>Done By</th><th>Date</th></tr></thead><tbody id="qualityTableBody"></tbody></table></div>
-            </div>
-            <div class="panel">
-              <div class="panel-head"><div><h2>Rework / Other Description</h2><p>Detailed loss/rework entries with reason visibility</p></div></div>
-              <div class="table-wrap small-table"><table><thead><tr><th>Date</th><th>Type</th><th>Dept</th><th>Sub Work</th><th>Root Area</th><th>Time</th><th>Description / Reason</th></tr></thead><tbody id="reworkOtherTableBody"></tbody></table></div>
-            </div>
+            <div class="panel"><div class="panel-head"><div><h2>Quality Point Checklist</h2><p>Planned + completed quality checkpoints</p></div></div><div class="table-wrap small-table"><table><thead><tr><th>Point</th><th>Status</th><th>Result</th><th>Done By</th><th>Date</th></tr></thead><tbody id="qualityTableBody"></tbody></table></div></div>
+            <div class="panel"><div class="panel-head"><div><h2>Rework / Other Description</h2><p>Detailed loss/rework entries with reason visibility</p></div></div><div class="table-wrap small-table"><table><thead><tr><th>Date</th><th>Type</th><th>Dept</th><th>Sub Work</th><th>Root Area</th><th>Time</th><th>Description / Reason</th></tr></thead><tbody id="reworkOtherTableBody"></tbody></table></div></div>
           </div>
 
           <div class="detail-grid-full">
-            <div class="panel">
-              <div class="panel-head"><div><h2>Remaining / Completed Work</h2><p>Department → Sub Work → Booking point visibility</p></div><div class="tab-buttons"><button class="tab-btn active" id="remainingTabBtn">Remaining</button><button class="tab-btn" id="completedTabBtn">Completed</button></div></div>
-              <div class="table-wrap work-table-wrap"><table><thead><tr><th>Dept</th><th>Sub Work</th><th>Booking Points</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Done Date</th></tr></thead><tbody id="workTableBody"></tbody></table></div>
-            </div>
+            <div class="panel"><div class="panel-head"><div><h2>Remaining / Completed Work</h2><p>Department → Sub Work → Booking point visibility</p></div><div class="tab-buttons"><button class="tab-btn active" id="remainingTabBtn">Remaining</button><button class="tab-btn" id="completedTabBtn">Completed</button></div></div><div class="table-wrap work-table-wrap"><table><thead><tr><th>Dept</th><th>Sub Work</th><th>Booking Points</th><th>Std</th><th>Actual</th><th>Remaining</th><th>Overrun</th><th>Done Date</th></tr></thead><tbody id="workTableBody"></tbody></table></div></div>
           </div>
 
           <section class="panel loss-summary-panel">
@@ -147,6 +132,7 @@
     window.SPWT.renderAppHeader({ title: "SP WorkTrack", subtitle: "Production Management System" });
   </script>
   <script src="dashboard.js"></script>
+  <script src="reworkOtherReportPatch.js"></script>
   <script src="qualityReportPatch.js"></script>
   <script src="qualityReportObservationAutoLoadPatch.js"></script>
   <script src="qualityReportPrintPolishPatch.js"></script>
