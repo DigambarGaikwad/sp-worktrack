@@ -8,10 +8,17 @@
   function $(id) { return document.getElementById(id); }
   function clean(value) { return String(value ?? "").trim(); }
   function num(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
+  function hoursText(minutes) { return `${(num(minutes, 0) / 60).toFixed(1)} hr`; }
 
   function getGlobal(name, fallback) {
-    try { return Function(`return typeof ${name} !== "undefined" ? ${name} : undefined`)() ?? fallback; }
-    catch { return fallback; }
+    try {
+      // app.js uses top-level let variables; direct eval can read those global lexical bindings.
+      // eslint-disable-next-line no-eval
+      const value = eval(name);
+      return value == null ? fallback : value;
+    } catch {
+      return fallback;
+    }
   }
 
   function tokenHeaders() {
@@ -45,17 +52,28 @@
   }
 
   function getEmployees() {
-    return (getGlobal("adminOverrides", {})?.employees || getGlobal("employees", []) || []);
+    const admin = getGlobal("adminOverrides", null);
+    const fromAdmin = Array.isArray(admin?.employees) ? admin.employees : [];
+    if (fromAdmin.length) return fromAdmin;
+    const fromGlobal = getGlobal("employees", []);
+    return Array.isArray(fromGlobal) ? fromGlobal : [];
+  }
+
+  function syncHourLabel(input) {
+    const label = input.closest("td")?.querySelector(".emp-min-hours");
+    if (label) label.textContent = hoursText(input.value);
   }
 
   function readVisibleMinutes() {
+    const list = getEmployees();
     document.querySelectorAll("[data-emp-min-idx]").forEach(input => {
       const idx = Number(input.dataset.empMinIdx);
-      const list = getEmployees();
       if (!list[idx]) return;
       const minutes = Math.max(0, Math.min(1440, Math.round(num(input.value, 0))));
+      input.value = String(minutes);
       list[idx].availableMinutesDay = minutes;
       list[idx].available_minutes_day = minutes;
+      syncHourLabel(input);
     });
   }
 
@@ -66,6 +84,8 @@
         empCode: clean(e.empId || e.emp_code || e.code),
         availableMinutesDay: num(e.availableMinutesDay ?? e.available_minutes_day, 0)
       })).filter(r => r.empCode);
+
+      if (!records.length) throw new Error("No employee records found on screen. Reload Admin page and try again.");
 
       status("Saving employee available minutes...");
       const payload = await requestJson("/api/admin/employee-available-minutes", {
@@ -88,20 +108,44 @@
 
     const headRow = table.querySelector("thead tr");
     const actionHead = headRow?.lastElementChild;
-    const th = document.createElement("th");
-    th.textContent = "Available Min/Day";
-    th.title = "Used for absent capacity loss hours. Example: 480 for 8 hrs, 600 for 10 hrs.";
-    if (actionHead) headRow.insertBefore(th, actionHead);
-    else headRow?.appendChild(th);
+    const thMin = document.createElement("th");
+    thMin.textContent = "Available Min/Day";
+    thMin.style.minWidth = "170px";
+    thMin.title = "Used for absent capacity loss hours. Example: 480 for 8 hrs, 600 for 10 hrs.";
+    const thHr = document.createElement("th");
+    thHr.textContent = "Hours/Day";
+    thHr.style.minWidth = "95px";
+    if (actionHead) {
+      headRow.insertBefore(thMin, actionHead);
+      headRow.insertBefore(thHr, actionHead);
+    } else {
+      headRow?.appendChild(thMin);
+      headRow?.appendChild(thHr);
+    }
 
     const employees = getEmployees();
     rows.forEach((row, idx) => {
       const actionCell = row.lastElementChild;
-      const td = document.createElement("td");
       const value = num(employees[idx]?.availableMinutesDay ?? employees[idx]?.available_minutes_day, 0);
-      td.innerHTML = `<input class="admin-input" data-emp-min-idx="${idx}" type="number" min="0" max="1440" step="1" value="${value}" placeholder="480" title="Available minutes per day" />`;
-      if (actionCell) row.insertBefore(td, actionCell);
-      else row.appendChild(td);
+
+      const tdMin = document.createElement("td");
+      tdMin.innerHTML = `<input class="admin-input" data-emp-min-idx="${idx}" type="number" min="0" max="1440" step="1" value="${value}" placeholder="480" title="Available minutes per day" style="min-width:135px;width:150px;text-align:right;font-weight:900;" />`;
+
+      const tdHr = document.createElement("td");
+      tdHr.innerHTML = `<span class="emp-min-hours" style="font-weight:900;color:#0b3f73;">${hoursText(value)}</span>`;
+
+      if (actionCell) {
+        row.insertBefore(tdMin, actionCell);
+        row.insertBefore(tdHr, actionCell);
+      } else {
+        row.appendChild(tdMin);
+        row.appendChild(tdHr);
+      }
+    });
+
+    table.querySelectorAll("[data-emp-min-idx]").forEach(input => {
+      input.addEventListener("input", () => syncHourLabel(input));
+      input.addEventListener("change", () => { readVisibleMinutes(); });
     });
 
     table.dataset.minutesEnhanced = "1";
@@ -110,7 +154,7 @@
       const box = document.createElement("div");
       box.className = "row admin-controls-actions";
       box.style.marginTop = "10px";
-      box.innerHTML = `<button class="btn green" id="saveEmployeeMinutesBtn" type="button">Save Available Minutes / Day</button><span class="small-hint">Used for Absent Report capacity loss. Blank/0 uses General Shift fallback.</span>`;
+      box.innerHTML = `<button class="btn green" id="saveEmployeeMinutesBtn" type="button">Save Available Minutes / Day</button><span class="small-hint">Used for Absent Report capacity loss. 480 = 8 hr, 600 = 10 hr. Blank/0 uses fallback.</span>`;
       host.insertAdjacentElement("afterend", box);
       $("saveEmployeeMinutesBtn")?.addEventListener("click", saveMinutes);
     }
