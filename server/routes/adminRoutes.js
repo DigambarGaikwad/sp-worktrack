@@ -12,6 +12,7 @@ const {
   saveSkillMatrix,
   deleteSkillMatrix
 } = require("../services/adminWriteServiceV2");
+const { saveEmployeeAvailableMinutes } = require("../services/employeeCapacityService");
 const {
   getAdminPin,
   verifyAdminPin,
@@ -78,6 +79,17 @@ router.post("/controls", async (req, res) => {
   } catch (err) {
     console.error("POST /api/admin/controls failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save admin controls", details: err.details || null });
+  }
+});
+
+router.post("/employee-available-minutes", async (req, res) => {
+  try {
+    requireAdminSession(req);
+    const data = await saveEmployeeAvailableMinutes(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/admin/employee-available-minutes failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save employee available minutes", details: err.details || null });
   }
 });
 
