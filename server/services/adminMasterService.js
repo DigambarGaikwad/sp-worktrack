@@ -20,6 +20,11 @@ function normalizeBool(value, defaultValue = true) {
   return defaultValue;
 }
 
+function num(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function isDeletedMachine(record) {
   return clean(record.status).toLowerCase() === "deleted";
 }
@@ -95,6 +100,7 @@ function buildEmployees(records) {
       name: clean(x.full_name),
       department: clean(x.department),
       designation: clean(x.designation),
+      availableMinutesDay: num(x.available_minutes_day, 0),
       active: normalizeBool(x.active, true)
     }))
     .filter((x) => x.empId && x.name);
@@ -221,128 +227,47 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
       .map((x) => [clean(x.department_code), clean(x.department_name)])
   );
 
-  const activeTypeCodes = new Set(
-    machineTypes
-      .filter((x) => normalizeBool(x.active, true))
-      .map((x) => clean(x.type_code))
-      .filter(Boolean)
-  );
+  const byType = {};
 
-  const catalog = {};
-
-  activeTypeCodes.forEach((typeCode) => {
-    catalog[typeCode] = {
-      mainWorks: [],
-      subWorks: {}
-    };
+  machineTypes.forEach((type) => {
+    byType[type.id] = { mainWorks: buildDepartments(departments), subWorks: {} };
   });
 
   subworks
     .filter((x) => normalizeBool(x.active, true))
-    .forEach((sw) => {
-      const typeCode = clean(sw.machine_type_code);
-      const deptCode = clean(sw.department_code);
-      const subworkCode = clean(sw.subwork_code);
-
-      if (!typeCode || !deptCode || !subworkCode) return;
-      if (!activeTypeCodes.has(typeCode)) return;
-      if (!activeDeptNameByCode.has(deptCode)) return;
-
-      if (!catalog[typeCode]) {
-        catalog[typeCode] = {
-          mainWorks: [],
-          subWorks: {}
-        };
-      }
-
-      const deptName = activeDeptNameByCode.get(deptCode);
-
-      if (!catalog[typeCode].mainWorks.includes(deptName)) {
-        catalog[typeCode].mainWorks.push(deptName);
-      }
-
-      if (!Array.isArray(catalog[typeCode].subWorks[deptName])) {
-        catalog[typeCode].subWorks[deptName] = [];
-      }
-
-      const key = [typeCode, deptCode, subworkCode].join("|");
-
-      catalog[typeCode].subWorks[deptName].push({
-        name: clean(sw.subwork_name),
-        standardTime: Number(sw.standard_time || 0) || 0,
+    .forEach((x) => {
+      const typeCode = clean(x.machine_type_code);
+      const deptCode = clean(x.department_code);
+      const deptName = activeDeptNameByCode.get(deptCode) || deptCode;
+      if (!typeCode || !deptName) return;
+      if (!byType[typeCode]) byType[typeCode] = { mainWorks: [], subWorks: {} };
+      if (!byType[typeCode].mainWorks.includes(deptName)) byType[typeCode].mainWorks.push(deptName);
+      if (!byType[typeCode].subWorks[deptName]) byType[typeCode].subWorks[deptName] = [];
+      const key = [typeCode, deptCode, clean(x.subwork_code)].join("|");
+      byType[typeCode].subWorks[deptName].push({
+        name: clean(x.subwork_name),
+        standardTime: Number(x.standard_time || 0) || 0,
         checkpoints: bookingMap.get(key) || [],
         qualityCheckpoints: qualityMap.get(key) || []
       });
     });
 
-  Object.keys(catalog).forEach((typeCode) => {
-    catalog[typeCode].mainWorks.sort((a, b) => a.localeCompare(b));
-
-    Object.keys(catalog[typeCode].subWorks).forEach((deptName) => {
-      catalog[typeCode].subWorks[deptName].sort((a, b) => a.name.localeCompare(b.name));
+  Object.values(byType).forEach((catalog) => {
+    catalog.mainWorks = Array.from(new Set(catalog.mainWorks.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    Object.keys(catalog.subWorks).forEach((dept) => {
+      catalog.subWorks[dept].sort((a, b) => a.name.localeCompare(b.name));
     });
   });
 
-  return catalog;
-}
-
-function buildLinkedMainWorks(workCatalogByType) {
-  const names = new Set();
-
-  Object.values(workCatalogByType || {}).forEach((catalog) => {
-    (catalog.mainWorks || []).forEach((name) => {
-      if (clean(name)) names.add(clean(name));
-    });
-  });
-
-  return Array.from(names).sort((a, b) => a.localeCompare(b));
-}
-
-function buildLegacySubWorks(workCatalogByType) {
-  const subWorksMap = {};
-
-  Object.values(workCatalogByType || {}).forEach((catalog) => {
-    Object.entries(catalog.subWorks || {}).forEach(([deptName, list]) => {
-      if (!Array.isArray(subWorksMap[deptName])) subWorksMap[deptName] = [];
-
-      (list || []).forEach((sw) => {
-        const exists = subWorksMap[deptName].some((x) => clean(x.name) === clean(sw.name));
-        if (!exists) {
-          subWorksMap[deptName].push({
-            name: clean(sw.name),
-            standardTime: Number(sw.standardTime || 0) || 0,
-            checkpoints: Array.isArray(sw.checkpoints) ? sw.checkpoints : [],
-            qualityCheckpoints: Array.isArray(sw.qualityCheckpoints) ? sw.qualityCheckpoints : []
-          });
-        }
-      });
-    });
-  });
-
-  Object.keys(subWorksMap).forEach((deptName) => {
-    subWorksMap[deptName].sort((a, b) => a.name.localeCompare(b.name));
-  });
-
-  return subWorksMap;
+  return byType;
 }
 
 async function getAdminMasterData() {
-  const [
-    employees,
-    shifts,
-    machineTypes,
-    machines,
-    departments,
-    subworks,
-    bookingPoints,
-    qualityPoints,
-    lossReasons,
-    rootAreas
-    ] = await Promise.all([
-    listAll("employees"),
-    listAll("shifts"),
+  const [machineTypesRaw, machinesRaw, employeesRaw, shiftsRaw, departmentsRaw, subworksRaw, bookingPointsRaw, qualityPointsRaw, lossReasonsRaw, rootAreasRaw] = await Promise.all([
     listAll("machine_types"),
     listAll("machines"),
+    listAll("employees"),
+    listAll("shifts"),
     listAll("departments"),
     listAll("subworks"),
     listAll("booking_points"),
@@ -351,48 +276,25 @@ async function getAdminMasterData() {
     listAll("root_areas")
   ]);
 
-  const frontendMachineTypes = buildMachineTypes(machineTypes);
-  const frontendMachines = buildMachines(machines);
-  const frontendEmployees = buildEmployees(employees);
-  const frontendShifts = buildShifts(shifts);
-  const workCatalogByType = buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoints, qualityPoints);
-  const mainWorks = buildLinkedMainWorks(workCatalogByType);
-  const subWorks = buildLegacySubWorks(workCatalogByType);
+  const machineTypes = buildMachineTypes(machineTypesRaw);
+  const departments = buildDepartments(departmentsRaw);
 
   return {
-    admin: {
-      pin: ""
-    },
-    employees: frontendEmployees,
-    shifts: frontendShifts,
-    machineTypes: frontendMachineTypes,
-    machines: frontendMachines,
-    mainWorks,
-    subWorks,
-    workCatalogByType,
-    lossReasons: buildLossReasons(lossReasons),
-    rootAreas: buildRootAreas(rootAreas),
+    admin: { pin: "1234" },
+    machineTypes,
+    machines: buildMachines(machinesRaw),
+    employees: buildEmployees(employeesRaw),
+    shifts: buildShifts(shiftsRaw),
+    mainWorks: departments,
+    subWorks: {},
+    workCatalogByType: buildWorkCatalogByType(machineTypes, departmentsRaw, subworksRaw, bookingPointsRaw, qualityPointsRaw),
+    lossReasons: buildLossReasons(lossReasonsRaw),
+    rootAreas: buildRootAreas(rootAreasRaw),
     meta: {
       source: "pocketbase",
-      departmentRule: "active departments only when linked to active subworks by active machine type",
-      generatedAt: new Date().toISOString(),
-      counts: {
-        employees: frontendEmployees.length,
-        shifts: frontendShifts.length,
-        machineTypes: frontendMachineTypes.length,
-        machines: frontendMachines.length,
-        departments: mainWorks.length,
-        allDepartmentMasterRows: departments.length,
-        subworks: subworks.length,
-        bookingPoints: bookingPoints.length,
-        qualityPoints: qualityPoints.length,
-        lossReasons: lossReasons.length,
-        rootAreas: rootAreas.length
-      }
+      generatedAt: new Date().toISOString()
     }
   };
 }
 
-module.exports = {
-  getAdminMasterData
-};
+module.exports = { getAdminMasterData };
