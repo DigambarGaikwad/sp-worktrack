@@ -1,8 +1,10 @@
 // renderer/maintenanceSetupClearPatch.js
 // Adds Maintenance option to clear setup/master data: employees, machines, work/subwork, booking/quality points.
+// Uses Maintenance OTP gate before confirm.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 45000;
+  const CLEAR_SETUP_ACTION = "clear_setup";
 
   function apiBaseUrl() { return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030"; }
   function clean(value) { return String(value ?? "").trim(); }
@@ -79,14 +81,27 @@
     }
   }
 
-  async function clearSetup(btn) {
+  async function clearSetupWithOtp(btn, otpPayload = {}) {
     if (btn?.disabled) return;
     try {
       const confirmText = clean(document.getElementById("clearSetupConfirmText")?.value);
       if (confirmText !== "MASTER") throw new Error("Type MASTER in the confirmation box first.");
+
+      const requestToken = clean(otpPayload.otpRequestToken || otpPayload.requestToken);
+      const otp = clean(otpPayload.otp);
+      if (!requestToken || !otp) throw new Error("Maintenance OTP details missing. Request OTP again.");
+
       btn.disabled = true;
       showBox("clearSetupResult", "Clearing setup/master data... please wait.");
-      const data = await requestJson("/api/maintenance/clear-setup/confirm", { confirmText });
+      const data = await requestJson("/api/maintenance/clear-setup/confirm", {
+        confirmText,
+        action: CLEAR_SETUP_ACTION,
+        otpRequestToken: requestToken,
+        requestToken,
+        otp
+      });
+
+      window.SPWT_CLOSE_MAINTENANCE_OTP?.();
       const deletedCounts = Object.fromEntries((data.deleted || []).map(x => [x.collection, x.deleted]));
       renderCounts("clearSetupResult", { counts: deletedCounts }, "Setup/master data cleared successfully.");
       const input = document.getElementById("clearSetupConfirmText");
@@ -98,8 +113,38 @@
     }
   }
 
+  async function clearSetup(btn) {
+    if (btn?.disabled) return;
+    try {
+      const confirmText = clean(document.getElementById("clearSetupConfirmText")?.value);
+      if (confirmText !== "MASTER") throw new Error("Type MASTER in the confirmation box first.");
+      if (typeof window.SPWT_REQUEST_MAINTENANCE_OTP !== "function") throw new Error("Maintenance OTP UI is not loaded. Restart app and try again.");
+
+      btn.disabled = true;
+      showBox("clearSetupResult", "Sending Maintenance OTP...");
+      await window.SPWT_REQUEST_MAINTENANCE_OTP(CLEAR_SETUP_ACTION);
+      showBox("clearSetupResult", "OTP sent. Enter OTP and click Verify & Continue.");
+    } catch (err) {
+      showBox("clearSetupResult", err?.message || String(err), "error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function wireOtpListener() {
+    if (document.__clearSetupOtpListenerWired) return;
+    document.__clearSetupOtpListenerWired = true;
+    document.addEventListener("spwt-maintenance-otp-ready", (event) => {
+      const detail = event?.detail || {};
+      if (detail.action !== CLEAR_SETUP_ACTION) return;
+      const clearBtn = document.getElementById("confirmClearSetupBtn") || { disabled: false };
+      clearSetupWithOtp(clearBtn, detail);
+    });
+  }
+
   function wire() {
     ensureSetupBox();
+    wireOtpListener();
     const previewBtn = document.getElementById("previewClearSetupBtn");
     const clearBtn = document.getElementById("confirmClearSetupBtn");
     if (previewBtn && !previewBtn.__wired) {
