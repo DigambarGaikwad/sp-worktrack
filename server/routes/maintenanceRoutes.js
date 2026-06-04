@@ -22,6 +22,7 @@ const {
   previewEmptyDatabase,
   emptyDatabase
 } = require("../services/emptyDbMaintenanceService");
+const { deleteBackupFile } = require("../services/backupFileDeleteService");
 const {
   requestMaintenanceOtp,
   verifyMaintenanceOtp,
@@ -75,6 +76,16 @@ router.post("/backups/list", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/backups/list failed:", err);
     handleError(res, err, "Failed to list backup files.");
+  }
+});
+
+router.post("/backups/delete", async (req, res) => {
+  try {
+    const data = deleteBackupFile(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/backups/delete failed:", err);
+    handleError(res, err, "Backup delete failed.");
   }
 });
 
@@ -205,6 +216,3 @@ router.post("/import-old-sheet", async (req, res) => {
 });
 
 module.exports = router;
-
-
-
