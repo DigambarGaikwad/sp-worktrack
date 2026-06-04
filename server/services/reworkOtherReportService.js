@@ -1,5 +1,5 @@
 // server/services/reworkOtherReportService.js
-// Builds Rework / Other Work reports from DB production entries and lines.
+// Builds Rework / Other Work reports from machine dashboard production_entry_lines.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
@@ -42,12 +42,15 @@ function normalizeType(type) {
   return t === "other" || t === "other work" ? "other" : "rework";
 }
 
-function rowMachine(entry = {}, line = {}) {
-  return clean(line.machine_no || line.machine || entry.machine_no || entry.machine || entry.machine_name || entry.machine_code);
+function rowMachine(line = {}, entry = {}) {
+  return clean(line.machine_no || line.machine || line.machine_name || line.machine_code || entry.machine_no || entry.machine || entry.machine_name || entry.machine_code);
 }
 
-function uniqueMachines(entries = []) {
-  return Array.from(new Set(entries.map(e => clean(e.machine_no || e.machine || e.machine_name || e.machine_code)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+function uniqueMachines(lines = [], machines = []) {
+  const values = new Set();
+  machines.forEach(m => { const v = clean(m.machine_no || m.name || m.machineNo); if (v) values.add(v); });
+  lines.forEach(line => { const v = rowMachine(line); if (v) values.add(v); });
+  return Array.from(values).sort((a, b) => a.localeCompare(b));
 }
 
 function lineNature(line = {}) {
@@ -60,26 +63,26 @@ async function getReworkOtherReport(params = {}) {
   const machineFilter = clean(params.machine || params.machineNo || "All");
   const range = selectedRange(params);
 
-  const [entriesRaw, linesRaw] = await Promise.all([
-    listAll("production_entries", { perPage: 10000, sort: "-work_date" }),
-    listAll("production_entry_lines", { perPage: 20000, sort: "-work_date" })
+  const [entriesRaw, linesRaw, machinesRaw] = await Promise.all([
+    listAll("production_entries", { perPage: 10000, sort: "-work_date" }).catch(() => []),
+    listAll("production_entry_lines", { perPage: 20000, sort: "-work_date" }),
+    listAll("machines", { perPage: 1000 }).catch(() => [])
   ]);
 
-  const entries = entriesRaw.filter(e => inRange(e.work_date, range));
-  const entryByNo = new Map(entries.map(e => [clean(e.entry_no), e]));
+  const entryByNo = new Map(entriesRaw.map(e => [clean(e.entry_no), e]));
 
   const rows = linesRaw
-    .filter(line => entryByNo.has(clean(line.entry_no)))
     .map(line => ({ line, entry: entryByNo.get(clean(line.entry_no)) || {} }))
+    .filter(({ line, entry }) => inRange(line.work_date || entry.work_date, range))
     .filter(({ line }) => lineNature(line) === wantedNature)
-    .filter(({ entry, line }) => machineFilter === "All" || rowMachine(entry, line) === machineFilter)
+    .filter(({ line, entry }) => machineFilter === "All" || rowMachine(line, entry) === machineFilter)
     .map(({ entry, line }) => {
       const actualMinutes = num(line.actual_minutes ?? line.actual_time ?? line.actual, 0);
       const standardMinutes = num(line.standard_minutes ?? line.standard_time ?? line.standard, 0);
       return {
         workDate: clean(line.work_date || entry.work_date),
         shift: clean(line.shift_name || entry.shift_name || entry.shift_code),
-        machine: rowMachine(entry, line) || "-",
+        machine: rowMachine(line, entry) || "-",
         empCode: clean(line.emp_code || entry.emp_code),
         empName: clean(line.emp_name || entry.emp_name),
         department: clean(line.department_name || line.department_code || "-"),
@@ -109,6 +112,7 @@ async function getReworkOtherReport(params = {}) {
 
   const totalActualMinutes = rows.reduce((s, r) => s + r.actualMinutes, 0);
   const totalStandardMinutes = rows.reduce((s, r) => s + r.standardMinutes, 0);
+  const machineOptions = uniqueMachines(linesRaw, machinesRaw);
 
   return {
     reportType,
@@ -125,8 +129,8 @@ async function getReworkOtherReport(params = {}) {
     rows,
     byMachine: Array.from(byMachine.values()).map(x => ({ ...x, actualHours: hours(x.actualMinutes), standardHours: hours(x.standardMinutes) })).sort((a, b) => b.actualMinutes - a.actualMinutes),
     byEmployee: Array.from(byEmployee.values()).map(x => ({ ...x, actualHours: hours(x.actualMinutes), standardHours: hours(x.standardMinutes) })).sort((a, b) => b.actualMinutes - a.actualMinutes),
-    filterOptions: { machines: ["All", ...uniqueMachines(entriesRaw)] },
-    meta: { generatedAt: new Date().toISOString(), service: "reworkOtherReportService" }
+    filterOptions: { machines: ["All", ...machineOptions] },
+    meta: { generatedAt: new Date().toISOString(), service: "reworkOtherReportService", source: "production_entry_lines" }
   };
 }
 
