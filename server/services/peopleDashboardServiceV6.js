@@ -1,5 +1,5 @@
-﻿// server/services/peopleDashboardServiceV6.js
-// People Dashboard DB service with selected Month and Year filters.
+// server/services/peopleDashboardServiceV6.js
+// People Dashboard DB service with selected Month/Year filters and planned absence split.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
@@ -40,16 +40,14 @@ function selectedRange(params = {}) {
   const now = new Date();
   const year = safeYear(params.year) || now.getFullYear();
   const month = safeMonth(params.month) || (now.getMonth() + 1);
-
-  if (period === "selectedYear") {
-    return capFutureRange({ from: `${year}-01-01`, to: `${year}-12-31`, label: `${year}`, mode: "year", year, month: "All" });
-  }
-
-  if (period === "selectedMonth") {
-    return capFutureRange({ from: `${year}-${String(month).padStart(2, "0")}-01`, to: `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth(year, month)).padStart(2, "0")}`, label: `${monthName(month)} ${year}`, mode: "month", year, month });
-  }
-
+  if (period === "selectedYear") return capFutureRange({ from: `${year}-01-01`, to: `${year}-12-31`, label: `${year}`, mode: "year", year, month: "All" });
+  if (period === "selectedMonth") return capFutureRange({ from: `${year}-${String(month).padStart(2, "0")}-01`, to: `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth(year, month)).padStart(2, "0")}`, label: `${monthName(month)} ${year}`, mode: "month", year, month });
   return periodRange(period);
+}
+
+function currentMonthRange() {
+  const now = new Date();
+  return { from: dateKey(new Date(now.getFullYear(), now.getMonth(), 1)), to: dateKey(now), label: `${monthName(now.getMonth() + 1)} ${now.getFullYear()}`, mode: "currentMonth" };
 }
 
 function workingDates(range) {
@@ -144,15 +142,66 @@ function buildPresenceLists(activeEmployees, attendanceByDate, dates, deptFilter
   return { present, absent };
 }
 
+function normalizePlannedAbsences(rows) {
+  return (Array.isArray(rows) ? rows : []).map((r) => ({
+    code: clean(r.emp_code || r.empCode).toLowerCase(),
+    name: clean(r.emp_name || r.empName).toLowerCase(),
+    department: clean(r.department),
+    from: clean(r.from_date || r.fromDate),
+    to: clean(r.to_date || r.toDate || r.from_date || r.fromDate),
+    reason: clean(r.reason),
+    remark: clean(r.remark),
+    status: clean(r.status || "Planned")
+  })).filter((r) => (r.code || r.name) && r.from && !["cancelled", "canceled", "deleted"].includes(r.status.toLowerCase()));
+}
+
+function isPlannedAbsent(emp, date, plannedAbsences) {
+  const code = clean(emp.code).toLowerCase();
+  const name = clean(emp.name).toLowerCase();
+  return plannedAbsences.some((p) => {
+    const sameEmployee = (p.code && code && p.code === code) || (p.name && name && p.name === name);
+    return sameEmployee && date >= p.from && date <= p.to;
+  });
+}
+
+function splitAbsentRowsByPlan(absentRows, plannedAbsences) {
+  const plannedMap = new Map(), unplannedMap = new Map();
+  let plannedAbsentDays = 0, unplannedAbsentDays = 0;
+  (absentRows || []).forEach((row) => {
+    (row.absentDates || []).forEach((date) => {
+      const planned = isPlannedAbsent(row, date, plannedAbsences);
+      const target = planned ? plannedMap : unplannedMap;
+      const key = row.code || row.name;
+      if (!target.has(key)) target.set(key, { ...row, absentDates: [], days: 0, absenceType: planned ? "Planned" : "Unplanned" });
+      target.get(key).absentDates.push(date);
+      target.get(key).days += 1;
+      if (planned) plannedAbsentDays += 1;
+      else unplannedAbsentDays += 1;
+    });
+  });
+  return { plannedAbsent: Array.from(plannedMap.values()), unplannedAbsent: Array.from(unplannedMap.values()), plannedAbsentEmployees: plannedMap.size, unplannedAbsentEmployees: unplannedMap.size, plannedAbsentDays, unplannedAbsentDays };
+}
+
+function absencePctForRange(activeEmployees, attendanceRaw, range, shiftFilter, deptFilter, employeeFilter) {
+  const dates = workingDates(range);
+  const scopedEmployees = activeEmployees.filter((e) => deptFilter === "All" || clean(e.department) === deptFilter).filter((e) => employeeFilter === "All" || clean(e.name || e.code) === employeeFilter);
+  const attendanceByDate = buildAttendanceByDate(attendanceRaw, range, shiftFilter);
+  const presence = buildPresenceLists(scopedEmployees, attendanceByDate, dates, "All", "All");
+  const absentPersonDays = presence.absent.reduce((sum, x) => sum + num(x.days, 0), 0);
+  const totalPersonDays = scopedEmployees.length * dates.length;
+  return { absentPersonDays, totalPersonDays, absentPct: pct(absentPersonDays, totalPersonDays) };
+}
+
 function buildInsights(kpis, departments, employees, label) {
   const insights = [];
-  if (num(kpis.absentEmployees) > 0) insights.push({ icon: "ðŸ‘¥", title: "Manpower Gap", text: `${kpis.absentEmployees} employee(s) have absence in ${label}. Check allocation before planning.` });
+  if (num(kpis.unplannedAbsentEmployees) > 0) insights.push({ icon: "PEOPLE", title: "Unplanned Absence", text: `${kpis.unplannedAbsentEmployees} unplanned absent employee(s) in ${label}. Review manpower allocation.` });
+  else if (num(kpis.absentEmployees) > 0) insights.push({ icon: "PEOPLE", title: "Planned Absence", text: `${kpis.absentEmployees} absent employee(s) in ${label}. Check planned leave coverage.` });
   const weakDept = departments.find((d) => num(d.productivityPct) < 70 && num(d.people) > 0);
-  if (weakDept) insights.push({ icon: "ðŸ“‰", title: "Department Efficiency Watch", text: `${weakDept.department} is at ${weakDept.productivityPct}% productivity. Review delay, rework or support need.` });
-  if (num(kpis.reworkHours) > 0) insights.push({ icon: "âš ï¸", title: "Rework Visibility", text: `${kpis.reworkHours} rework hour(s) recorded in selected period.` });
+  if (weakDept) insights.push({ icon: "TREND", title: "Department Efficiency Watch", text: `${weakDept.department} is at ${weakDept.productivityPct}% productivity. Review delay, rework or support need.` });
+  if (num(kpis.reworkHours) > 0) insights.push({ icon: "ALERT", title: "Rework Visibility", text: `${kpis.reworkHours} rework hour(s) recorded in selected period.` });
   const top = employees.find((e) => num(e.score) > 0);
-  if (top) insights.push({ icon: "ðŸ†", title: "Recognition", text: `${top.name} is leading selected period with score ${top.score}.` });
-  if (!insights.length) insights.push({ icon: "â„¹ï¸", title: "No Major Risk", text: "No major manpower or productivity issue detected for selected period." });
+  if (top) insights.push({ icon: "TOP", title: "Recognition", text: `${top.name} is leading selected period with score ${top.score}.` });
+  if (!insights.length) insights.push({ icon: "INFO", title: "No Major Risk", text: "No major manpower or productivity issue detected for selected period." });
   return insights;
 }
 
@@ -164,13 +213,14 @@ async function getPeopleDashboard(params = {}) {
   const range = selectedRange(params);
   const selectedWorkingDays = workingDates(range);
 
-  const [employeesRaw, entriesRaw, linesRaw, attendanceRaw, shiftsRaw, departmentsRaw] = await Promise.all([
+  const [employeesRaw, entriesRaw, linesRaw, attendanceRaw, shiftsRaw, departmentsRaw, plannedAbsencesRaw] = await Promise.all([
     listAll("employees", { perPage: 1000 }),
     listAll("production_entries", { perPage: 5000, sort: "-work_date" }),
     listAll("production_entry_lines", { perPage: 10000, sort: "-work_date" }),
     listAll("attendance", { perPage: 10000, sort: "-work_date" }),
     listAll("shifts", { perPage: 500 }),
-    listAll("departments", { perPage: 1000 })
+    listAll("departments", { perPage: 1000 }),
+    listAll("planned_absences", { perPage: 5000 }).catch(() => [])
   ]);
 
   const activeEmployees = employeesRaw.filter((e) => isActive(e.active)).map((e) => ({ code: clean(e.emp_code), name: clean(e.full_name), department: clean(e.department) || "-", designation: clean(e.designation) })).filter((e) => e.code || e.name);
@@ -202,6 +252,9 @@ async function getPeopleDashboard(params = {}) {
 
   const attendanceByDate = buildAttendanceByDate(attendanceRaw, range, shiftFilter);
   const presence = buildPresenceLists(activeEmployees, attendanceByDate, selectedWorkingDays, deptFilter, employeeFilter);
+  const plannedAbsences = normalizePlannedAbsences(plannedAbsencesRaw);
+  const absentBreakdown = splitAbsentRowsByPlan(presence.absent, plannedAbsences);
+  const monthAbsence = absencePctForRange(activeEmployees, attendanceRaw, currentMonthRange(), shiftFilter, deptFilter, employeeFilter);
   const absentMap = new Map(); presence.absent.forEach((a) => absentMap.set(a.code || a.name, num(a.days, 0)));
   const generalShiftMinutes = getGeneralShiftMinutes(shiftsRaw);
   const manpowerAvailableMinutes = presence.present.reduce((sum, p) => sum + num(p.days, 0), 0) * generalShiftMinutes;
@@ -226,22 +279,36 @@ async function getPeopleDashboard(params = {}) {
 
   const totalActual = selectedEntries.reduce((s, x) => s + num(x.total_actual_minutes, 0), 0);
   const totalStandard = selectedEntries.reduce((s, x) => s + num(x.total_standard_minutes, 0), 0);
-  const kpis = { presentEmployees: presence.present.length, absentEmployees: presence.absent.length, availableHours: hours(manpowerAvailableMinutes), utilizedHours: hours(totalActual), standardOutputHours: hours(totalStandard), productivityPct: pct(totalStandard, manpowerAvailableMinutes), utilizationPct: pct(totalActual, manpowerAvailableMinutes), reworkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "rework").reduce((s, x) => s + num(x.actual_minutes, 0), 0)), otherWorkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "other").reduce((s, x) => s + num(x.actual_minutes, 0), 0)), lossHours: hours(selectedEntries.reduce((s, x) => s + num(x.major_loss_minutes, 0), 0)) };
+  const kpis = {
+    presentEmployees: presence.present.length,
+    absentEmployees: presence.absent.length,
+    plannedAbsentEmployees: absentBreakdown.plannedAbsentEmployees,
+    unplannedAbsentEmployees: absentBreakdown.unplannedAbsentEmployees,
+    plannedAbsentDays: absentBreakdown.plannedAbsentDays,
+    unplannedAbsentDays: absentBreakdown.unplannedAbsentDays,
+    absentPctCurrentMonth: monthAbsence.absentPct,
+    monthAbsentDays: monthAbsence.absentPersonDays,
+    monthAvailablePersonDays: monthAbsence.totalPersonDays,
+    availableHours: hours(manpowerAvailableMinutes),
+    utilizedHours: hours(totalActual),
+    standardOutputHours: hours(totalStandard),
+    productivityPct: pct(totalStandard, manpowerAvailableMinutes),
+    utilizationPct: pct(totalActual, manpowerAvailableMinutes),
+    reworkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "rework").reduce((s, x) => s + num(x.actual_minutes, 0), 0)),
+    otherWorkHours: hours(selectedLines.filter((x) => clean(x.work_nature).toLowerCase() === "other").reduce((s, x) => s + num(x.actual_minutes, 0), 0)),
+    lossHours: hours(selectedEntries.reduce((s, x) => s + num(x.major_loss_minutes, 0), 0))
+  };
 
   const shifts = []; shiftsRaw.forEach((s) => addUnique(shifts, s.shift_name || s.shift_code)); entriesRaw.forEach((e) => addUnique(shifts, e.shift_name || e.shift_code)); shifts.sort((a, b) => a.localeCompare(b));
   const departmentsForFilter = [];
-  departmentsRaw
-    .filter((d) => isActive(d.active))
-    .forEach((d) => addUnique(departmentsForFilter, d.department_name || d.department_code || d.name));
+  departmentsRaw.filter((d) => isActive(d.active)).forEach((d) => addUnique(departmentsForFilter, d.department_name || d.department_code || d.name));
   departmentsForFilter.sort((a, b) => a.localeCompare(b));
   const employeesForFilter = activeEmployees.map((e) => e.name || e.code).filter(Boolean).sort((a, b) => a.localeCompare(b));
   const years = yearsFromDates(entriesRaw, linesRaw, attendanceRaw);
   const topPeriod = people.find((p) => num(p.score) > 0) || null;
   const topMonth = people.filter((p) => num(p.score) > 0).slice(0, 3).map((p, idx) => ({ ...p, badges: [`Selected Rank ${idx + 1}`] }));
 
-  return { ok: true, source: "pocketbase", period, range, selectedYear: params.year || "", selectedMonth: params.month || "", filterOptions: { shifts, departments: departmentsForFilter, employees: employeesForFilter, years, months: Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: monthName(i + 1) })) }, kpis, topYesterday: topPeriod ? { ...topPeriod, badges: ["Selected Period Topper"] } : null, topMonth, presentList: presence.present, yesterdayAbsent: presence.absent, monthAbsent: presence.absent, employees: people, departments, insights: buildInsights(kpis, departments, people, range.label), meta: { service: "peopleDashboardServiceV6", generatedAt: new Date().toISOString(), dateFilterMode: range.mode, selectedWorkingDates: selectedWorkingDays, generalShiftMinutes, counts: { employees: activeEmployees.length, selectedEntries: selectedEntries.length, selectedLines: selectedLines.length, attendance: attendanceRaw.length } } };
+  return { ok: true, source: "pocketbase", period, range, selectedYear: params.year || "", selectedMonth: params.month || "", filterOptions: { shifts, departments: departmentsForFilter, employees: employeesForFilter, years, months: Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: monthName(i + 1) })) }, kpis, topYesterday: topPeriod ? { ...topPeriod, badges: ["Selected Period Topper"] } : null, topMonth, presentList: presence.present, yesterdayAbsent: presence.absent, monthAbsent: presence.absent, plannedAbsent: absentBreakdown.plannedAbsent, unplannedAbsent: absentBreakdown.unplannedAbsent, employees: people, departments, insights: buildInsights(kpis, departments, people, range.label), meta: { service: "peopleDashboardServiceV6", generatedAt: new Date().toISOString(), dateFilterMode: range.mode, selectedWorkingDates: selectedWorkingDays, generalShiftMinutes, counts: { employees: activeEmployees.length, selectedEntries: selectedEntries.length, selectedLines: selectedLines.length, attendance: attendanceRaw.length, plannedAbsences: plannedAbsencesRaw.length } } };
 }
 
 module.exports = { getPeopleDashboard };
-
-
