@@ -16,7 +16,8 @@ function toNumber(value, defaultValue = 0) {
 function normalizeMachineStatus(record = {}) {
   const raw = clean(record.status).toLowerCase();
   if (raw === "completed" || raw === "complete") return "Completed";
-  if (raw === "inactive" || raw === "deleted" || record.active === false) return "Inactive";
+  if (raw === "inactive" || raw === "deleted" || raw === "delete" || raw === "disabled") return "Inactive";
+  if (record.active === false) return "Inactive";
   return "Active";
 }
 
@@ -74,7 +75,14 @@ async function getMachineSummary(params = {}) {
     if (!machineNo) return;
     const typeCode = clean(m.machine_type_code || m.type || "");
     const typeName = typeNameMap.get(typeCode) || typeCode;
-    machineMap.set(machineNo, { machineNo, machineCategory: typeName, machineTypeCode: typeCode, status: normalizeMachineStatus(m), active: m.active !== false });
+    machineMap.set(machineNo, {
+      machineNo,
+      machineCategory: typeName,
+      machineTypeCode: typeCode,
+      status: normalizeMachineStatus(m),
+      rawStatus: clean(m.status),
+      active: m.active !== false
+    });
   });
 
   const bookingStdBySubworkKey = new Map();
@@ -111,6 +119,7 @@ async function getMachineSummary(params = {}) {
         machineCategory: finalCategory,
         machineTypeCode: finalTypeCode,
         status: clean(master.status || "Active"),
+        rawStatus: clean(master.rawStatus || master.status || "Active"),
         plannedStandardMinutes,
         completedStandardMinutes: 0,
         actualMinutes: 0,
@@ -182,7 +191,7 @@ async function getMachineSummary(params = {}) {
   if (statusFilter && statusFilter.toLowerCase() !== "all") items = items.filter(x => x.status.toLowerCase() === statusFilter.toLowerCase());
   items.sort((a, b) => a.status !== b.status ? a.status.localeCompare(b.status) : a.machineNo.localeCompare(b.machineNo));
 
-  return { machines: items, meta: { source: "pocketbase", statusRule: "deleted_or_active_false_maps_to_inactive", generatedAt: new Date().toISOString(), counts: { machines: items.length, machineTypes: machineTypes.length, subworks: subworks.length, bookingPoints: bookingPoints.length, productionLines: lines.length, bookingStatus: bookingStatus.length, qualityLogs: qualityLogs.length } } };
+  return { machines: items, meta: { source: "pocketbase", statusRule: "completed_status_wins_before_active_false;deleted_or_inactive_maps_to_inactive", generatedAt: new Date().toISOString(), counts: { machines: items.length, machineTypes: machineTypes.length, subworks: subworks.length, bookingPoints: bookingPoints.length, productionLines: lines.length, bookingStatus: bookingStatus.length, qualityLogs: qualityLogs.length } } };
 }
 
 async function getMachineDetail(params = {}) {
