@@ -37,6 +37,32 @@
     el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
   }
 
+  function focusField(id) {
+    const field = $(id);
+    if (!field) return;
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      field.focus();
+      field.classList.add("entry-error");
+      setTimeout(() => field.classList.remove("entry-error"), 1800);
+    }, 250);
+  }
+
+  function validateSelection() {
+    const type = clean($("rwOtherType")?.value);
+    const period = clean($("rwOtherPeriod")?.value);
+    const year = clean($("rwOtherYear")?.value);
+    const month = clean($("rwOtherMonth")?.value);
+    const machineOptions = Array.from($("rwOtherMachine")?.options || []);
+
+    if (!type) { setStatus("Select report type first.", "error"); focusField("rwOtherType"); return false; }
+    if (!period) { setStatus("Select report period first.", "error"); focusField("rwOtherPeriod"); return false; }
+    if (!year) { setStatus("Select year first.", "error"); focusField("rwOtherYear"); return false; }
+    if (period !== "selectedYear" && !month) { setStatus("Select month first.", "error"); focusField("rwOtherMonth"); return false; }
+    if (machineOptions.length <= 1) { setStatus("Machine list is not loaded. Click Refresh, then try again.", "error"); focusField("machineFilter"); return false; }
+    return true;
+  }
+
   function getMachineValue() {
     return clean($("rwOtherMachine")?.value || $("machineFilter")?.value || "All") || "All";
   }
@@ -73,6 +99,7 @@
     syncMachineOptions();
     $("rwOtherPeriod")?.addEventListener("change", syncMonthVisibility);
     $("machineFilter")?.addEventListener("change", syncMachineOptions);
+    $("refreshBtn")?.addEventListener("click", () => setTimeout(syncMachineOptions, 900));
     $("showRwOtherMachineReportBtn")?.addEventListener("click", showReport);
     syncMonthVisibility();
   }
@@ -116,11 +143,17 @@
 
   async function showReport() {
     try {
+      syncMachineOptions();
+      if (!validateSelection()) return;
       setStatus("Preparing report...");
       const btn = $("showRwOtherMachineReportBtn");
       if (btn) { btn.disabled = true; btn.textContent = "Preparing..."; }
-      syncMachineOptions();
       const data = await requestJson(reportUrl());
+      if (!data?.rows?.length) {
+        setStatus("No records found for this selection. Change period, machine or report type.", "error");
+        focusField("rwOtherMachine");
+        return;
+      }
       latestReport = data;
       latestHtml = reportHtml(data);
       const w = window.open("", "_blank", "width=1200,height=850");
@@ -128,7 +161,7 @@
       w.document.open(); w.document.write(latestHtml); w.document.close();
       setTimeout(() => { try { w.document.getElementById("sendRwOtherReportFromPopup")?.addEventListener("click", () => sendReport()); } catch {} }, 300);
       setStatus(`${data.title} opened.`, "success");
-    } catch (err) { setStatus("Report failed: " + (err?.message || err), "error"); }
+    } catch (err) { setStatus("Report failed: " + (err?.message || err), "error"); focusField("showRwOtherMachineReportBtn"); }
     finally { const btn = $("showRwOtherMachineReportBtn"); if (btn) { btn.disabled = false; btn.textContent = "Show Work Nature Report"; } }
   }
 
