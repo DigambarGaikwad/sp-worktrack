@@ -1,11 +1,9 @@
 // server/services/dashboardServiceV2.js
 // Wrapper over dashboardService.js.
-// Keeps existing machine detail and loss summary logic, but improves machine summary category visibility.
-// Rule:
-// - Active dashboard/filter should use active machine categories only.
-// - Deleted/inactive categories may still appear for Completed/Deleted/historical machines with entries.
+// Keeps machine summary V2 category/status visibility and exports detail/loss contracts.
 
 const baseDashboardService = require("./dashboardService");
+const { getMachineDetail, getLossSummary } = require("./dashboardDetailLossService");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 function clean(value) {
@@ -364,5 +362,7 @@ async function getMachineSummary(params = {}) {
 
 module.exports = {
   ...baseDashboardService,
-  getMachineSummary
+  getMachineSummary,
+  getMachineDetail,
+  getLossSummary
 };
