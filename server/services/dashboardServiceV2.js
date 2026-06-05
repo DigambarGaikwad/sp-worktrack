@@ -18,12 +18,16 @@ function toNumber(value, defaultValue = 0) {
 }
 
 function statusOfMachine(m) {
-  return clean(m.status || (m.active === false ? "Completed" : "Active")) || "Active";
+  const raw = clean(m.status).toLowerCase();
+  if (raw === "completed" || raw === "complete") return "Completed";
+  if (raw === "inactive" || raw === "deleted" || raw === "delete" || raw === "disabled") return "Inactive";
+  if (m.active === false) return "Inactive";
+  return "Active";
 }
 
 function isHistoricalStatus(status) {
   const s = clean(status).toLowerCase();
-  return s === "completed" || s === "deleted" || s === "inactive";
+  return s === "completed" || s === "deleted" || s === "inactive" || s === "historical";
 }
 
 async function listAll(collectionName, options = {}) {
@@ -114,8 +118,6 @@ async function getMachineSummary(params = {}) {
     const status = statusOfMachine(m);
     const hasHistory = lineMachineNos.has(machineNo);
 
-    // Hide active machines whose category is deleted/inactive.
-    // But keep Completed/Deleted/Inactive or historical machines so old data remains traceable.
     if (typeCode && typeMeta && !typeMeta.active && !isHistoricalStatus(status) && !hasHistory) return;
 
     const typeName = typeMeta?.name || typeCode;
@@ -125,6 +127,7 @@ async function getMachineSummary(params = {}) {
       machineCategory: typeName,
       machineTypeCode: typeCode,
       status,
+      rawStatus: clean(m.status),
       active: m.active !== false,
       typeActive: typeMeta ? typeMeta.active : true,
       hasHistory
@@ -185,8 +188,6 @@ async function getMachineSummary(params = {}) {
       const finalStatus = clean(master.status || (lineMachineNos.has(key) ? "Historical" : "Active"));
       const hasHistory = lineMachineNos.has(key) || Boolean(master.hasHistory);
 
-      // Do not allow a deleted/inactive category to appear in active/current dashboard.
-      // Historical data is allowed only under Completed/Deleted/Inactive/Historical status.
       if (typeMeta && !typeMeta.active && !isHistoricalStatus(finalStatus) && !hasHistory) return null;
 
       const finalCategory = clean(
@@ -205,6 +206,7 @@ async function getMachineSummary(params = {}) {
         machineTypeCode: finalTypeCode,
         machineCategoryActive: typeMeta ? typeMeta.active : true,
         status: finalStatus,
+        rawStatus: clean(master.rawStatus || finalStatus),
 
         plannedStandardMinutes,
         completedStandardMinutes: 0,
@@ -343,7 +345,8 @@ async function getMachineSummary(params = {}) {
     meta: {
       source: "pocketbase",
       service: "dashboardServiceV2",
-      machineCategoryRule: "filters show active categories only; historical completed/deleted machines may retain inactive categories",
+      statusRule: "completed_status_wins;inactive_deleted_or_active_false_maps_to_inactive",
+      machineCategoryRule: "filters show active categories only; historical completed/inactive machines may retain inactive categories",
       generatedAt: new Date().toISOString(),
       counts: {
         machines: items.length,
