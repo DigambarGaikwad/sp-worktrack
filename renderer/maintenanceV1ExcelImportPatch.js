@@ -4,6 +4,7 @@
 (function () {
   const REQUEST_TIMEOUT_MS = 180000;
   let lastAnalysis = null;
+  let otpRequestToken = "";
 
   function apiBaseUrl() { return window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030"; }
   function clean(value) { return String(value ?? "").trim(); }
@@ -39,7 +40,7 @@
   }
 
   function setBusy(value) {
-    ["v1AnalyzeBtn", "v1ImportBtn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = Boolean(value); });
+    ["v1ChooseFileBtn", "v1AnalyzeBtn", "v1RequestOtpBtn", "v1ImportBtn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = Boolean(value); });
   }
 
   function renderObjectTable(obj) {
@@ -87,11 +88,17 @@
     oldBox.innerHTML = `
       <div id="v1ExcelImportBox">
         <div class="maintenance-title">4. Import V1 Excel Backup</div>
-        <div class="small-hint">Imports old Google Sheet Excel backup into PocketBase DB. ADMIN sheet is ignored. Planned_Work is validation/snapshot only.</div>
-        <div class="field"><label>Excel File Path</label><input id="v1ExcelFilePath" class="admin-input" placeholder="C:\\SP WorkTrack-Dev\\migration\\v1-data.xlsx" /></div>
+        <div class="small-hint">Choose old Google Sheet Excel backup. ADMIN sheet is ignored. Planned_Work is validation/snapshot only.</div>
+        <input id="v1ExcelFileInput" type="file" accept=".xlsx,.xls" style="display:none;" />
+        <div class="field"><label>Selected Excel File</label><input id="v1ExcelFilePath" class="admin-input" placeholder="Choose .xlsx file" readonly /></div>
         <div class="row" style="gap:8px; flex-wrap:wrap;">
+          <button class="btn grey" id="v1ChooseFileBtn" type="button">Choose Excel File</button>
           <button class="btn grey" id="v1AnalyzeBtn" type="button">Analyze Excel</button>
           <label class="quality-recheck-line"><input id="v1CreateBackup" type="checkbox" checked /> Create DB backup before import</label>
+        </div>
+        <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn grey" id="v1RequestOtpBtn" type="button">Request Import OTP</button>
+          <input id="v1OtpInput" class="admin-input" style="max-width:150px;" placeholder="Enter OTP" autocomplete="one-time-code" />
         </div>
         <label class="confirm-label">Type IMPORT_V1 here to confirm</label>
         <input id="v1ConfirmText" class="admin-input confirm-input" placeholder="IMPORT_V1" autocomplete="off" />
@@ -103,9 +110,29 @@
     wire();
   }
 
+  function selectedFilePath(file) {
+    return clean(file?.path || file?.webkitRelativePath || file?.name);
+  }
+
+  function chooseFile() {
+    const fileInput = document.getElementById("v1ExcelFileInput");
+    fileInput?.click();
+  }
+
+  function onFileSelected() {
+    const file = document.getElementById("v1ExcelFileInput")?.files?.[0];
+    const filePath = selectedFilePath(file);
+    if (!filePath) { setStatus("Could not read selected file path. Use Electron app window, not browser.", "error"); return; }
+    if (!/\.xlsx?$/i.test(filePath)) { setStatus("Select only .xlsx/.xls file.", "error"); return; }
+    document.getElementById("v1ExcelFilePath").value = filePath;
+    lastAnalysis = null;
+    otpRequestToken = "";
+    setStatus("Excel file selected. Click Analyze Excel.", "success");
+  }
+
   function payloadBase() {
     const filePath = clean(document.getElementById("v1ExcelFilePath")?.value);
-    if (!filePath) { setStatus("Enter Excel file path first.", "error"); focusField("v1ExcelFilePath"); return null; }
+    if (!filePath) { setStatus("Choose Excel file first.", "error"); focusField("v1ChooseFileBtn"); return null; }
     return { filePath };
   }
 
@@ -122,24 +149,49 @@
     finally { setBusy(false); }
   }
 
-  async function importNow() {
+  async function requestOtp() {
     const body = payloadBase();
     if (!body) return;
-    const confirmText = clean(document.getElementById("v1ConfirmText")?.value);
-    if (confirmText !== "IMPORT_V1") { setStatus("Type IMPORT_V1 in confirmation box first.", "error"); focusField("v1ConfirmText"); return; }
     try {
-      setBusy(true); setStatus("Importing V1 Excel. Please wait; do not close the app...");
-      const data = await postJson("/api/maintenance/v1-excel/import", { ...body, confirmText, createBackup: document.getElementById("v1CreateBackup")?.checked !== false });
-      renderImportResult(data);
-      document.getElementById("v1ConfirmText").value = "";
-      setStatus("V1 Excel import completed.", "success");
+      setBusy(true); setStatus("Requesting import OTP...");
+      const data = await postJson("/api/maintenance/otp/request", { action: "import_v1_excel" });
+      otpRequestToken = clean(data.requestToken || data.otpRequestToken || data.token);
+      setStatus("OTP sent. Enter OTP, type IMPORT_V1 and click Import.", "success");
+      focusField("v1OtpInput");
     } catch (err) { setStatus(err?.message || String(err), "error"); }
     finally { setBusy(false); }
   }
 
+  async function importNow() {
+    const body = payloadBase();
+    if (!body) return;
+    const otp = clean(document.getElementById("v1OtpInput")?.value);
+    const confirmText = clean(document.getElementById("v1ConfirmText")?.value);
+    if (!lastAnalysis) { setStatus("Analyze Excel first, then import.", "error"); focusField("v1AnalyzeBtn"); return; }
+    if (!otpRequestToken) { setStatus("Request Import OTP first.", "error"); focusField("v1RequestOtpBtn"); return; }
+    if (!otp) { setStatus("Enter OTP first.", "error"); focusField("v1OtpInput"); return; }
+    if (confirmText !== "IMPORT_V1") { setStatus("Type IMPORT_V1 in confirmation box first.", "error"); focusField("v1ConfirmText"); return; }
+    try {
+      setBusy(true); setStatus("Importing V1 Excel. Please wait; do not close the app...");
+      const data = await postJson("/api/maintenance/v1-excel/import", { ...body, confirmText, otpRequestToken, otp, action: "import_v1_excel", createBackup: document.getElementById("v1CreateBackup")?.checked !== false });
+      renderImportResult(data);
+      document.getElementById("v1ConfirmText").value = "";
+      document.getElementById("v1OtpInput").value = "";
+      otpRequestToken = "";
+      setStatus("V1 Excel import completed.", "success");
+    } catch (err) { setStatus(err?.message || String(err), "error"); if (/otp/i.test(String(err?.message || ""))) focusField("v1RequestOtpBtn"); }
+    finally { setBusy(false); }
+  }
+
   function wire() {
+    const fileInput = document.getElementById("v1ExcelFileInput");
+    if (fileInput && !fileInput.__wired) { fileInput.__wired = true; fileInput.addEventListener("change", onFileSelected); }
+    const c = document.getElementById("v1ChooseFileBtn");
+    if (c && !c.__wired) { c.__wired = true; c.addEventListener("click", chooseFile); }
     const a = document.getElementById("v1AnalyzeBtn");
     if (a && !a.__wired) { a.__wired = true; a.addEventListener("click", analyze); }
+    const o = document.getElementById("v1RequestOtpBtn");
+    if (o && !o.__wired) { o.__wired = true; o.addEventListener("click", requestOtp); }
     const i = document.getElementById("v1ImportBtn");
     if (i && !i.__wired) { i.__wired = true; i.addEventListener("click", importNow); }
   }
