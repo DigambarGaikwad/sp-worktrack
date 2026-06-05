@@ -64,7 +64,31 @@ function buildTargets({ to = "", cc = "", recipients = [] } = {}) {
   return { to: Array.from(new Set(validTo)), cc: Array.from(new Set(ccFiltered)), invalid: Array.from(new Set(invalid)) };
 }
 
-async function sendReworkOtherReport({ reportType = "rework", period = "", machine = "All", html = "", text = "", to = "", cc = "", pdfHtml = "" } = {}) {
+function buildMailBody({ title, period, machine }) {
+  const machineLine = clean(machine) && clean(machine) !== "All" ? ` for machine ${clean(machine)}` : " for all selected machines";
+  const plain = [
+    "Dear Team,",
+    "",
+    `Please find attached the ${title}${machineLine} for ${clean(period || "the selected period")}.`,
+    "",
+    "The PDF contains machine-wise summary, employee-wise summary, and detailed work nature records for review and action.",
+    "",
+    "Regards,",
+    "SP WorkTrack"
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827;">
+      <p>Dear Team,</p>
+      <p>Please find attached the <b>${clean(title)}</b>${machineLine} for <b>${clean(period || "the selected period")}</b>.</p>
+      <p>The PDF contains machine-wise summary, employee-wise summary, and detailed work nature records for review and action.</p>
+      <p>Regards,<br><b>SP WorkTrack</b></p>
+    </div>`;
+
+  return { plain, html };
+}
+
+async function sendReworkOtherReport({ reportType = "rework", period = "", machine = "All", html = "", to = "", cc = "", pdfHtml = "" } = {}) {
   const recipientsData = await getReworkOtherReportRecipients();
   const targets = buildTargets({ to, cc, recipients: recipientsData.recipients });
   if (!targets.to.length) {
@@ -75,16 +99,19 @@ async function sendReworkOtherReport({ reportType = "rework", period = "", machi
 
   const title = clean(reportType).toLowerCase() === "other" ? "Other Work Report" : "Rework Report";
   const subject = `SP WorkTrack ${title} - ${period || "Selected Period"}${machine && machine !== "All" ? " - " + machine : ""}`;
+  const reportHtml = clean(pdfHtml || html);
   const attachments = [];
-  if (clean(pdfHtml || html)) {
-    const pdfBuffer = await generatePdfFromHtml(pdfHtml || html);
+
+  if (reportHtml) {
+    const pdfBuffer = await generatePdfFromHtml(reportHtml);
     attachments.push({ filename: `${title.replace(/\s+/g, "_")}_${safeFilePart(period)}.pdf`, content: pdfBuffer, contentType: "application/pdf" });
   }
-  const bodyText = text || `SP WorkTrack ${title}\nPeriod: ${period}\nMachine: ${machine}\n\nPDF report is attached.`;
-  const bodyHtml = html || `<div style="font-family:Arial,sans-serif;line-height:1.5;"><h2>SP WorkTrack ${title}</h2><p><b>Period:</b> ${clean(period)}</p><p><b>Machine:</b> ${clean(machine)}</p><p>Please find attached PDF report.</p></div>`;
+
+  const body = buildMailBody({ title, period, machine });
   const primaryTo = targets.to[0];
   const copied = Array.from(new Set([...targets.to.slice(1), ...targets.cc]));
-  const result = await sendEmail({ to: primaryTo, cc: copied.join(", "), subject, text: bodyText, html: bodyHtml, attachments });
+  const result = await sendEmail({ to: primaryTo, cc: copied.join(", "), subject, text: body.plain, html: body.html, attachments });
+
   return { sent: result.accepted?.length || targets.to.length, mainRecipients: targets.to, ccRecipients: targets.cc, attachmentCount: attachments.length, skippedInvalidRecipients: targets.invalid, results: [{ email: primaryTo, cc: copied.join(", "), ...result }] };
 }
 
