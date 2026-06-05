@@ -4,6 +4,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const { backupDb } = require("./maintenanceService");
@@ -13,6 +14,7 @@ function toNumber(value, fallback = 0) { const n = Number(value); return Number.
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function slug(value) { return clean(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
 function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function hash(value) { return crypto.createHash("sha1").update(clean(value)).digest("hex").slice(0, 10); }
 function counter() { return { checked: 0, wouldCreate: 0, wouldUpdate: 0, created: 0, updated: 0, skipped: 0, errors: 0 }; }
 function bump(summary, name) { if (!summary[name]) summary[name] = counter(); return summary[name]; }
 
@@ -45,6 +47,12 @@ function machineTypeCode(category) {
   if (s.includes("online")) return "Online";
   if (s.includes("dispenser")) return "Dispenser";
   return slug(category) || "Unknown";
+}
+
+function truthyActive(value) {
+  const t = clean(value).toLowerCase();
+  if (["false", "0", "no", "inactive", "deleted"].includes(t)) return false;
+  return true;
 }
 
 function readWorkbook(filePath) {
@@ -92,6 +100,22 @@ async function upsert(collectionName, filter, body, apply, counters) {
   return pocketBaseRequest(`/api/collections/${collectionName}/records`, { method: "POST", body });
 }
 
+async function upsertPreserve(collectionName, filter, body, preserveFields, apply, counters) {
+  counters.checked += 1;
+  const existing = await findOne(collectionName, filter).catch(() => null);
+  if (!apply) { existing ? counters.wouldUpdate++ : counters.wouldCreate++; return existing || body; }
+  if (existing?.id) {
+    const merged = { ...body };
+    preserveFields.forEach((field) => {
+      if ((merged[field] === "" || merged[field] === 0 || merged[field] == null) && existing[field] !== undefined) merged[field] = existing[field];
+    });
+    counters.updated += 1;
+    return pocketBaseRequest(`/api/collections/${collectionName}/records/${existing.id}`, { method: "PATCH", body: merged });
+  }
+  counters.created += 1;
+  return pocketBaseRequest(`/api/collections/${collectionName}/records`, { method: "POST", body });
+}
+
 async function createIfMissing(collectionName, filter, body, apply, counters) {
   counters.checked += 1;
   const existing = await findOne(collectionName, filter).catch(() => null);
@@ -109,6 +133,31 @@ function getStandardMinutesForLogRow(row) {
   return submittedStd > 0 && submittedStd < toNumber(row[21], 0) ? submittedStd : 0;
 }
 
+function rowKeyParts(row) {
+  const workDate = excelDateToYmd(row[1]);
+  return {
+    workDate,
+    timestamp: clean(row[0]),
+    shiftName: clean(row[2]),
+    workType: clean(row[6] || "Normal"),
+    empCode: clean(row[7]),
+    empName: clean(row[8])
+  };
+}
+
+function groupKeyForLogRow(row) {
+  const p = rowKeyParts(row);
+  return [p.timestamp || "NO_TS", p.workDate, p.empCode, p.shiftName, p.workType].join("|");
+}
+
+function entryNoFromGroup(first) {
+  const p = rowKeyParts(first);
+  const shiftCode = slug(p.shiftName) || p.shiftName;
+  const workTypeCode = slug(p.workType) || "normal";
+  const sourceHash = hash(groupKeyForLogRow(first));
+  return `V1-${p.workDate.replace(/-/g, "")}-${p.empCode}-${shiftCode}-${workTypeCode}-${sourceHash}`;
+}
+
 function logRowToLine(row, entryNo, lineNo) {
   const workDate = excelDateToYmd(row[1]);
   const category = clean(row[14]) || "Unknown";
@@ -120,6 +169,7 @@ function logRowToLine(row, entryNo, lineNo) {
   return {
     entry_no: entryNo,
     line_no: lineNo,
+    source_hash: hash([entryNo, lineNo, workDate, clean(row[13]), dept, sub, nature, actual, clean(row[18])].join("|")),
     work_date: workDate,
     work_year: Number(workDate.slice(0, 4)) || new Date().getFullYear(),
     emp_code: clean(row[7]),
@@ -148,6 +198,10 @@ function machineRowsFromSheet(workbook) {
   return raw.map(r => ({ machineNo: clean(r[0]), category: clean(r[1]) }));
 }
 
+function stdKey(category, dept, sub) {
+  return [machineTypeCode(category), slug(dept), slug(sub)].join("|");
+}
+
 function analyzeWorkbook(workbook, filePath) {
   const sheetNames = workbook.SheetNames || [];
   const employeeRows = recordsFromRows(rows(workbook, "EMPLOYEES"));
@@ -167,6 +221,32 @@ function analyzeWorkbook(workbook, filePath) {
   const statusCount = {};
   attRows.forEach(r => { const s = clean(r[6] || "Present") || "Present"; statusCount[s] = (statusCount[s] || 0) + 1; });
 
+  const machineSet = new Set(machines.map(x => x.machineNo));
+  const logMachinesMissing = Array.from(new Set(logRows.map(r => clean(r[13])).filter(m => m && !machineSet.has(m)))).sort();
+  if (logMachinesMissing.length) warnings.push(`LOG has ${logMachinesMissing.length} machine(s) not found in Machine_List. They will be created from LOG category.`);
+
+  const stdSeen = new Map();
+  let duplicateStdConflicts = 0;
+  stdRows.forEach(r => {
+    const key = stdKey(r["Machine Category"], r.Department, r["Sub Work"]);
+    if (!key.includes("||")) {
+      const val = toNumber(r["Std Time"], 0);
+      if (stdSeen.has(key) && stdSeen.get(key) !== val) duplicateStdConflicts += 1;
+      stdSeen.set(key, val);
+    }
+  });
+  if (duplicateStdConflicts) warnings.push(`${duplicateStdConflicts} Standard_Time duplicate key conflict(s) found. Last row value will be used.`);
+
+  const logSubMissing = new Set();
+  logRows.forEach(r => {
+    const category = clean(r[14]), dept = clean(r[15]), sub = clean(r[16]);
+    if (category && dept && sub && !stdSeen.has(stdKey(category, dept, sub))) logSubMissing.add(stdKey(category, dept, sub));
+  });
+  if (logSubMissing.size) warnings.push(`${logSubMissing.size} LOG subwork combination(s) missing in Standard_Time. They will be created with standard time from LOG/0.`);
+
+  const groups = new Set(logRows.map(groupKeyForLogRow));
+  if (groups.size < logRows.length) warnings.push(`LOG rows grouped into ${groups.size} production entry header(s). Timestamp is included to prevent same-day merge conflict.`);
+
   return {
     filePath,
     fileName: path.basename(filePath),
@@ -176,10 +256,14 @@ function analyzeWorkbook(workbook, filePath) {
       employees: employeeRows.length,
       attendance: attRows.length,
       logRows: logRows.length,
+      logEntryGroups: groups.size,
       standardTime: stdRows.length,
       plannedWork: plannedRows.length,
       machineListRows: machines.length,
-      uniqueMachines: new Set(machines.map(x => x.machineNo)).size
+      uniqueMachines: new Set(machines.map(x => x.machineNo)).size,
+      logMachinesMissingInMachineList: logMachinesMissing.length,
+      logSubworksMissingInStandardTime: logSubMissing.size,
+      standardTimeDuplicateConflicts: duplicateStdConflicts
     },
     dateRange: { from: dates[0] || "", to: dates[dates.length - 1] || "" },
     logTypeCount: typeCount,
@@ -193,7 +277,7 @@ async function importMasters(workbook, apply, summary) {
   for (const r of recordsFromRows(rows(workbook, "EMPLOYEES"))) {
     const empCode = clean(r["Emp ID"]);
     if (!empCode) continue;
-    await upsert("employees", `emp_code="${pbEscape(empCode)}"`, { emp_code: empCode, full_name: clean(r["Emp Name"]), department: "", designation: "", active: r.Active !== false }, apply, bump(summary, "employees"));
+    await upsertPreserve("employees", `emp_code="${pbEscape(empCode)}"`, { emp_code: empCode, full_name: clean(r["Emp Name"]), department: "", designation: "", active: truthyActive(r.Active), available_minutes_day: 0 }, ["department", "designation", "available_minutes_day"], apply, bump(summary, "employees"));
   }
 
   const std = recordsFromRows(rows(workbook, "Standard_Time"));
@@ -203,10 +287,19 @@ async function importMasters(workbook, apply, summary) {
     if (!category || !dept || !sub) continue;
     typeMap.set(machineTypeCode(category), category);
     deptMap.set(slug(dept), dept);
-    subMap.set([machineTypeCode(category), slug(dept), slug(sub)].join("|"), { category, dept, sub, std: toNumber(r["Std Time"], 0) });
+    subMap.set(stdKey(category, dept, sub), { category, dept, sub, std: toNumber(r["Std Time"], 0) });
   }
-  for (const m of machineRowsFromSheet(workbook)) typeMap.set(machineTypeCode(m.category), m.category);
 
+  rows(workbook, "LOG_2026").slice(1).forEach(row => {
+    const category = clean(row[14]), dept = clean(row[15]), sub = clean(row[16]);
+    if (!category || !dept || !sub) return;
+    typeMap.set(machineTypeCode(category), category);
+    deptMap.set(slug(dept), dept);
+    const key = stdKey(category, dept, sub);
+    if (!subMap.has(key)) subMap.set(key, { category, dept, sub, std: getStandardMinutesForLogRow(row) });
+  });
+
+  for (const m of machineRowsFromSheet(workbook)) typeMap.set(machineTypeCode(m.category), m.category);
   for (const [typeCode, typeName] of typeMap) await upsert("machine_types", `type_code="${pbEscape(typeCode)}"`, { type_code: typeCode, type_name: typeName, active: true }, apply, bump(summary, "machine_types"));
   for (const [deptCode, deptName] of deptMap) await upsert("departments", `department_code="${pbEscape(deptCode)}"`, { department_code: deptCode, department_name: deptName, active: true }, apply, bump(summary, "departments"));
   for (const item of subMap.values()) await upsert("subworks", `machine_type_code="${pbEscape(machineTypeCode(item.category))}" && department_code="${pbEscape(slug(item.dept))}" && subwork_code="${pbEscape(slug(item.sub))}"`, { machine_type_code: machineTypeCode(item.category), department_code: slug(item.dept), subwork_code: slug(item.sub), subwork_name: item.sub, standard_time: item.std, active: true }, apply, bump(summary, "subworks"));
@@ -229,15 +322,14 @@ async function importAttendance(workbook, apply, summary) {
   for (const row of rows(workbook, "ATT_2026").slice(1).filter(r => clean(r[1]) && clean(r[2]))) {
     const workDate = excelDateToYmd(row[1]), shiftName = clean(row[4]), empCode = clean(row[2]), workType = clean(row[5] || "Normal"), shiftCode = slug(shiftName) || shiftName;
     const attKey = [workDate, shiftCode, empCode, slug(workType)].map(x => clean(x).toLowerCase()).join("|");
-    await upsert("attendance", `att_key="${pbEscape(attKey)}"`, { att_key: attKey, work_date: workDate, work_year: Number(workDate.slice(0, 4)) || 2026, shift_code: shiftCode, shift_name: shiftName, emp_code: empCode, emp_name: clean(row[3]), work_type: workType, status: clean(row[6] || "Present"), shift_available: toNumber(row[7], 0), utilized_minutes: toNumber(row[8], 0), source_entry_no: `V1-${workDate.replace(/-/g, "")}-${empCode}-${shiftCode}-${slug(workType)}`, remarks: "Imported from V1 ATT_2026" }, apply, bump(summary, "attendance"));
+    await upsert("attendance", `att_key="${pbEscape(attKey)}"`, { att_key: attKey, work_date: workDate, work_year: Number(workDate.slice(0, 4)) || 2026, shift_code: shiftCode, shift_name: shiftName, emp_code: empCode, emp_name: clean(row[3]), work_type: workType, status: clean(row[6] || "Present"), shift_available: toNumber(row[7], 0), utilized_minutes: toNumber(row[8], 0), source_entry_no: `V1-ATT-${workDate.replace(/-/g, "")}-${empCode}-${shiftCode}-${slug(workType)}`, remarks: "Imported from V1 ATT_2026" }, apply, bump(summary, "attendance"));
   }
 }
 
 function groupLogRows(workbook) {
   const groups = new Map();
   for (const row of rows(workbook, "LOG_2026").slice(1).filter(r => clean(r[1]) && clean(r[7]) && clean(r[2]))) {
-    const workDate = excelDateToYmd(row[1]), empCode = clean(row[7]), shiftName = clean(row[2]), workType = clean(row[6] || "Normal");
-    const key = [workDate, empCode, shiftName, workType].join("|");
+    const key = groupKeyForLogRow(row);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
@@ -245,16 +337,14 @@ function groupLogRows(workbook) {
 }
 
 async function importProduction(workbook, apply, summary) {
-  for (const [key, groupRows] of groupLogRows(workbook)) {
+  for (const groupRows of groupLogRows(workbook).values()) {
     const first = groupRows[0];
     const workDate = excelDateToYmd(first[1]), empCode = clean(first[7]), empName = clean(first[8]), shiftName = clean(first[2]), workType = clean(first[6] || "Normal"), shiftCode = slug(shiftName) || shiftName;
-    const entryNo = `V1-${workDate.replace(/-/g, "")}-${empCode}-${shiftCode}-${slug(workType)}`;
+    const entryNo = entryNoFromGroup(first);
     const productionCounter = bump(summary, "production_entries");
-    const existing = await findOne("production_entries", `entry_no="${pbEscape(entryNo)}"`).catch(() => null);
-    if (existing?.id) { productionCounter.skipped += 1; continue; }
     const lines = groupRows.map((row, i) => logRowToLine(row, entryNo, i + 1));
     const totalStd = lines.reduce((s, x) => s + toNumber(x.standard_minutes, 0), 0), totalActual = lines.reduce((s, x) => s + toNumber(x.actual_minutes, 0), 0), shiftAvailable = toNumber(first[9], 0);
-    await createIfMissing("production_entries", `entry_no="${pbEscape(entryNo)}"`, { entry_no: entryNo, work_date: workDate, work_year: Number(workDate.slice(0, 4)) || 2026, shift_code: shiftCode, shift_name: shiftName, shift_start: excelTimeToText(first[3]), shift_end: excelTimeToText(first[4]), break_minutes: toNumber(first[5], 0), flexible_shift_minutes: 0, work_type: workType, emp_code: empCode, emp_name: empName, gross_shift_available: shiftAvailable, major_loss_reason: "", major_loss_minutes: 0, shift_available: shiftAvailable, total_standard_minutes: totalStd, total_actual_minutes: totalActual, remaining_minutes: Math.max(0, shiftAvailable - totalActual), productivity_percent: shiftAvailable > 0 ? Number(((totalStd / shiftAvailable) * 100).toFixed(2)) : toNumber(first[12], 0), source: "v1-excel-import", status: "SUBMITTED", remarks: "Imported from V1 LOG_2026" }, apply, productionCounter);
+    await upsert("production_entries", `entry_no="${pbEscape(entryNo)}"`, { entry_no: entryNo, work_date: workDate, work_year: Number(workDate.slice(0, 4)) || 2026, shift_code: shiftCode, shift_name: shiftName, shift_start: excelTimeToText(first[3]), shift_end: excelTimeToText(first[4]), break_minutes: toNumber(first[5], 0), flexible_shift_minutes: 0, work_type: workType, emp_code: empCode, emp_name: empName, gross_shift_available: shiftAvailable, major_loss_reason: "", major_loss_minutes: 0, shift_available: shiftAvailable, total_standard_minutes: totalStd, total_actual_minutes: totalActual, remaining_minutes: Math.max(0, shiftAvailable - totalActual), productivity_percent: shiftAvailable > 0 ? Number(((totalStd / shiftAvailable) * 100).toFixed(2)) : toNumber(first[12], 0), source: "v1-excel-import", status: "SUBMITTED", remarks: "Imported from V1 LOG_2026" }, apply, productionCounter);
     const lineCounter = bump(summary, "production_entry_lines");
     for (const line of lines) {
       try { await createIfMissing("production_entry_lines", `entry_no="${pbEscape(line.entry_no)}" && line_no=${line.line_no}`, line, apply, lineCounter); }
