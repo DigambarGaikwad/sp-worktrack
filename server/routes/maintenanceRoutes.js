@@ -1,4 +1,4 @@
-﻿// server/routes/maintenanceRoutes.js
+// server/routes/maintenanceRoutes.js
 // Admin Maintenance API routes.
 
 const express = require("express");
@@ -23,6 +23,7 @@ const {
   emptyDatabase
 } = require("../services/emptyDbMaintenanceService");
 const { deleteBackupFile } = require("../services/backupFileDeleteService");
+const { analyzeV1ExcelFile, importV1ExcelFile } = require("../services/v1ExcelImportService");
 const {
   requestMaintenanceOtp,
   verifyMaintenanceOtp,
@@ -201,6 +202,27 @@ router.post("/empty-db/confirm", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/empty-db/confirm failed:", err);
     handleError(res, err, "Empty database failed.");
+  }
+});
+
+router.post("/v1-excel/analyze", async (req, res) => {
+  try {
+    const data = analyzeV1ExcelFile(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/v1-excel/analyze failed:", err);
+    handleError(res, err, "V1 Excel analyze failed.");
+  }
+});
+
+router.post("/v1-excel/import", async (req, res) => {
+  try {
+    assertOtp(req.body || {}, "import_v1_excel");
+    const data = await importV1ExcelFile(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/v1-excel/import failed:", err);
+    handleError(res, err, "V1 Excel import failed.");
   }
 });
 
