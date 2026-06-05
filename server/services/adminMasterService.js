@@ -230,7 +230,7 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
   const byType = {};
 
   machineTypes.forEach((type) => {
-    byType[type.id] = { mainWorks: buildDepartments(departments), subWorks: {} };
+    byType[type.id] = { mainWorks: [], subWorks: {} };
   });
 
   subworks
@@ -239,13 +239,16 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
       const typeCode = clean(x.machine_type_code);
       const deptCode = clean(x.department_code);
       const deptName = activeDeptNameByCode.get(deptCode) || deptCode;
-      if (!typeCode || !deptName) return;
+      const subworkName = clean(x.subwork_name);
+
+      if (!typeCode || !deptName || !subworkName) return;
       if (!byType[typeCode]) byType[typeCode] = { mainWorks: [], subWorks: {} };
       if (!byType[typeCode].mainWorks.includes(deptName)) byType[typeCode].mainWorks.push(deptName);
       if (!byType[typeCode].subWorks[deptName]) byType[typeCode].subWorks[deptName] = [];
+
       const key = [typeCode, deptCode, clean(x.subwork_code)].join("|");
       byType[typeCode].subWorks[deptName].push({
-        name: clean(x.subwork_name),
+        name: subworkName,
         standardTime: Number(x.standard_time || 0) || 0,
         checkpoints: bookingMap.get(key) || [],
         qualityCheckpoints: qualityMap.get(key) || []
@@ -255,7 +258,11 @@ function buildWorkCatalogByType(machineTypes, departments, subworks, bookingPoin
   Object.values(byType).forEach((catalog) => {
     catalog.mainWorks = Array.from(new Set(catalog.mainWorks.filter(Boolean))).sort((a, b) => a.localeCompare(b));
     Object.keys(catalog.subWorks).forEach((dept) => {
-      catalog.subWorks[dept].sort((a, b) => a.name.localeCompare(b.name));
+      catalog.subWorks[dept] = Array.from(new Map(
+        catalog.subWorks[dept]
+          .filter((x) => clean(x.name))
+          .map((x) => [clean(x.name), x])
+      ).values()).sort((a, b) => a.name.localeCompare(b.name));
     });
   });
 
