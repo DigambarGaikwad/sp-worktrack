@@ -1,0 +1,115 @@
+/* Machine Dashboard filter stabilization patch.
+   Narrow override only: keeps filters inside card without changing dashboard calculations. */
+
+.dash-topbar {
+  overflow: hidden !important;
+  align-items: flex-start !important;
+}
+
+.dash-topbar .brand-block {
+  flex: 0 0 190px !important;
+  min-width: 170px !important;
+}
+
+.dash-topbar .filter-bar {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 210px) !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+#statusFilter {
+  width: 165px !important;
+  min-width: 145px !important;
+}
+
+#typeFilter {
+  width: 230px !important;
+  min-width: 170px !important;
+}
+
+#machineFilter {
+  width: min(520px, 42vw) !important;
+  min-width: 220px !important;
+  max-width: 520px !important;
+}
+
+#refreshBtn {
+  width: 96px !important;
+  min-width: 96px !important;
+}
+
+#rwOtherMachineReportControls {
+  display: flex !important;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  gap: 8px !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex-wrap: nowrap !important;
+}
+
+#rwOtherMachineReportControls .dash-select {
+  flex: 0 0 auto !important;
+}
+
+#rwOtherType { width: 170px !important; }
+#rwOtherPeriod { width: 165px !important; }
+#rwOtherYear { width: 135px !important; }
+#rwOtherMonth { width: 135px !important; }
+
+#rwOtherMachine {
+  width: min(360px, 25vw) !important;
+  min-width: 190px !important;
+  max-width: 360px !important;
+}
+
+#showRwOtherMachineReportBtn {
+  width: 210px !important;
+  min-width: 210px !important;
+  max-width: 210px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (max-width: 1200px) {
+  .dash-topbar {
+    flex-direction: column !important;
+  }
+  .dash-topbar .brand-block,
+  .dash-topbar .filter-bar {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .dash-topbar .filter-bar,
+  #rwOtherMachineReportControls {
+    justify-content: flex-start !important;
+  }
+}
+
+@media (max-width: 760px) {
+  #statusFilter,
+  #typeFilter,
+  #machineFilter,
+  #rwOtherType,
+  #rwOtherPeriod,
+  #rwOtherYear,
+  #rwOtherMonth,
+  #rwOtherMachine,
+  #showRwOtherMachineReportBtn,
+  #refreshBtn {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  #rwOtherMachineReportControls {
+    flex-wrap: wrap !important;
+  }
+}
