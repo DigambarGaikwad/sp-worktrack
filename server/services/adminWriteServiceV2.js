@@ -77,7 +77,7 @@ function normalizeMachineStatus(x = {}) {
   const statusLower = rawStatus.toLowerCase();
   if (statusLower === "completed" || statusLower === "complete") return "Completed";
   if (statusLower === "inactive" || statusLower === "deleted" || statusLower === "delete" || statusLower === "disabled") return "Inactive";
-  if (x.active === false) return "Inactive";
+  if (x.active === false) return "Completed";
   return "Active";
 }
 function activeFromMachineStatus(status) {
@@ -98,7 +98,7 @@ function normalizeMachines(data) {
     .filter((x) => x.machine_no);
 }
 function normalizeEmployees(data) { return (Array.isArray(data.employees) ? data.employees : []).map((x) => ({ emp_code: clean(x.empId || x.emp_code || x.code), full_name: clean(x.name || x.full_name || x.emp_name), department: clean(x.department), designation: clean(x.designation), active: bool(x.active, true) })).filter((x) => x.emp_code && x.full_name); }
-function normalizeShifts(data) { return (Array.isArray(data.shifts) ? data.shifts : []).map((x) => ({ shift_code: clean(x.id || x.shift_code || x.code || x.name), shift_name: clean(x.name || x.shift_name || x.id), start_time: clean(x.start || x.start_time), end_time: clean(x.end || x.end_time), break_minutes: num(x.breakMinutes ?? x.break_minutes, 0), flexible: bool(x.flexible, false), active: bool(x.flexible, false) ? bool(x.active, true) : bool(x.active, true) })).filter((x) => x.shift_code && x.shift_name); }
+function normalizeShifts(data) { return (Array.isArray(data.shifts) ? data.shifts : []).map((x) => ({ shift_code: clean(x.id || x.shift_code || x.code || x.name), shift_name: clean(x.name || x.shift_name || x.id), start_time: clean(x.start || x.start_time), end_time: clean(x.end || x.end_time), break_minutes: num(x.breakMinutes ?? x.break_minutes, 0), flexible: bool(x.flexible, false), active: bool(x.active, true) })).filter((x) => x.shift_code && x.shift_name); }
 function normalizeDepartments(data) {
   const fromMainWorks = normalizeNameList(data.mainWorks);
   const fromEmployees = normalizeEmployees(data).map((e) => e.department).filter(Boolean);
