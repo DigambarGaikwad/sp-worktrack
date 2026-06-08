@@ -72,9 +72,33 @@ function normalizeNameList(list) {
   }).filter(Boolean);
 }
 function normalizeMachineTypes(data) { return (Array.isArray(data.machineTypes) ? data.machineTypes : []).map((x) => ({ type_code: clean(x.id || x.type_code || x.code || x.name), type_name: clean(x.name || x.type_name || x.id), active: bool(x.active, true) })).filter((x) => x.type_code && x.type_name); }
-function normalizeMachines(data) { return (Array.isArray(data.machines) ? data.machines : []).map((x) => ({ machine_no: clean(x.name || x.machine_no || x.machineNo), machine_type_code: clean(x.type || x.machine_type_code || x.type_code), status: clean(x.status || (bool(x.active, true) ? "Active" : "Completed")), active: bool(x.active, clean(x.status).toLowerCase() !== "completed") })).filter((x) => x.machine_no); }
+function normalizeMachineStatus(x = {}) {
+  const rawStatus = clean(x.status || x.machineStatus || x.state);
+  const statusLower = rawStatus.toLowerCase();
+  if (statusLower === "completed" || statusLower === "complete") return "Completed";
+  if (statusLower === "inactive" || statusLower === "deleted" || statusLower === "delete" || statusLower === "disabled") return "Inactive";
+  if (x.active === false) return "Inactive";
+  return "Active";
+}
+function activeFromMachineStatus(status) {
+  const s = clean(status).toLowerCase();
+  return s === "active";
+}
+function normalizeMachines(data) {
+  return (Array.isArray(data.machines) ? data.machines : [])
+    .map((x) => {
+      const status = normalizeMachineStatus(x);
+      return {
+        machine_no: clean(x.name || x.machine_no || x.machineNo),
+        machine_type_code: clean(x.type || x.machine_type_code || x.type_code),
+        status,
+        active: activeFromMachineStatus(status)
+      };
+    })
+    .filter((x) => x.machine_no);
+}
 function normalizeEmployees(data) { return (Array.isArray(data.employees) ? data.employees : []).map((x) => ({ emp_code: clean(x.empId || x.emp_code || x.code), full_name: clean(x.name || x.full_name || x.emp_name), department: clean(x.department), designation: clean(x.designation), active: bool(x.active, true) })).filter((x) => x.emp_code && x.full_name); }
-function normalizeShifts(data) { return (Array.isArray(data.shifts) ? data.shifts : []).map((x) => ({ shift_code: clean(x.id || x.shift_code || x.code || x.name), shift_name: clean(x.name || x.shift_name || x.id), start_time: clean(x.start || x.start_time), end_time: clean(x.end || x.end_time), break_minutes: num(x.breakMinutes ?? x.break_minutes, 0), flexible: bool(x.flexible, false), active: bool(x.active, true) })).filter((x) => x.shift_code && x.shift_name); }
+function normalizeShifts(data) { return (Array.isArray(data.shifts) ? data.shifts : []).map((x) => ({ shift_code: clean(x.id || x.shift_code || x.code || x.name), shift_name: clean(x.name || x.shift_name || x.id), start_time: clean(x.start || x.start_time), end_time: clean(x.end || x.end_time), break_minutes: num(x.breakMinutes ?? x.break_minutes, 0), flexible: bool(x.flexible, false), active: bool(x.flexible, false) ? bool(x.active, true) : bool(x.active, true) })).filter((x) => x.shift_code && x.shift_name); }
 function normalizeDepartments(data) {
   const fromMainWorks = normalizeNameList(data.mainWorks);
   const fromEmployees = normalizeEmployees(data).map((e) => e.department).filter(Boolean);
@@ -173,54 +197,10 @@ async function saveAdminMasterData(rawData = {}, options = {}) {
   results.subworks = await syncCollection({ collection: "subworks", records: subworks, keyFn: subworkKey, deactivateMissing });
   results.bookingPoints = await syncCollection({ collection: "booking_points", records: bookingPoints, keyFn: bookingPointKey, deactivateMissing });
   results.qualityPoints = await syncCollection({ collection: "quality_points", records: qualityPoints, keyFn: (x) => `${clean(x.machine_type_code)}|${clean(x.department_code)}|${clean(x.subwork_code)}|${clean(x.point_code)}`, deactivateMissing });
-  results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_code || x.reason_name), deactivateMissing });
-  results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_code || x.area_name), deactivateMissing });
-  return {
-    ok: true,
-    mode: deactivateMissing ? "sync-deactivate-missing" : "upsert-only",
-    standardTimeProtected: protectedWork.protected,
-    message: protectedWork.protected
-      ? "Admin master data saved. Work/Sub Work updated; standard times preserved for confirmation by authorized user."
-      : (deactivateMissing ? "Admin master data saved. Deleted records hidden from Admin." : "Admin master data saved to PocketBase."),
-    results
-  };
+  results.lossReasons = await syncCollection({ collection: "loss_reasons", records: lossReasons, keyFn: (x) => clean(x.reason_code), deactivateMissing });
+  results.rootAreas = await syncCollection({ collection: "root_areas", records: rootAreas, keyFn: (x) => clean(x.area_code), deactivateMissing });
+  results.protectedStandardTime = protectedWork.protected;
+  return { ok: true, mode: "pocketbase", syncMode: deactivateMissing ? "deactivateMissing" : "upsertOnly", results };
 }
 
-function missingSkillCollectionError() { const err = new Error("PocketBase collection skill_matrix is missing. Create it before saving skill matrix."); err.status = 400; err.details = { reasonCode: "SKILL_MATRIX_COLLECTION_MISSING", collection: "skill_matrix" }; return err; }
-async function listSkillMatrix(params = {}) {
-  const emp = clean(params.emp_code || params.empCode);
-  const filter = emp ? `emp_code="${pbEscape(emp)}"` : "";
-  try { return await listAll("skill_matrix", { perPage: 1000, sort: "emp_name,department_name,subwork_name", filter }); }
-  catch (err) { if (isMissingCollectionError(err)) return []; throw err; }
-}
-async function saveSkillMatrix(body = {}) {
-  const records = Array.isArray(body.records) ? body.records : [body];
-  const saved = [];
-  try {
-    for (const raw of records) {
-      const record = {
-        emp_code: clean(raw.emp_code || raw.empCode), emp_name: clean(raw.emp_name || raw.empName),
-        department_code: clean(raw.department_code || raw.departmentCode || slug(raw.department_name || raw.departmentName)), department_name: clean(raw.department_name || raw.departmentName),
-        subwork_code: clean(raw.subwork_code || raw.subworkCode || slug(raw.subwork_name || raw.subworkName)), subwork_name: clean(raw.subwork_name || raw.subworkName),
-        capability_pct: num(raw.capability_pct ?? raw.capabilityPct, 100), preferred: bool(raw.preferred, true), active: bool(raw.active, true), remark: clean(raw.remark)
-      };
-      if (!record.emp_code && !record.emp_name) throw new Error("Employee is required for skill matrix.");
-      if (!record.department_name) throw new Error("Department is required for skill matrix.");
-      if (!record.subwork_name) throw new Error("Sub work is required for skill matrix.");
-      const existing = await listAll("skill_matrix", { perPage: 1, filter: [`emp_code="${pbEscape(record.emp_code)}"`, `department_code="${pbEscape(record.department_code)}"`, `subwork_code="${pbEscape(record.subwork_code)}"`].join(" && ") });
-      if (existing[0]?.id) saved.push(await updateRecord("skill_matrix", existing[0].id, record)); else saved.push(await createRecord("skill_matrix", record));
-    }
-    return saved;
-  } catch (err) { if (isMissingCollectionError(err)) throw missingSkillCollectionError(); throw err; }
-}
-async function deleteSkillMatrix(id) { try { return await deleteRecord("skill_matrix", clean(id)); } catch (err) { if (isMissingCollectionError(err)) throw missingSkillCollectionError(); throw err; } }
-
-module.exports = {
-  saveAdminMasterData,
-  listPlannedAbsences: planned.listPlannedAbsences,
-  savePlannedAbsence: planned.savePlannedAbsence,
-  deletePlannedAbsence: planned.deletePlannedAbsence,
-  listSkillMatrix,
-  saveSkillMatrix,
-  deleteSkillMatrix
-};
+module.exports = { saveAdminMasterData };
