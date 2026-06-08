@@ -10,23 +10,26 @@ function clean(value) {
 function normalizeMachineStatus(machine = {}) {
   const raw = clean(machine.status || machine.machineStatus || machine.machine_status).toLowerCase();
 
-  if (raw === "completed" || raw === "complete") {
-    return { ...machine, status: "Completed", active: true };
+  // Delete/inactive states are explicit historical/inactive states.
+  if (raw === "deleted" || raw === "delete") {
+    return { ...machine, status: "Deleted", active: false };
   }
 
   if (raw === "inactive" || raw === "disabled") {
     return { ...machine, status: "Inactive", active: false };
   }
 
-  if (raw === "deleted" || raw === "delete") {
-    return { ...machine, status: "Deleted", active: false };
+  // Admin machine dropdown only sends active=false for Completed.
+  // This must override any stale status="Active" value from the loaded record.
+  if (machine.active === false) {
+    return { ...machine, status: "Completed", active: false };
   }
 
-  if (raw === "active") {
-    return { ...machine, status: "Active", active: true };
+  if (raw === "completed" || raw === "complete") {
+    return { ...machine, status: "Completed", active: false };
   }
 
-  return machine;
+  return { ...machine, status: "Active", active: true };
 }
 
 function normalizePayload(rawData = {}) {
