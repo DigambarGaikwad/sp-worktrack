@@ -24,8 +24,6 @@
     const wired = patchSaveButton();
     if (!wired && initAttempts < MAX_INIT_ATTEMPTS) setTimeout(scheduleInit, INIT_RETRY_MS);
 
-    // app.js can overwrite btn.onclick after its async loadData() completes.
-    // These late passes restore label/title/onclick; capture guard below still protects click.
     if (wired && !document.__spwtDbSaveLatePatchScheduled) {
       document.__spwtDbSaveLatePatchScheduled = true;
       [500, 1200, 2500, 5000].forEach((ms) => setTimeout(patchSaveButton, ms));
@@ -37,10 +35,7 @@
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        signal: controller.signal
-      });
+      const res = await fetch(`${API_BASE_URL}${path}`, { ...options, signal: controller.signal });
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.ok) throw new Error(body?.message || `Request failed ${res.status}`);
       return body;
@@ -77,7 +72,6 @@
 
   function getGlobalValue(name, fallback) {
     try {
-      // Required until app.js exposes admin state on window.
       // eslint-disable-next-line no-eval
       const value = eval(name);
       return value == null ? fallback : value;
@@ -89,7 +83,6 @@
   function assignGlobalValue(name, value) {
     try {
       window.__spwtAdminDbPatchValue = value;
-      // Required until app.js exposes admin state on window.
       // eslint-disable-next-line no-new-func
       Function(`${name} = window.__spwtAdminDbPatchValue`)();
     } catch (err) {
@@ -101,16 +94,11 @@
 
   function getAdminHeaders() {
     const tokenHeaders = window.SPWT_ADMIN_TOKEN_HEADER ? window.SPWT_ADMIN_TOKEN_HEADER() : {};
-    return {
-      "Content-Type": "application/json",
-      ...tokenHeaders
-    };
+    return { "Content-Type": "application/json", ...tokenHeaders };
   }
 
   function readInputList(selector) {
-    return Array.from(document.querySelectorAll(selector))
-      .map((input) => String(input.value || "").trim())
-      .filter(Boolean);
+    return Array.from(document.querySelectorAll(selector)).map((input) => String(input.value || "").trim()).filter(Boolean);
   }
 
   function safeClone(value, fallback) {
@@ -181,13 +169,10 @@
         throw new Error("Login session required. Please logout and login again.");
       }
 
-      const body = await requestJson("/api/admin/save-master-data", {
+      const body = await requestJson("/api/admin/master-data", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          syncMode: "deactivateMissing",
-          data: buildPayload()
-        })
+        body: JSON.stringify({ syncMode: "deactivateMissing", data: buildPayload() })
       });
 
       const msg = body.data?.standardTimeProtected
