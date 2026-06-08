@@ -17,9 +17,14 @@ function toNumber(value, defaultValue = 0) {
 
 function statusOfMachine(m) {
   const raw = clean(m.status).toLowerCase();
-  if (raw === "completed" || raw === "complete") return "Completed";
+
   if (raw === "inactive" || raw === "deleted" || raw === "delete" || raw === "disabled") return "Inactive";
-  if (m.active === false) return "Inactive";
+  if (raw === "completed" || raw === "complete") return "Completed";
+
+  // Admin screen has only Active/Completed dropdown. Completed is stored as active=false.
+  // Deleted machines are already stored with status=Deleted, so active=false here means Completed.
+  if (m.active === false) return "Completed";
+
   return "Active";
 }
 
@@ -343,7 +348,7 @@ async function getMachineSummary(params = {}) {
     meta: {
       source: "pocketbase",
       service: "dashboardServiceV2",
-      statusRule: "completed_status_wins;inactive_deleted_or_active_false_maps_to_inactive",
+      statusRule: "inactive_deleted_disabled_wins;completed_status_or_active_false_maps_to_completed",
       machineCategoryRule: "filters show active categories only; historical completed/inactive machines may retain inactive categories",
       generatedAt: new Date().toISOString(),
       counts: {
