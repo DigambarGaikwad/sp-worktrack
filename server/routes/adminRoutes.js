@@ -11,7 +11,7 @@ const {
   listSkillMatrix,
   saveSkillMatrix,
   deleteSkillMatrix
-} = require("../services/adminWriteServiceV2");
+} = require("../services/adminWriteServiceV3");
 const { saveEmployeeAvailableMinutes } = require("../services/employeeCapacityService");
 const {
   getAdminPin,
@@ -82,118 +82,96 @@ router.post("/controls", async (req, res) => {
   }
 });
 
-router.post("/employee-available-minutes", async (req, res) => {
+router.post("/master-data", async (req, res) => {
   try {
-    requireAdminSession(req);
-    const data = await saveEmployeeAvailableMinutes(req.body || {});
+    const user = requireAdminSession(req);
+    const canEditMaster = userCan(user, "masterData");
+    const canEditStandardTime = userCan(user, "standardTime");
+    const data = await saveAdminMasterData(req.body || {}, { canEditMaster, canEditStandardTime });
     res.json({ ok: true, data });
   } catch (err) {
-    console.error("POST /api/admin/employee-available-minutes failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save employee available minutes", details: err.details || null });
+    console.error("POST /api/admin/master-data failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save admin master data", details: err.details || null });
   }
 });
 
-router.get("/pin/status", async (req, res) => {
+router.get("/pin", async (req, res) => {
   try {
-    await getAdminPin();
-    res.json({ ok: true, pinConfigured: true });
+    const data = await getAdminPin();
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error("GET /api/admin/pin/status failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to read admin PIN status", details: err.details || null });
+    console.error("GET /api/admin/pin failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load admin PIN", details: err.details || null });
   }
 });
 
 router.post("/pin/verify", async (req, res) => {
   try {
-    const valid = await verifyAdminPin(req.body?.pin || "");
-    res.json({ ok: true, valid });
+    const data = await verifyAdminPin(req.body?.pin);
+    res.json({ ok: true, data });
   } catch (err) {
     console.error("POST /api/admin/pin/verify failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to verify admin PIN", details: err.details || null });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "PIN verify failed", details: err.details || null });
   }
 });
 
-router.post("/pin/update", async (req, res) => {
+router.post("/pin", async (req, res) => {
   try {
-    const result = await updateAdminPin(req.body?.newPin || req.body?.pin || "");
-    res.json({ ok: true, data: result });
+    requireAdminPermission(req, "changePin");
+    const data = await updateAdminPin(req.body || {});
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error("POST /api/admin/pin/update failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to update admin PIN", details: err.details || null });
+    console.error("POST /api/admin/pin failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "PIN update failed", details: err.details || null });
   }
 });
 
-router.post("/access/login", async (req, res) => {
-  try {
-    const result = await loginAdminAccess(req.body || {});
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    console.error("POST /api/admin/access/login failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to login", details: err.details || null });
-  }
-});
-
-router.get("/access/users", async (req, res) => {
+router.get("/access-users", async (req, res) => {
   try {
     requireAdminPermission(req, "userAccess");
     const data = await listAccessUsers();
     res.json({ ok: true, data });
   } catch (err) {
-    console.error("GET /api/admin/access/users failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load access users", details: err.details || null });
+    console.error("GET /api/admin/access-users failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to list access users", details: err.details || null });
   }
 });
 
-router.post("/access/users", async (req, res) => {
+router.post("/access-users", async (req, res) => {
   try {
     requireAdminPermission(req, "userAccess");
-    const users = Array.isArray(req.body?.users) ? req.body.users : [];
-    const data = await upsertAccessUsers(users);
+    const data = await upsertAccessUsers(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
-    console.error("POST /api/admin/access/users failed:", err);
+    console.error("POST /api/admin/access-users failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save access users", details: err.details || null });
   }
 });
 
-router.post("/save-master-data", async (req, res) => {
+router.post("/access/login", async (req, res) => {
   try {
-    const user = requireAdminSession(req);
-    const hasWorkCatalogPermission = userCan(user, "workCatalog");
-    const hasStandardTimePermission = userCan(user, "standardTime");
-
-    if (!hasWorkCatalogPermission) {
-      const err = new Error("Permission required: workCatalog");
-      err.status = 403;
-      throw err;
-    }
-
-    const result = await saveAdminMasterData(req.body || {}, {
-      user,
-      canEditWorkCatalog: hasWorkCatalogPermission,
-      canEditStandardTime: hasStandardTimePermission
-    });
-    res.json({ ok: true, data: result });
+    const data = await loginAdminAccess(req.body || {});
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error("POST /api/admin/save-master-data failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save admin master data", details: err.details || null });
+    console.error("POST /api/admin/access/login failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Access login failed", details: err.details || null });
   }
 });
 
 router.get("/planned-absences", async (req, res) => {
   try {
-    const items = await listPlannedAbsences(req.query || {});
-    res.json({ ok: true, items });
+    const data = await listPlannedAbsences(req.query || {});
+    res.json({ ok: true, data });
   } catch (err) {
     console.error("GET /api/admin/planned-absences failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load planned absences", details: err.details || null });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to list planned absences", details: err.details || null });
   }
 });
 
 router.post("/planned-absences", async (req, res) => {
   try {
-    const item = await savePlannedAbsence(req.body || {});
-    res.json({ ok: true, item });
+    const data = await savePlannedAbsence(req.body || {});
+    res.json({ ok: true, data });
   } catch (err) {
     console.error("POST /api/admin/planned-absences failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save planned absence", details: err.details || null });
@@ -202,28 +180,28 @@ router.post("/planned-absences", async (req, res) => {
 
 router.delete("/planned-absences/:id", async (req, res) => {
   try {
-    await deletePlannedAbsence(req.params.id);
-    res.json({ ok: true });
+    const data = await deletePlannedAbsence(req.params.id);
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error("DELETE /api/admin/planned-absences failed:", err);
+    console.error("DELETE /api/admin/planned-absences/:id failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to delete planned absence", details: err.details || null });
   }
 });
 
 router.get("/skill-matrix", async (req, res) => {
   try {
-    const items = await listSkillMatrix(req.query || {});
-    res.json({ ok: true, items });
+    const data = await listSkillMatrix(req.query || {});
+    res.json({ ok: true, data });
   } catch (err) {
     console.error("GET /api/admin/skill-matrix failed:", err);
-    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load skill matrix", details: err.details || null });
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to list skill matrix", details: err.details || null });
   }
 });
 
 router.post("/skill-matrix", async (req, res) => {
   try {
-    const items = await saveSkillMatrix(req.body || {});
-    res.json({ ok: true, items });
+    const data = await saveSkillMatrix(req.body || {});
+    res.json({ ok: true, data });
   } catch (err) {
     console.error("POST /api/admin/skill-matrix failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save skill matrix", details: err.details || null });
@@ -232,10 +210,10 @@ router.post("/skill-matrix", async (req, res) => {
 
 router.delete("/skill-matrix/:id", async (req, res) => {
   try {
-    await deleteSkillMatrix(req.params.id);
-    res.json({ ok: true });
+    const data = await deleteSkillMatrix(req.params.id);
+    res.json({ ok: true, data });
   } catch (err) {
-    console.error("DELETE /api/admin/skill-matrix failed:", err);
+    console.error("DELETE /api/admin/skill-matrix/:id failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to delete skill matrix", details: err.details || null });
   }
 });
