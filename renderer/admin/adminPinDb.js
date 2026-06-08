@@ -134,7 +134,7 @@
 
     try {
       setPinBusy(true);
-      await postJson("/api/admin/pin/update", { newPin: p1 });
+      await postJson("/api/admin/pin", { newPin: p1 });
 
       syncLocalAdminPin(p1);
 
