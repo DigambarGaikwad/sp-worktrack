@@ -14,8 +14,8 @@ function normalizeBool(value, defaultValue = true) {
 
   const text = String(value ?? "").trim().toLowerCase();
 
-  if (text === "false" || text === "0" || text === "no" || text === "inactive") return false;
-  if (text === "true" || text === "1" || text === "yes" || text === "active") return true;
+  if (["false", "0", "no", "inactive", "completed"].includes(text)) return false;
+  if (["true", "1", "yes", "active"].includes(text)) return true;
 
   return defaultValue;
 }
@@ -25,8 +25,16 @@ function num(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function machineStatusOf(record) {
+  const raw = clean(record.status).toLowerCase();
+  if (["deleted", "delete", "inactive", "disabled"].includes(raw)) return "Deleted";
+  if (["completed", "complete"].includes(raw)) return "Completed";
+  if (record.active === false) return "Completed";
+  return "Active";
+}
+
 function isDeletedMachine(record) {
-  return clean(record.status).toLowerCase() === "deleted";
+  return machineStatusOf(record) === "Deleted";
 }
 
 function isDeletedEmployee(record) {
@@ -81,13 +89,16 @@ function buildMachineTypes(records) {
 function buildMachines(records) {
   return sortByText(records, "machine_no")
     .filter((x) => !isDeletedMachine(x))
-    .map((x) => ({
-      id: x.id,
-      name: clean(x.machine_no),
-      type: clean(x.machine_type_code),
-      active: normalizeBool(x.active, true),
-      status: clean(x.status || (normalizeBool(x.active, true) ? "Active" : "Inactive"))
-    }))
+    .map((x) => {
+      const status = machineStatusOf(x);
+      return {
+        id: x.id,
+        name: clean(x.machine_no),
+        type: clean(x.machine_type_code),
+        active: status === "Active",
+        status
+      };
+    })
     .filter((x) => x.name);
 }
 
