@@ -10,25 +10,10 @@ const COLLECTION = "admin_settings";
 const ACCESS_KEY = "admin_access_users_json";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
-// Permission split:
-// - workCatalog = machine category / department / sub work / booking point / quality point structure
-// - standardTime = base standard time and booking point standard time confirmation
-// - adminControls = configurable rules like overrun reason limit
-// NOTE: workStandards is kept for backward compatibility with older saved users.
 const ALL_PERMISSIONS = [
-  "machines",
-  "employees",
-  "shifts",
-  "lossReasons",
-  "rootAreas",
-  "workCatalog",
-  "standardTime",
-  "adminControls",
-  "workStandards",
-  "plannedAbsence",
-  "skillMatrix",
-  "pin",
-  "userAccess"
+  "machines", "employees", "shifts", "lossReasons", "rootAreas",
+  "workCatalog", "standardTime", "adminControls", "workStandards",
+  "plannedAbsence", "skillMatrix", "pin", "userAccess"
 ];
 
 const ROLE_TEMPLATES = {
@@ -39,39 +24,18 @@ const ROLE_TEMPLATES = {
 
 const sessions = new Map();
 
-function clean(value) {
-  return String(value ?? "").trim();
-}
-
-function normalizeUsername(value) {
-  return clean(value).toLowerCase();
-}
-
-function hashPin(pin, salt) {
-  return crypto.createHash("sha256").update(`${salt}:${clean(pin)}`).digest("hex");
-}
-
-function safeJsonParse(value, fallback) {
-  try {
-    return JSON.parse(value || "");
-  } catch (err) {
-    return fallback;
-  }
-}
-
-function isMissingCollectionError(err) {
-  return err?.status === 404 || /missing collection context/i.test(String(err?.message || ""));
-}
+function clean(value) { return String(value ?? "").trim(); }
+function normalizeUsername(value) { return clean(value).toLowerCase(); }
+function isSuperAdminName(username) { return ["", "admin", "superadmin", "super_admin"].includes(normalizeUsername(username)); }
+function hashPin(pin, salt) { return crypto.createHash("sha256").update(`${salt}:${clean(pin)}`).digest("hex"); }
+function safeJsonParse(value, fallback) { try { return JSON.parse(value || ""); } catch { return fallback; } }
+function isMissingCollectionError(err) { return err?.status === 404 || /missing collection context/i.test(String(err?.message || "")); }
 
 async function findSettingRecord(key) {
   try {
     const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
       method: "GET",
-      query: {
-        page: 1,
-        perPage: 1,
-        filter: `setting_key="${key}"`
-      }
+      query: { page: 1, perPage: 1, filter: `setting_key="${key}"` }
     });
     return Array.isArray(result.items) ? result.items[0] || null : null;
   } catch (err) {
@@ -88,13 +52,7 @@ async function getStoredUsers() {
 
 function expandBackwardCompatiblePermissions(list) {
   const set = new Set((Array.isArray(list) ? list : []).map(clean).filter(Boolean));
-
-  // Old permission should automatically give both new permissions until old users are edited.
-  if (set.has("workStandards")) {
-    set.add("workCatalog");
-    set.add("standardTime");
-  }
-
+  if (set.has("workStandards")) { set.add("workCatalog"); set.add("standardTime"); }
   return Array.from(set);
 }
 
@@ -117,14 +75,8 @@ function userCan(user, permission) {
   if (!user) return false;
   if (user.role === "super_admin") return true;
   if (Array.isArray(user.permissions) && user.permissions.includes("all")) return true;
-
   const permissions = normalizePermissions(user.permissions || []);
-
-  // Backward compatibility: old workStandards permission can still satisfy both new checks.
-  if ((permission === "workCatalog" || permission === "standardTime") && permissions.includes("workStandards")) {
-    return true;
-  }
-
+  if ((permission === "workCatalog" || permission === "standardTime") && permissions.includes("workStandards")) return true;
   return permissions.includes(permission);
 }
 
@@ -139,24 +91,15 @@ async function saveStoredUsers(users) {
       permissions: normalizePermissions(u.permissions || ROLE_TEMPLATES[u.role] || []),
       active: u.active !== false
     }))
-    .filter((u) => u.username && u.pinHash);
+    .filter((u) => u.username && u.pinHash && !isSuperAdminName(u.username));
 
   const rec = await findSettingRecord(ACCESS_KEY);
-  const body = {
-    setting_key: ACCESS_KEY,
-    setting_value: JSON.stringify(sanitized)
-  };
+  const body = { setting_key: ACCESS_KEY, setting_value: JSON.stringify(sanitized) };
 
   if (rec?.id) {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, {
-      method: "PATCH",
-      body
-    });
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
   } else {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
-      method: "POST",
-      body
-    });
+    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
   }
 
   return sanitized.map(publicUser);
@@ -164,23 +107,29 @@ async function saveStoredUsers(users) {
 
 async function listAccessUsers() {
   const users = await getStoredUsers();
-  return {
-    permissions: ALL_PERMISSIONS,
-    roleTemplates: ROLE_TEMPLATES,
-    users: users.map(publicUser)
-  };
+  return { permissions: ALL_PERMISSIONS, roleTemplates: ROLE_TEMPLATES, users: users.map(publicUser) };
 }
 
 async function upsertAccessUsers(incoming = []) {
   const existing = await getStoredUsers();
   const existingByUsername = new Map(existing.map((u) => [normalizeUsername(u.username), u]));
+  const superPin = clean(await getAdminPin());
 
   const users = (Array.isArray(incoming) ? incoming : []).map((raw) => {
     const username = normalizeUsername(raw.username);
+    if (!username || isSuperAdminName(username)) return null;
+
     const old = existingByUsername.get(username) || {};
     const newPin = clean(raw.pin || raw.newPin);
-    const salt = clean(old.salt) || crypto.randomBytes(12).toString("hex");
 
+    if (newPin && superPin && newPin === superPin) {
+      const err = new Error(`User '${username}' cannot use the Super Admin PIN. Set a different PIN.`);
+      err.status = 400;
+      err.details = { reasonCode: "USER_PIN_MATCHES_SUPER_ADMIN", username };
+      throw err;
+    }
+
+    const salt = clean(old.salt) || crypto.randomBytes(12).toString("hex");
     return {
       username,
       displayName: clean(raw.displayName || raw.display_name || old.displayName || username),
@@ -190,7 +139,7 @@ async function upsertAccessUsers(incoming = []) {
       permissions: normalizePermissions(raw.permissions || old.permissions || ROLE_TEMPLATES[raw.role] || []),
       active: raw.active !== false
     };
-  }).filter((u) => u.username && u.pinHash);
+  }).filter((u) => u && u.username && u.pinHash);
 
   return saveStoredUsers(users);
 }
@@ -204,24 +153,14 @@ function createSession(user) {
     permissions: normalizePermissions(user.permissions),
     active: user.active !== false
   };
-
-  sessions.set(token, {
-    user: sessionUser,
-    expiresAt: Date.now() + SESSION_TTL_MS
-  });
-
+  sessions.set(token, { user: sessionUser, expiresAt: Date.now() + SESSION_TTL_MS });
   return { token, user: sessionUser };
 }
 
 async function isSuperAdminPinValid(enteredPin) {
   const pin = clean(enteredPin);
   if (!pin) return false;
-
-  // Primary DB verification path.
   if (await verifyAdminPin(pin)) return true;
-
-  // Backward-compatible direct compare against existing admin PIN value.
-  // This protects old installations where /pin/verify and RBAC login load timing differs.
   const savedPin = clean(await getAdminPin());
   return pin === savedPin;
 }
@@ -236,20 +175,17 @@ async function loginAdminAccess({ username = "", pin = "" } = {}) {
     throw err;
   }
 
-  // Existing admin PIN remains the super-admin login.
-  if (!uname || uname === "admin" || uname === "superadmin" || uname === "super_admin") {
+  if (isSuperAdminName(uname)) {
     const valid = await isSuperAdminPinValid(enteredPin);
     if (!valid) return { valid: false, reason: "SUPER_ADMIN_PIN_NOT_MATCHED" };
     return {
       valid: true,
-      ...createSession({
-        username: "admin",
-        displayName: "Super Admin",
-        role: "super_admin",
-        permissions: ["all"],
-        active: true
-      })
+      ...createSession({ username: "admin", displayName: "Super Admin", role: "super_admin", permissions: ["all"], active: true })
     };
+  }
+
+  if (await isSuperAdminPinValid(enteredPin)) {
+    return { valid: false, reason: "USER_CANNOT_USE_SUPER_ADMIN_PIN" };
   }
 
   const users = await getStoredUsers();
@@ -259,10 +195,7 @@ async function loginAdminAccess({ username = "", pin = "" } = {}) {
   const valid = hashPin(enteredPin, user.salt) === user.pinHash;
   if (!valid) return { valid: false, reason: "USER_PIN_NOT_MATCHED" };
 
-  return {
-    valid: true,
-    ...createSession(publicUser(user))
-  };
+  return { valid: true, ...createSession(publicUser(user)) };
 }
 
 function getSession(token) {
@@ -270,32 +203,19 @@ function getSession(token) {
   if (!rawToken) return null;
   const session = sessions.get(rawToken);
   if (!session) return null;
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(rawToken);
-    return null;
-  }
+  if (Date.now() > session.expiresAt) { sessions.delete(rawToken); return null; }
   session.expiresAt = Date.now() + SESSION_TTL_MS;
   return session;
 }
 
 function requirePermission(token, permission) {
   const session = getSession(token);
-  if (!session?.user) {
-    const err = new Error("Login session required.");
-    err.status = 401;
-    throw err;
-  }
-  if (!userCan(session.user, permission)) {
-    const err = new Error(`Permission required: ${permission}`);
-    err.status = 403;
-    throw err;
-  }
+  if (!session?.user) { const err = new Error("Login session required."); err.status = 401; throw err; }
+  if (!userCan(session.user, permission)) { const err = new Error(`Permission required: ${permission}`); err.status = 403; throw err; }
   return session.user;
 }
 
-function getSessionUser(token) {
-  return getSession(token)?.user || null;
-}
+function getSessionUser(token) { return getSession(token)?.user || null; }
 
 module.exports = {
   ALL_PERMISSIONS,
