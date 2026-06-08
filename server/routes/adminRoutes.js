@@ -117,8 +117,8 @@ router.post("/pin/verify", async (req, res) => {
 
 router.post("/pin", async (req, res) => {
   try {
-    requireAdminPermission(req, "changePin");
-    const data = await updateAdminPin(req.body || {});
+    requireAdminPermission(req, "pin");
+    const data = await updateAdminPin(req.body?.newPin || req.body?.pin || req.body || "");
     res.json({ ok: true, data });
   } catch (err) {
     console.error("POST /api/admin/pin failed:", err);
