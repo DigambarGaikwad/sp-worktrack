@@ -30,6 +30,12 @@ function isSuperAdminName(username) { return ["", "admin", "superadmin", "super_
 function hashPin(pin, salt) { return crypto.createHash("sha256").update(`${salt}:${clean(pin)}`).digest("hex"); }
 function safeJsonParse(value, fallback) { try { return JSON.parse(value || ""); } catch { return fallback; } }
 function isMissingCollectionError(err) { return err?.status === 404 || /missing collection context/i.test(String(err?.message || "")); }
+function extractUsersPayload(incoming) {
+  if (Array.isArray(incoming)) return incoming;
+  if (Array.isArray(incoming?.users)) return incoming.users;
+  if (Array.isArray(incoming?.data?.users)) return incoming.data.users;
+  return null;
+}
 
 async function findSettingRecord(key) {
   try {
@@ -96,11 +102,8 @@ async function saveStoredUsers(users) {
   const rec = await findSettingRecord(ACCESS_KEY);
   const body = { setting_key: ACCESS_KEY, setting_value: JSON.stringify(sanitized) };
 
-  if (rec?.id) {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
-  } else {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
-  }
+  if (rec?.id) await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
+  else await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
 
   return sanitized.map(publicUser);
 }
@@ -111,16 +114,31 @@ async function listAccessUsers() {
 }
 
 async function upsertAccessUsers(incoming = []) {
+  const payloadUsers = extractUsersPayload(incoming);
+  if (!payloadUsers) {
+    const err = new Error("Invalid Users & Access payload. Expected users array.");
+    err.status = 400;
+    err.details = { reasonCode: "INVALID_USERS_PAYLOAD" };
+    throw err;
+  }
+
   const existing = await getStoredUsers();
   const existingByUsername = new Map(existing.map((u) => [normalizeUsername(u.username), u]));
   const superPin = clean(await getAdminPin());
 
-  const users = (Array.isArray(incoming) ? incoming : []).map((raw) => {
+  const users = payloadUsers.map((raw) => {
     const username = normalizeUsername(raw.username);
     if (!username || isSuperAdminName(username)) return null;
 
     const old = existingByUsername.get(username) || {};
     const newPin = clean(raw.pin || raw.newPin);
+
+    if (!newPin && !clean(old.pinHash || old.pin_hash)) {
+      const err = new Error(`PIN required for new user '${username}'.`);
+      err.status = 400;
+      err.details = { reasonCode: "USER_PIN_REQUIRED", username };
+      throw err;
+    }
 
     if (newPin && superPin && newPin === superPin) {
       const err = new Error(`User '${username}' cannot use the Super Admin PIN. Set a different PIN.`);
@@ -129,7 +147,7 @@ async function upsertAccessUsers(incoming = []) {
       throw err;
     }
 
-    const salt = clean(old.salt) || crypto.randomBytes(12).toString("hex");
+    const salt = newPin ? crypto.randomBytes(12).toString("hex") : clean(old.salt);
     return {
       username,
       displayName: clean(raw.displayName || raw.display_name || old.displayName || username),
@@ -178,15 +196,10 @@ async function loginAdminAccess({ username = "", pin = "" } = {}) {
   if (isSuperAdminName(uname)) {
     const valid = await isSuperAdminPinValid(enteredPin);
     if (!valid) return { valid: false, reason: "SUPER_ADMIN_PIN_NOT_MATCHED" };
-    return {
-      valid: true,
-      ...createSession({ username: "admin", displayName: "Super Admin", role: "super_admin", permissions: ["all"], active: true })
-    };
+    return { valid: true, ...createSession({ username: "admin", displayName: "Super Admin", role: "super_admin", permissions: ["all"], active: true }) };
   }
 
-  if (await isSuperAdminPinValid(enteredPin)) {
-    return { valid: false, reason: "USER_CANNOT_USE_SUPER_ADMIN_PIN" };
-  }
+  if (await isSuperAdminPinValid(enteredPin)) return { valid: false, reason: "USER_CANNOT_USE_SUPER_ADMIN_PIN" };
 
   const users = await getStoredUsers();
   const user = users.find((u) => normalizeUsername(u.username) === uname && u.active !== false);
@@ -217,13 +230,4 @@ function requirePermission(token, permission) {
 
 function getSessionUser(token) { return getSession(token)?.user || null; }
 
-module.exports = {
-  ALL_PERMISSIONS,
-  ROLE_TEMPLATES,
-  listAccessUsers,
-  upsertAccessUsers,
-  loginAdminAccess,
-  requirePermission,
-  getSessionUser,
-  userCan
-};
+module.exports = { ALL_PERMISSIONS, ROLE_TEMPLATES, listAccessUsers, upsertAccessUsers, loginAdminAccess, requirePermission, getSessionUser, userCan };
