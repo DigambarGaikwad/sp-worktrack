@@ -13,13 +13,13 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const ALL_PERMISSIONS = [
   "machines", "employees", "shifts", "lossReasons", "rootAreas",
   "workCatalog", "standardTime", "adminControls", "workStandards",
-  "plannedAbsence", "skillMatrix", "pin", "userAccess"
+  "plannedAbsence", "pin", "userAccess"
 ];
 
 const ROLE_TEMPLATES = {
   admin: ALL_PERMISSIONS,
-  supervisor: ["machines", "employees", "workCatalog", "plannedAbsence", "skillMatrix"],
-  engineer: ["lossReasons", "rootAreas", "workCatalog", "standardTime", "workStandards", "skillMatrix"]
+  supervisor: ["machines", "employees", "workCatalog", "plannedAbsence"],
+  engineer: ["lossReasons", "rootAreas", "workCatalog", "standardTime", "workStandards"]
 };
 
 const sessions = new Map();
