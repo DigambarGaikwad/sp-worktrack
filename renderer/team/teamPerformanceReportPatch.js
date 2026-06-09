@@ -42,19 +42,46 @@
     el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
   }
 
-  function buildPeopleUrl(employee) {
+  function selectedPeriodParts() {
     const period = clean($("periodFilter")?.value) || "yesterday";
-    const year = clean($("yearFilter")?.value) || String(new Date().getFullYear());
-    const month = clean($("monthFilter")?.value) || String(new Date().getMonth() + 1);
-    const params = new URLSearchParams({
+    return {
       period,
+      year: clean($("yearFilter")?.value) || String(new Date().getFullYear()),
+      month: clean($("monthFilter")?.value) || String(new Date().getMonth() + 1)
+    };
+  }
+
+  function buildPeopleUrl(employee) {
+    const p = selectedPeriodParts();
+    const params = new URLSearchParams({
+      period: p.period,
       shift: clean($("shiftFilter")?.value) || "All",
       department: clean($("departmentFilter")?.value) || "All",
       employee,
-      year
+      year: p.year
     });
-    if (period !== "selectedYear") params.set("month", month);
+    if (p.period !== "selectedYear") params.set("month", p.month);
     return `${API_BASE_URL}/api/dashboard/people?${params.toString()}`;
+  }
+
+  function buildCommentUrl(person) {
+    const p = selectedPeriodParts();
+    const params = new URLSearchParams({
+      year: p.year,
+      month: p.month,
+      empCode: clean(person.code),
+      empName: clean(person.name)
+    });
+    return `${API_BASE_URL}/api/admin/performance-comment?${params.toString()}`;
+  }
+
+  async function loadAdminComment(person) {
+    try {
+      return await requestJson(buildCommentUrl(person));
+    } catch (err) {
+      console.warn("Performance comment load skipped:", err);
+      return null;
+    }
   }
 
   function scoreLine(label, value, sign) {
@@ -77,7 +104,21 @@
     return "Review Required: productivity, attendance or penalty factors need improvement.";
   }
 
-  function reportHtml(data, person) {
+  function commentRow(label, value) {
+    return `<tr><td style="width:24%;font-weight:900;">${esc(label)}</td><td>${esc(value || "-")}</td></tr>`;
+  }
+
+  function adminCommentsHtml(comment) {
+    if (!comment) return `<div class="remark">No monthly admin comment saved for this employee.</div>`;
+    return `<table><tbody>
+      ${commentRow("Positive Points", comment.positives)}
+      ${commentRow("Negative / Improvement Areas", comment.negatives)}
+      ${commentRow("Initiatives", comment.initiatives)}
+      ${commentRow("Multi-skill Initiative", comment.multiSkillInitiative)}
+    </tbody></table>`;
+  }
+
+  function reportHtml(data, person, comment) {
     const r = data.scoreRules || {};
     const b = person.scoreBreakdown?.details || {};
     const i = person.scoreInputs || {};
@@ -98,7 +139,7 @@
   .title{font-size:26px;font-weight:900;color:#0b3f73;}.sub{color:#64748b;margin-top:4px;}.score{font-size:34px;font-weight:900;color:#15803d;text-align:right;}.score small{display:block;font-size:12px;color:#64748b;}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0;}.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc;}.kpi-label{font-size:12px;color:#64748b;font-weight:800;}.kpi-value{font-size:21px;font-weight:900;margin-top:4px;}.kpi-note{font-size:11px;color:#64748b;margin-top:4px;}
   .section{margin-top:18px;}.section h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;}
-  table{width:100%;border-collapse:collapse;margin-top:8px;}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;}td{padding:9px;border-bottom:1px solid #e5e7eb;} .remark{background:#ecfdf5;border-left:5px solid #15803d;border-radius:10px;padding:12px;font-weight:800;line-height:1.45;}
+  table{width:100%;border-collapse:collapse;margin-top:8px;}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;}td{padding:9px;border-bottom:1px solid #e5e7eb;vertical-align:top;} .remark{background:#ecfdf5;border-left:5px solid #15803d;border-radius:10px;padding:12px;font-weight:800;line-height:1.45;}
   .actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;}.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;}.print{background:#15803d;color:#fff;}.close{background:#e5e7eb;color:#111827;}
   @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;border-radius:0}.actions{display:none}.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
@@ -141,6 +182,8 @@
     </tbody></table>
   </div>
 
+  <div class="section"><h2>Admin Monthly Comments</h2>${adminCommentsHtml(comment)}</div>
+
   <div class="section"><h2>Admin Score Rules Used</h2>
     <table><tbody>
       <tr><td>Positive marks total</td><td>${esc(n((r.productivityWeight || 0) + (r.utilizationWeight || 0) + (r.efficiencyWeight || 0) + (r.attendanceWeight || 0)))}</td></tr>
@@ -173,11 +216,12 @@
       const data = await requestJson(buildPeopleUrl(employee));
       const person = (data.employees || []).find(p => clean(p.name) === employee || clean(p.code) === employee) || (data.employees || [])[0];
       if (!person) throw new Error("No performance data found for selected employee and period.");
+      const comment = await loadAdminComment(person);
 
       const w = window.open("", "_blank", "width=1100,height=850");
       if (!w) throw new Error("Popup blocked. Allow popups for this app.");
       w.document.open();
-      w.document.write(reportHtml(data, person));
+      w.document.write(reportHtml(data, person, comment));
       w.document.close();
       setReportStatus("Report opened.", "success");
     } catch (err) {
