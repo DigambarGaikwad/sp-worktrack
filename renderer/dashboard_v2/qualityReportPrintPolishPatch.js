@@ -144,7 +144,7 @@
 <body>
   <div class="page">
     <div class="app-head">
-      <div class="brand"><img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" /><div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production Management System</div></div></div>
+      <div class="brand"><img class="logo-img" src="${esc(logo)}" onerror="this.style.display='none'" /><div><div class="app-title">SP WorkTrack</div><div class="app-sub">Production & Performance Management System</div></div></div>
       <div><div class="report-title">Quality Checkpoint Report</div><div class="report-sub">Planned + completed checkpoints</div></div>
     </div>
     <div class="content">

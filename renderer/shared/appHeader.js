@@ -65,7 +65,7 @@
     if (!mount) return;
 
     const title = options.title || "SP WorkTrack";
-    const subtitle = options.subtitle || "Production Management System";
+    const subtitle = options.subtitle || "Production & Performance Management System";
 
     mount.innerHTML = `
       <div class="topbar shared-topbar">

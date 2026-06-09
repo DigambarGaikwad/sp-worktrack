@@ -19,8 +19,8 @@
 
           <div class="modal-body">
             <div style="line-height:1.6; font-size:14px; margin-left:25px;">
-              <strong>SP WorkTrack v1.0</strong><br/>
-              Production Management System<br/><br/>
+              <strong>SP WorkTrack v 2.0</strong><br/>
+              Production & Performance Management System<br/><br/>
 
               <strong>Core Features:</strong>
               <ul style="margin-top:6px;">
