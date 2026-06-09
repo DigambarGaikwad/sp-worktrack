@@ -5,7 +5,7 @@ window.SPWT_CONFIG = {
 
   // DB Edition API
   // Local development:
-  API_BASE_URL: "http://localhost:3030",
+  API_BASE_URL: window.location.protocol === "file:" ? "http://localhost:3030" : window.location.origin,
 
   // Data source control
   // "db" = load from PocketBase through Node API
@@ -23,6 +23,6 @@ window.SPWT_CONFIG = {
 // window.SPWT_CONFIG = {
 //   SHEETS_WEBAPP_URL: "https://script.google.com/macros/s/AKfycbzY35LcyEbDk8xw-siWtbhe-JbUJuJsmVcHhvq-_i-tOB17GJ8FTXy4XpKa4scEmPzE/exec",
 //   SECRET: "DIGAMBAR",
-//   API_BASE_URL: "http://localhost:3030",
+//   API_BASE_URL: window.location.protocol === "file:" ? "http://localhost:3030" : window.location.origin,
 //   DATA_SOURCE: "db"
 // };
