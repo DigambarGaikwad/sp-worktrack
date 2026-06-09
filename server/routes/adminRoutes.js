@@ -30,6 +30,11 @@ const {
   getAdminControls,
   saveAdminControls
 } = require("../services/adminControlService");
+const {
+  listPerformanceComments,
+  getPerformanceComment,
+  savePerformanceComment
+} = require("../services/performanceCommentService");
 
 const router = express.Router();
 
@@ -185,6 +190,37 @@ router.delete("/planned-absences/:id", async (req, res) => {
   } catch (err) {
     console.error("DELETE /api/admin/planned-absences/:id failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to delete planned absence", details: err.details || null });
+  }
+});
+
+router.get("/performance-comments", async (req, res) => {
+  try {
+    const data = await listPerformanceComments(req.query || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/admin/performance-comments failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to list performance comments", details: err.details || null });
+  }
+});
+
+router.get("/performance-comment", async (req, res) => {
+  try {
+    const data = await getPerformanceComment(req.query || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/admin/performance-comment failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load performance comment", details: err.details || null });
+  }
+});
+
+router.post("/performance-comments", async (req, res) => {
+  try {
+    requireAdminPermission(req, "adminControls");
+    const data = await savePerformanceComment(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/admin/performance-comments failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save performance comment", details: err.details || null });
   }
 });
 
