@@ -29,6 +29,7 @@ const DEFAULT_CONTROLS = {
   overrunReasonEnabled: true,
   overrunReasonLimitPct: 120,
   bookingExtraReasonEnabled: true,
+  allowVpnAccess: false,
   performanceScoreRules: DEFAULT_SCORE_RULES
 };
 
@@ -116,6 +117,7 @@ function normalizeAdminControls(raw = {}) {
       300
     ),
     bookingExtraReasonEnabled: bool(raw.bookingExtraReasonEnabled, DEFAULT_CONTROLS.bookingExtraReasonEnabled),
+    allowVpnAccess: bool(raw.allowVpnAccess, DEFAULT_CONTROLS.allowVpnAccess),
     performanceScoreRules: normalizePerformanceScoreRules(mergedScoreRules)
   };
 }
@@ -172,3 +174,4 @@ module.exports = {
   normalizeAdminControls,
   normalizePerformanceScoreRules
 };
+

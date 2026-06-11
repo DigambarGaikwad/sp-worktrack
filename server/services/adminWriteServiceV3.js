@@ -2,6 +2,7 @@
 // Thin wrapper over V2 to make machine status explicit before saving.
 
 const v2 = require("./adminWriteServiceV2");
+const plannedAbsenceService = require("./plannedAbsenceService");
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -49,5 +50,8 @@ async function saveAdminMasterData(rawData = {}, options = {}) {
 
 module.exports = {
   ...v2,
+  ...plannedAbsenceService,
   saveAdminMasterData
 };
+
+

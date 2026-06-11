@@ -6,7 +6,8 @@
   const DEFAULT_CONTROLS = {
     overrunReasonEnabled: true,
     overrunReasonLimitPct: 120,
-    bookingExtraReasonEnabled: true
+    bookingExtraReasonEnabled: true,
+    allowVpnAccess: false
   };
 
   const AUTO_REASON = "Not required - disabled by Admin Control";
@@ -48,7 +49,8 @@
     return {
       overrunReasonEnabled: raw?.overrunReasonEnabled !== false,
       overrunReasonLimitPct: Number.isFinite(pct) ? Math.min(300, Math.max(100, pct)) : 120,
-      bookingExtraReasonEnabled: raw?.bookingExtraReasonEnabled !== false
+      bookingExtraReasonEnabled: raw?.bookingExtraReasonEnabled !== false,
+      allowVpnAccess: raw?.allowVpnAccess === true
     };
   }
 
@@ -100,8 +102,8 @@
       page.className = "tab-page hidden";
       page.id = "tabControls";
       page.innerHTML = `
-        <div class="section-title">Admin Controls</div>
-        <div class="small-hint">Control production entry rules. Default overrun reason limit is 120%.</div>
+        <div class="section-title">Entry Rules</div>
+        <div class="small-hint">Control production entry validation rules. Default overrun reason limit is 120%.</div>
 
         <div class="card admin-controls-card">
           <div class="grid-2">
@@ -129,7 +131,7 @@
           </div>
 
           <div class="row admin-controls-actions">
-            <button class="btn green" id="saveAdminControlsBtn" type="button">Save Admin Controls</button>
+            <button class="btn green" id="saveAdminControlsBtn" type="button">Save Entry Rules</button>
             <span class="small-hint" id="adminControlsStatus"></span>
           </div>
         </div>
@@ -158,18 +160,54 @@
     return adminControls;
   }
 
+  function ensureVpnAccessControl() {
+    if (document.getElementById("allowVpnAccess")) return;
+
+    const tab = document.getElementById("tabControls");
+    if (!tab) return;
+
+    const card = document.createElement("div");
+    card.className = "card admin-controls-card";
+    card.style.marginTop = "14px";
+    card.innerHTML = `
+      <div class="section-title">Network Access</div>
+      <div class="small-hint">Control whether SP WorkTrack can be opened from VPN/remote network.</div>
+
+      <div class="field" style="margin-top:12px;">
+        <label class="quality-recheck-line">
+          <input type="checkbox" id="allowVpnAccess" />
+          Allow VPN / Remote Network Access
+        </label>
+        <div class="small-hint">OFF = same WiFi/local network only. ON = allow approved VPN network also.</div>
+      </div>
+
+      <div class="row admin-controls-actions">
+        <button class="btn green" id="saveNetworkAccessBtn" type="button">Save Network Access</button>
+        <span class="small-hint" id="networkAccessStatus"></span>
+      </div>
+    `;
+
+    const mainCard = tab.querySelector(".admin-controls-card");
+    if (mainCard) mainCard.insertAdjacentElement("afterend", card);
+    else tab.appendChild(card);
+  }
+
   function fillControlsForm() {
     const overrunEnabled = document.getElementById("overrunReasonEnabled");
     const overrunPct = document.getElementById("overrunReasonLimitPct");
     const bookingExtra = document.getElementById("bookingExtraReasonEnabled");
+    const allowVpn = document.getElementById("allowVpnAccess");
+
 
     if (overrunEnabled) overrunEnabled.checked = adminControls.overrunReasonEnabled !== false;
     if (overrunPct) overrunPct.value = String(Number(adminControls.overrunReasonLimitPct || 120));
     if (bookingExtra) bookingExtra.checked = adminControls.bookingExtraReasonEnabled !== false;
+    if (allowVpn) allowVpn.checked = adminControls.allowVpnAccess === true;
   }
 
   async function renderAdminControls() {
     ensureAdminControlsTab();
+    ensureVpnAccessControl();
     status("Loading controls...");
     await loadAdminControls(true);
     fillControlsForm();
@@ -177,9 +215,12 @@
   }
 
   function readControlsForm() {
+    ensureVpnAccessControl();
     const overrunEnabled = document.getElementById("overrunReasonEnabled");
     const overrunPct = document.getElementById("overrunReasonLimitPct");
     const bookingExtra = document.getElementById("bookingExtraReasonEnabled");
+    const allowVpn = document.getElementById("allowVpnAccess");
+
 
     return normalizeControls({
       overrunReasonEnabled: overrunEnabled ? overrunEnabled.checked : true,
@@ -217,14 +258,55 @@
       window.SPWT_ADMIN_CONTROLS = adminControls;
       fillControlsForm();
       scheduleEntryControlApply();
-      status("Saved. Overrun limit is now " + adminControls.overrunReasonLimitPct + "%", "success");
+      status("Entry rules saved. Overrun limit is now " + adminControls.overrunReasonLimitPct + "%", "success");
     } catch (err) {
       console.error("Admin controls save failed:", err);
       status("Save failed: " + (err?.message || err), "error");
       alert("Admin Controls save failed: " + (err?.message || err));
     } finally {
       controlsSaving = false;
-      if (btn) { btn.disabled = false; btn.textContent = "Save Admin Controls"; }
+      if (btn) { btn.disabled = false; btn.textContent = "Save Entry Rules"; }
+    }
+  }
+
+    function networkStatus(message, type = "") {
+    const el = document.getElementById("networkAccessStatus");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.remove("spwt-status-error", "spwt-status-success");
+    if (type === "error") el.classList.add("spwt-status-error");
+    if (type === "success") el.classList.add("spwt-status-success");
+  }
+
+  async function saveNetworkAccess() {
+    const btn = document.getElementById("saveNetworkAccessBtn");
+    const allowVpn = document.getElementById("allowVpnAccess");
+
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
+      networkStatus("Saving...");
+
+      const token = getAdminToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["x-spwt-admin-token"] = token;
+
+      const payload = await requestJson("/api/admin/controls", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ allowVpnAccess: allowVpn ? allowVpn.checked : false })
+      });
+
+      adminControls = normalizeControls(payload.data);
+      controlsLoaded = true;
+      window.SPWT_ADMIN_CONTROLS = adminControls;
+      fillControlsForm();
+      networkStatus("Network access saved.", "success");
+    } catch (err) {
+      console.error("Network access save failed:", err);
+      networkStatus("Save failed: " + (err?.message || err), "error");
+      alert("Network Access save failed: " + (err?.message || err));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Save Network Access"; }
     }
   }
 
@@ -257,6 +339,13 @@
       saveBtn.__spwtWired = true;
       saveBtn.type = "button";
       saveBtn.onclick = saveAdminControls;
+    }
+
+    const networkBtn = document.getElementById("saveNetworkAccessBtn");
+    if (networkBtn && !networkBtn.__spwtWired) {
+      networkBtn.__spwtWired = true;
+      networkBtn.type = "button";
+      networkBtn.onclick = saveNetworkAccess;
     }
   }
 
@@ -568,3 +657,8 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
+
+
+
+
