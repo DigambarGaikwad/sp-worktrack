@@ -1040,3 +1040,23 @@ input:focus {
     justify-self: stretch;
   }
 }
+/* Rework / Other report recipients table */
+#rwReportRecipientsTable input.rw-email {
+  min-width: 260px;
+}
+
+#rwReportRecipientsTable input.rw-name {
+  min-width: 180px;
+}
+
+#rwReportRecipientsTable input.rw-role {
+  min-width: 190px;
+}
+
+#rwReportRecipientsTable select.rw-type {
+  min-width: 150px;
+}
+
+#rwReportRecipientsTable {
+  min-width: 920px;
+}
