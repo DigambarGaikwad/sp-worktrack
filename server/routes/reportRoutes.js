@@ -3,6 +3,7 @@
 
 const express = require("express");
 const { getReworkOtherReport } = require("../services/reworkOtherReportService");
+const { getOvertimeReport } = require("../services/overtimeReportService");
 
 const router = express.Router();
 
@@ -16,4 +17,15 @@ router.get("/rework-other", async (req, res) => {
   }
 });
 
+router.get("/overtime", async (req, res) => {
+  try {
+    const data = await getOvertimeReport(req.query || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/reports/overtime failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to build overtime report" });
+  }
+});
+
 module.exports = router;
+

@@ -17,11 +17,38 @@
   let initAttempts = 0;
   let dbSaveBusy = false;
 
+  const MASTER_SAVE_TABS = new Set([
+    "tabMachines",
+    "tabEmployees",
+    "tabShifts",
+    "tabWork",
+    "tabLossReasons",
+    "tabRootAreas"
+  ]);
+
+  function getActiveAdminTabId() {
+    return document.querySelector(".tab.active[data-tab]")?.dataset?.tab || "";
+  }
+
+  function updateDbSaveVisibility() {
+    const btn = $("adminSaveBtn");
+    if (!btn) return false;
+
+    const visible = MASTER_SAVE_TABS.has(getActiveAdminTabId());
+    const holder = btn.closest(".admin-save-row, .admin-actions, .section-actions, .footer-actions") || btn.parentElement;
+
+    if (holder) holder.style.display = visible ? "" : "none";
+    else btn.style.display = visible ? "" : "none";
+
+    return visible;
+  }
+
   document.addEventListener("DOMContentLoaded", scheduleInit);
 
   function scheduleInit() {
     initAttempts += 1;
     const wired = patchSaveButton();
+    updateDbSaveVisibility();
     if (!wired && initAttempts < MAX_INIT_ATTEMPTS) setTimeout(scheduleInit, INIT_RETRY_MS);
 
     if (wired && !document.__spwtDbSaveLatePatchScheduled) {
@@ -56,6 +83,7 @@
     btn.title = "Save current admin masters to PocketBase DB";
     btn.onclick = saveCurrentAdminStateToDb;
     btn.__spwtDbSaveWired = true;
+    updateDbSaveVisibility();
 
     if (!btn.__spwtDbSaveClickGuardWired) {
       btn.__spwtDbSaveClickGuardWired = true;
@@ -70,6 +98,12 @@
     return true;
   }
 
+  document.addEventListener("click", function (event) {
+    if (event.target?.closest?.("[data-tab]")) {
+      setTimeout(updateDbSaveVisibility, 0);
+      setTimeout(updateDbSaveVisibility, 200);
+    }
+  }, true);
   function getGlobalValue(name, fallback) {
     try {
       // eslint-disable-next-line no-eval
@@ -209,3 +243,4 @@
     toast._timer = setTimeout(() => toast.classList.remove("show"), 3500);
   }
 })();
+

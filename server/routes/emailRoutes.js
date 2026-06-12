@@ -15,6 +15,12 @@ const {
   saveReworkOtherReportRecipients,
   sendReworkOtherReport
 } = require("../services/reworkOtherReportEmailService");
+
+const {
+  getOvertimeReportRecipients,
+  saveOvertimeReportRecipients,
+  sendOvertimeReport
+} = require("../services/overtimeReportEmailService");
 const { generatePdfFromHtml } = require("../services/pdfReportService");
 
 const router = express.Router();
@@ -85,6 +91,22 @@ router.post("/rework-other-report/send", async (req, res) => {
   catch (err) { console.error("POST /api/email/rework-other-report/send failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send rework/other report.", details: err.details || null }); }
 });
 
+
+router.get("/overtime-report/recipients", async (req, res) => {
+  try { res.json({ ok: true, data: await getOvertimeReportRecipients() }); }
+  catch (err) { console.error("GET /api/email/overtime-report/recipients failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load overtime report recipients" }); }
+});
+
+router.post("/overtime-report/recipients", async (req, res) => {
+  try { res.json({ ok: true, data: await saveOvertimeReportRecipients(req.body || {}) }); }
+  catch (err) { console.error("POST /api/email/overtime-report/recipients failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save overtime report recipients" }); }
+});
+
+router.post("/overtime-report/send", async (req, res) => {
+  try { res.json({ ok: true, data: await sendOvertimeReport(req.body || {}) }); }
+  catch (err) { console.error("POST /api/email/overtime-report/send failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send overtime report" }); }
+});
+
 router.post("/rework-other-report/pdf", async (req, res) => {
   try {
     const html = clean(req.body?.pdfHtml || req.body?.html || "");
@@ -98,3 +120,4 @@ router.post("/rework-other-report/pdf", async (req, res) => {
 });
 
 module.exports = router;
+
