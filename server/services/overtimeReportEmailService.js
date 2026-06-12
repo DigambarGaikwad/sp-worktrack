@@ -111,61 +111,44 @@ function esc(value) {
 
 function buildMailBody(report) {
   const s = report.summary || {};
-  const empRows = Array.isArray(report.byEmployee) ? report.byEmployee : [];
-  const detailRows = Array.isArray(report.rows) ? report.rows : [];
-
-  const html = `
-    <div style="font-family:Arial,sans-serif;color:#0f172a">
-      <p>Dear Team,</p>
-      <p>Please find below the overtime report for <b>${esc(report.period)}</b>.</p>
-
-      <h2>${esc(report.title || "Overtime Report")}</h2>
-      <p><b>Period:</b> ${esc(report.fromDate)} to ${esc(report.toDate)}</p>
-
-      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-bottom:14px;">
-        <tr>
-          <th>Employees</th><th>Entries</th><th>Actual OT Hours</th><th>Standard Hours</th><th>OT Productivity</th>
-        </tr>
-        <tr>
-          <td>${esc(s.employees)}</td><td>${esc(s.entries)}</td><td>${esc(s.totalActualHours)}</td><td>${esc(s.totalStandardHours)}</td><td>${esc(s.productivityPct)}%</td>
-        </tr>
-      </table>
-
-      <h3>Employee Summary</h3>
-      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;">
-        <thead><tr><th>Emp ID</th><th>Name</th><th>Actual OT Hours</th><th>Standard Hours</th><th>Productivity</th><th>Entries</th></tr></thead>
-        <tbody>
-          ${empRows.map((r) => `<tr><td>${esc(r.empCode)}</td><td>${esc(r.empName)}</td><td>${esc(r.actualHours)}</td><td>${esc(r.standardHours)}</td><td>${esc(r.productivityPct)}%</td><td>${esc(r.entries)}</td></tr>`).join("") || `<tr><td colspan="6">No overtime records.</td></tr>`}
-        </tbody>
-      </table>
-
-      <h3>Detailed Records</h3>
-      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;">
-        <thead><tr><th>Date</th><th>Emp ID</th><th>Name</th><th>Shift</th><th>Actual OT Hours</th><th>Standard Hours</th><th>Productivity</th></tr></thead>
-        <tbody>
-          ${detailRows.map((r) => `<tr><td>${esc(r.workDate)}</td><td>${esc(r.empCode)}</td><td>${esc(r.empName)}</td><td>${esc(r.shift)}</td><td>${esc(r.actualHours)}</td><td>${esc(r.standardHours)}</td><td>${esc(r.productivityPct)}%</td></tr>`).join("") || `<tr><td colspan="7">No overtime records.</td></tr>`}
-        </tbody>
-      </table>
-
-      <p>Regards,<br>SP WorkTrack</p>
-    </div>`;
-
-  const text = [
+  const plain = [
     "Dear Team,",
     "",
-    `${report.title || "Overtime Report"} - ${report.period}`,
-    `Period: ${report.fromDate} to ${report.toDate}`,
-    `Employees: ${s.employees}`,
-    `Entries: ${s.entries}`,
-    `Actual OT Hours: ${s.totalActualHours}`,
-    `Standard Hours: ${s.totalStandardHours}`,
-    `OT Productivity: ${s.productivityPct}%`,
+    `Please find attached the Overtime Report for ${clean(report.period || "the selected period")}.`,
+    "",
+    "The PDF contains employee-wise overtime summary, machine-wise work details, department/sub-work details, standard vs actual hours, and productivity visibility for review and action.",
+    "",
+    `Summary: Employees ${s.employees || 0}, Entries ${s.entries || 0}, Line Records ${s.lines || 0}, Actual OT Hours ${s.totalActualHours || 0}, Standard Hours ${s.totalStandardHours || 0}, OT Productivity ${s.productivityPct || 0}%.`,
     "",
     "Regards,",
     "SP WorkTrack"
   ].join("\n");
 
-  return { html, text };
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5">
+      <p>Dear Team,</p>
+      <p>Please find attached the <b>Overtime Report</b> for <b>${esc(report.period || "the selected period")}</b>.</p>
+      <p>The attached PDF contains:</p>
+      <ul>
+        <li>Employee-wise overtime summary</li>
+        <li>Machine-wise work details</li>
+        <li>Department and Sub Work details</li>
+        <li>Standard hours vs actual overtime hours</li>
+        <li>Productivity visibility for review and action</li>
+      </ul>
+      <p>
+        <b>Summary:</b>
+        Employees: ${esc(s.employees || 0)} |
+        Entries: ${esc(s.entries || 0)} |
+        Line Records: ${esc(s.lines || 0)} |
+        Actual OT Hours: ${esc(s.totalActualHours || 0)} |
+        Standard Hours: ${esc(s.totalStandardHours || 0)} |
+        OT Productivity: ${esc(s.productivityPct || 0)}%
+      </p>
+      <p>Regards,<br><b>SP WorkTrack</b></p>
+    </div>`;
+
+  return { plain, html };
 }
 
 async function sendOvertimeReport(params = {}) {
@@ -188,7 +171,7 @@ async function sendOvertimeReport(params = {}) {
     to: targets.to,
     cc: targets.cc,
     subject: `SP WorkTrack - Overtime Report - ${report.period}`,
-    text: body.text,
+    text: body.plain,
     html: body.html,
     attachments: [{
       filename: `${safeFilePart(`Overtime_Report_${report.period}_${report.fromDate}_to_${report.toDate}`)}.pdf`,
@@ -210,5 +193,6 @@ module.exports = {
   saveOvertimeReportRecipients,
   sendOvertimeReport
 };
+
 
 

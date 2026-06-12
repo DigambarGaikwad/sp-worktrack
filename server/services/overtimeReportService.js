@@ -70,9 +70,9 @@ function makeLineRow(entry, line) {
     empName: clean(entry.emp_name),
     machine: clean(entry.machine_no || entry.machine || line.machine_no || line.machine),
     machineCategory: clean(entry.machine_category || entry.machine_type || line.machine_category),
-    department: clean(line.department || line.main_work || line.work_type),
-    subWork: clean(line.sub_work || line.subwork || line.work_name),
-    description: clean(line.description || line.remarks || line.remark),
+    department: clean(line.department_name || line.department_code || line.department || line.main_work || "-"),
+    subWork: clean(line.subwork_name || line.sub_work || line.subwork_code || line.subwork || line.work_name || "-"),
+    description: clean(line.description || line.major_loss_remark || line.remarks || line.remark || line.reason || line.efficiency_reason || "-"),
     standardMinutes,
     actualMinutes,
     standardHours: hours(standardMinutes),
@@ -168,4 +168,5 @@ async function getOvertimeReport(params = {}) {
 }
 
 module.exports = { getOvertimeReport };
+
 
