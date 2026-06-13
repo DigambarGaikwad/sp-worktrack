@@ -502,4 +502,54 @@ body {
 .absent-grid {
   grid-template-columns: 1fr;
 }
+}/* Laptop-friendly People Dashboard filter layout */
+.people-hero {
+  grid-template-columns: 1fr !important;
+  align-items: stretch !important;
+}
+
+.people-hero > div:first-child {
+  width: 100%;
+}
+
+.people-title {
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+.people-subtitle {
+  max-width: 100%;
+  font-size: 14px;
+}
+
+.people-filters {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(150px, 1fr)) !important;
+  gap: 12px !important;
+  align-items: center;
+}
+
+#overtimeReportControls {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 1.3fr 0.8fr 0.8fr 1fr 1fr 1fr !important;
+  gap: 12px !important;
+  margin-top: 12px !important;
+}
+
+#overtimeReportControls .people-select,
+#overtimeReportControls .people-btn {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1250px) {
+  .people-filters {
+    grid-template-columns: repeat(3, minmax(150px, 1fr)) !important;
+  }
+
+  #overtimeReportControls {
+    grid-template-columns: repeat(3, minmax(150px, 1fr)) !important;
+  }
 }

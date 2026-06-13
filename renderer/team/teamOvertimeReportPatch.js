@@ -52,13 +52,8 @@
   function mountControls() {
     if ($("overtimeReportControls")) return;
 
-        const anchor =
-      $("showAbsentReportBtn") ||
-      $("showPerformanceReportBtn") ||
-      $("refreshPeopleBtn") ||
-      document.querySelector(".people-btn");
-
-    if (!anchor?.parentElement) return;
+            const filters = document.querySelector(".people-filters");
+    if (!filters?.parentElement) return;
 
     const wrap = document.createElement("div");
     wrap.id = "overtimeReportControls";
@@ -76,7 +71,7 @@
       <button class="people-btn" id="showOvertimeReportBtn" type="button">Show Overtime Report</button>
     `;
 
-    anchor.parentElement.insertBefore(wrap, anchor.nextSibling);
+    filters.insertAdjacentElement("afterend", wrap);
 
     fillYearMonth();
     $("otReportPeriod")?.addEventListener("change", syncMonthVisibility);
@@ -248,6 +243,7 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
 
 

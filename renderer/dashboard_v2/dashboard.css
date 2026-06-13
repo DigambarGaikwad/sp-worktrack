@@ -840,4 +840,215 @@ body,
   .last-six-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}/* Laptop-friendly Machine Dashboard filter layout */
+.dashboard-hero,
+.dash-hero,
+.dashboard-header-card,
+.machine-hero {
+  grid-template-columns: 1fr !important;
+  align-items: stretch !important;
+}
+
+.dash-filter-row,
+.dashboard-filters,
+.machine-filters {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 0.8fr 1fr 3fr 0.7fr !important;
+  gap: 12px !important;
+  align-items: center;
+}
+
+#rwOtherMachineReportControls {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 0.9fr 0.9fr 2fr 1.2fr !important;
+  gap: 12px !important;
+  align-items: center;
+  margin-top: 12px !important;
+}
+
+#rwOtherMachineReportControls .dash-select,
+#rwOtherMachineReportControls .dash-btn,
+#rwOtherMachineReportControls button {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1250px) {
+  .dash-filter-row,
+  .dashboard-filters,
+  .machine-filters {
+    grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+  }
+
+  #rwOtherMachineReportControls {
+    grid-template-columns: repeat(3, minmax(160px, 1fr)) !important;
+  }
+}
+/* Laptop-friendly Machine Dashboard top filter layout */
+.dash-topbar {
+  display: grid !important;
+  grid-template-columns: 210px 1fr !important;
+  align-items: start !important;
+  gap: 18px !important;
+}
+
+.dash-topbar .brand-block {
+  min-width: 190px;
+  padding-top: 8px;
+}
+
+.dash-topbar .brand-title {
+  font-size: 26px !important;
+  line-height: 1.15 !important;
+}
+
+.dash-topbar .brand-subtitle {
+  max-width: 190px;
+  line-height: 1.45;
+}
+
+.dash-topbar .filter-bar {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 0.9fr 1.25fr 3.5fr 0.7fr !important;
+  gap: 12px !important;
+  align-items: center !important;
+  justify-content: stretch !important;
+}
+
+.dash-topbar .filter-bar .dash-select,
+.dash-topbar .filter-bar .dash-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 50px !important;
+  font-size: 15px !important;
+}
+
+#rwOtherMachineReportControls {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 0.9fr 0.9fr 2.5fr 1fr !important;
+  gap: 12px !important;
+  align-items: center !important;
+  margin-top: 0 !important;
+}
+
+#rwOtherMachineReportControls .dash-select,
+#rwOtherMachineReportControls .dash-btn,
+#rwOtherMachineReportControls button {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 50px !important;
+  font-size: 15px !important;
+}
+
+@media (max-width: 1250px) {
+  .dash-topbar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dash-topbar .brand-subtitle {
+    max-width: 100%;
+  }
+
+  .dash-topbar .filter-bar {
+    grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+  }
+
+  #rwOtherMachineReportControls {
+    grid-template-columns: repeat(3, minmax(160px, 1fr)) !important;
+  }
+}
+/* FINAL: Machine Dashboard same stacked layout as People Dashboard */
+.dash-topbar {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+}
+
+.dash-topbar .brand-block {
+  width: 100% !important;
+  min-width: 0 !important;
+  padding-top: 0 !important;
+}
+
+.dash-topbar .brand-title {
+  font-size: 30px !important;
+  line-height: 1.15 !important;
+}
+
+.dash-topbar .brand-subtitle {
+  max-width: 100% !important;
+  line-height: 1.45 !important;
+  font-size: 14px !important;
+}
+
+.dash-topbar .filter-bar {
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1.4fr 3.2fr 0.8fr !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.dash-topbar .filter-bar > .dash-select,
+.dash-topbar .filter-bar > .dash-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 50px !important;
+}
+
+#rwOtherMachineReportControls {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1.15fr 0.9fr 0.9fr 2.5fr 1.4fr !important;
+  gap: 12px !important;
+  align-items: center !important;
+  margin-top: 0 !important;
+}
+
+#rwOtherMachineReportControls .dash-select,
+#rwOtherMachineReportControls .dash-btn,
+#rwOtherMachineReportControls button {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 50px !important;
+}
+
+@media (max-width: 1250px) {
+  .dash-topbar .filter-bar {
+    grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+  }
+
+  #rwOtherMachineReportControls {
+    grid-template-columns: repeat(3, minmax(160px, 1fr)) !important;
+  }
+}
+/* Fix dashboard report button text overflow */
+#rwOtherMachineReportControls {
+  grid-template-columns: 1fr 1fr 0.8fr 0.8fr 2.2fr minmax(230px, 1.4fr) !important;
+}
+
+#rwOtherMachineReportControls .dash-btn,
+#rwOtherMachineReportControls button,
+.dash-btn {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  line-height: 1.15 !important;
+  text-align: center !important;
+  padding: 10px 12px !important;
+  min-height: 50px !important;
+  height: auto !important;
+}
+
+#showRwOtherMachineReportBtn {
+  min-width: 230px !important;
+  max-width: 100% !important;
+  font-size: 15px !important;
 }
