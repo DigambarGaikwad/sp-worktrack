@@ -63,6 +63,7 @@
       <select class="people-select" id="otReportPeriod" title="Overtime Report Period">
         <option value="selectedMonth">OT Report: Selected Month</option>
         <option value="selectedYear">OT Report: Selected Year</option>
+        <option value="selectedRange">OT Report: Selected Range</option>
       </select>
       <select class="people-select" id="otReportYear" title="Report Year"></select>
       <select class="people-select" id="otReportMonth" title="Report Month"></select>
@@ -105,9 +106,19 @@
   }
 
   function syncMonthVisibility() {
-    const yearly = $("otReportPeriod")?.value === "selectedYear";
+    const period = $("otReportPeriod")?.value || "selectedMonth";
+    const yearly = period === "selectedYear";
+    const range = period === "selectedRange";
+
+    const y = $("otReportYear");
     const m = $("otReportMonth");
-    if (m) m.style.display = yearly ? "none" : "";
+    const f = $("otReportFromDate");
+    const t = $("otReportToDate");
+
+    if (y) y.style.display = range ? "none" : "";
+    if (m) m.style.display = yearly || range ? "none" : "";
+    if (f) f.style.display = range ? "" : "none";
+    if (t) t.style.display = range ? "" : "none";
   }
 
   function mini(label, value, note = "") {
@@ -185,6 +196,10 @@
     try {
       if (btn) { btn.disabled = true; btn.textContent = "Loading..."; }
       setStatus("");
+      const period = clean($("otReportPeriod")?.value || "selectedMonth");
+      if (period === "selectedRange" && (!clean($("otReportFromDate")?.value) || !clean($("otReportToDate")?.value))) {
+        throw new Error("Select From Date and To Date for selected range overtime report.");
+      }
       const report = await requestJson(buildUrl());
       const w = window.open("", "_blank");
       if (!w) throw new Error("Popup blocked. Allow popups for this app.");
@@ -243,6 +258,7 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
+
 
 
 
