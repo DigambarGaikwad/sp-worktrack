@@ -10,6 +10,18 @@
   --sp-text: #0f172a;
   --sp-muted: #64748b;
   --sp-orange: #f97316;
+  --sp-action-primary: #0b3f73;
+  --sp-action-primary-hover: #0a3561;
+  --sp-action-send: #f97316;
+  --sp-action-send-hover: #ea580c;
+  --sp-action-success: #15803d;
+  --sp-action-success-hover: #166534;
+  --sp-action-danger: #dc2626;
+  --sp-action-danger-hover: #b91c1c;
+  --sp-action-edit: #7c3aed;
+  --sp-action-edit-hover: #6d28d9;
+  --sp-action-neutral: #e5e7eb;
+  --sp-action-neutral-hover: #d1d5db;
 }
 
 .hidden {
@@ -167,6 +179,110 @@
   font-size: 13px;
   color: var(--sp-muted);
   font-weight: 700;
+}
+
+/* ===================== SHARED ACTION BUTTONS ===================== */
+
+.sp-action-btn {
+  border: 0 !important;
+  border-radius: 10px !important;
+  min-height: 34px !important;
+  padding: 8px 13px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  color: #ffffff !important;
+  font: inherit !important;
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1px !important;
+  text-align: center !important;
+  text-decoration: none !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  cursor: pointer !important;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.10) !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease, opacity 0.14s ease !important;
+}
+
+.sp-action-btn:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.16) !important;
+  filter: none !important;
+}
+
+.sp-action-btn:active {
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow: 0 5px 10px rgba(15, 23, 42, 0.12) !important;
+}
+
+.sp-action-btn:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.28) !important;
+  outline-offset: 2px !important;
+}
+
+.sp-action-btn:disabled,
+.sp-action-btn[aria-disabled="true"] {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.sp-action-primary {
+  background: var(--sp-action-primary) !important;
+}
+
+.sp-action-primary:hover {
+  background: var(--sp-action-primary-hover) !important;
+}
+
+.sp-action-send {
+  background: var(--sp-action-send) !important;
+}
+
+.sp-action-send:hover {
+  background: var(--sp-action-send-hover) !important;
+}
+
+.sp-action-success {
+  background: var(--sp-action-success) !important;
+}
+
+.sp-action-success:hover {
+  background: var(--sp-action-success-hover) !important;
+}
+
+.sp-action-danger {
+  background: var(--sp-action-danger) !important;
+}
+
+.sp-action-danger:hover {
+  background: var(--sp-action-danger-hover) !important;
+}
+
+.sp-action-edit {
+  background: var(--sp-action-edit) !important;
+}
+
+.sp-action-edit:hover {
+  background: var(--sp-action-edit-hover) !important;
+}
+
+.sp-action-neutral {
+  background: var(--sp-action-neutral) !important;
+  color: #111827 !important;
+}
+
+.sp-action-neutral:hover {
+  background: var(--sp-action-neutral-hover) !important;
+}
+
+.quality-report-actions .sp-action-btn {
+  min-height: 32px !important;
+  padding: 7px 11px !important;
 }
 
 /* ===================== SHARED MODALS ===================== */
