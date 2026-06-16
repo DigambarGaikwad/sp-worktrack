@@ -62,6 +62,8 @@
   const BUTTON_SELECTOR = "button, a.btn, input[type='button'], input[type='submit']";
   const BUTTON_IGNORE_SELECTOR = [
     ".shared-nav-btn",
+    ".mobile-menu-btn",
+    ".mobile-menu-link",
     ".icon-btn",
     ".tab",
     ".tab-btn",
@@ -141,6 +143,40 @@
     window.SPWT_BUTTON_OBSERVER = observer;
   }
 
+  function navLink(page, href, icon, label, extraClass = "") {
+    return `<a class="shared-nav-btn ${extraClass} ${activeClass(page)}" href="${pagePath(href)}" title="${escapeHtml(label)}">${icon}</a>`;
+  }
+
+  function mobileMenuLink(page, href, icon, label) {
+    return `<a class="mobile-menu-link ${activeClass(page)}" href="${pagePath(href)}"><span>${icon}</span><span>${escapeHtml(label)}</span></a>`;
+  }
+
+  function closeMobileMenus(except) {
+    document.querySelectorAll(".mobile-menu-wrap.open").forEach((menu) => {
+      if (menu !== except) menu.classList.remove("open");
+    });
+  }
+
+  function wireMobileMenu(mount) {
+    const wrap = mount.querySelector(".mobile-menu-wrap");
+    const btn = mount.querySelector(".mobile-menu-btn");
+    if (!wrap || !btn || btn.__spwtMenuWired) return;
+
+    btn.__spwtMenuWired = true;
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = !wrap.classList.contains("open");
+      closeMobileMenus(wrap);
+      wrap.classList.toggle("open", open);
+    });
+  }
+
+  document.addEventListener("click", () => closeMobileMenus());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMobileMenus();
+  });
+
   window.SPWT = window.SPWT || {};
   window.SPWT.styleActionButtons = styleActionButtons;
 
@@ -161,18 +197,32 @@
           </div>
         </div>
 
-        <div class="right">
+        <div class="right desktop-nav">
           <span id="currentDate">${todayText()}</span>
+          ${navLink("home", "index.html", "🏠", "Home / Production Entry")}
+          ${navLink("machine", "renderer/dashboard_v2/dashboard.html", "📊", "Machine Dashboard")}
+          ${navLink("team", "renderer/team/team.html", "👥", "Team Dashboard")}
+          ${navLink("capacity", "renderer/capacity/capacity.html", "📈", "Capacity Planning")}
+          ${navLink("info", "renderer/info/info.html", "ℹ", "Info")}
+          ${navLink("admin", "renderer/admin/admin.html", "⚙", "Admin Settings", "settings")}
+        </div>
 
-          <a class="shared-nav-btn ${activeClass("home")}" href="${pagePath("index.html")}" title="Home / Production Entry">🏠</a>
-          <a class="shared-nav-btn ${activeClass("machine")}" href="${pagePath("renderer/dashboard_v2/dashboard.html")}" title="Machine Dashboard">📊</a>
-          <a class="shared-nav-btn ${activeClass("team")}"href="${pagePath("renderer/team/team.html")}" title="Team Dashboard">👥</a>
-          <a class="shared-nav-btn ${activeClass("capacity")}" href="${pagePath("renderer/capacity/capacity.html")}" title="Capacity Planning">📈</a>
-          <a class="shared-nav-btn ${activeClass("info")}" href="${pagePath("renderer/info/info.html")}" title="Info">ℹ</a>
-          <a class="shared-nav-btn settings ${activeClass("admin")}" href="${pagePath("renderer/admin/admin.html")}" title="Admin Settings">⚙</a>
+        <div class="mobile-menu-wrap">
+          <button class="mobile-menu-btn" type="button" aria-label="Open navigation menu">☰</button>
+          <div class="mobile-menu-panel">
+            <div class="mobile-menu-date">${todayText()}</div>
+            ${mobileMenuLink("home", "index.html", "🏠", "Home / Production Entry")}
+            ${mobileMenuLink("machine", "renderer/dashboard_v2/dashboard.html", "📊", "Machine Dashboard")}
+            ${mobileMenuLink("team", "renderer/team/team.html", "👥", "Team Dashboard")}
+            ${mobileMenuLink("capacity", "renderer/capacity/capacity.html", "📈", "Capacity Planning")}
+            ${mobileMenuLink("info", "renderer/info/info.html", "ℹ", "Info")}
+            ${mobileMenuLink("admin", "renderer/admin/admin.html", "⚙", "Admin Settings")}
+          </div>
         </div>
       </div>
     `;
+
+    wireMobileMenu(mount);
   };
 
   if (document.readyState === "loading") {
