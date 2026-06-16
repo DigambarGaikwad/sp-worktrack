@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="renderer/shared/appShell.css" />
   <link rel="stylesheet" href="renderer/entryUi.css" />
   <link rel="stylesheet" href="renderer/mobileEntryLayout.css" />
-  <link rel="stylesheet" href="renderer/mobileHeaderFix.css" />
 </head>
 
 <body>
@@ -70,6 +69,11 @@
 
       <div id="workContainer" class="work-list"></div>
 
+      <div class="work-actions-bottom">
+        <button class="btn green" id="addWorkBtnBottom" type="button">+ Add Work</button>
+        <button class="btn red" id="deleteLastBtn" type="button">Delete Last Work</button>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <div class="card-title">Shift Summary</div>
@@ -124,7 +128,6 @@
   <script src="renderer/app.js"></script>
   <script src="renderer/entryDb.js"></script>
   <script src="renderer/entryDbPatch.js"></script>
-  <script src="renderer/entryMobileSubmitPatch.js"></script>
   <script src="renderer/qualityDbPatch.js"></script>
   <script src="renderer/workCheckpointDbPatch.js"></script>
   <script src="renderer/entryLossBridgePatch.js"></script>
