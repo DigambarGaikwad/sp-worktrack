@@ -1,4 +1,167 @@
 (function () {
+  const HEADER_STYLE_ID = "spwt-shared-header-style";
+
+  function ensureHeaderStyles() {
+    if (document.getElementById(HEADER_STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = HEADER_STYLE_ID;
+    style.textContent = `
+      .mobile-menu-wrap { display: none; }
+      .mobile-menu-panel { display: none; }
+      .mobile-menu-wrap.open .mobile-menu-panel { display: block; }
+
+      @media (min-width: 769px) {
+        .shared-topbar { flex-direction: row !important; align-items: center !important; justify-content: space-between !important; }
+        .shared-topbar .desktop-nav { display: flex !important; }
+        .shared-topbar .mobile-menu-wrap { display: none !important; }
+        .shared-topbar .mobile-menu-panel { display: none !important; }
+      }
+
+      @media (max-width: 768px) {
+        .shared-topbar {
+          height: 56px !important;
+          min-height: 56px !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 8px !important;
+          padding: 0 10px !important;
+          overflow: visible !important;
+          position: relative !important;
+        }
+
+        .shared-topbar .left {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          max-width: calc(100% - 48px) !important;
+          gap: 8px !important;
+          overflow: hidden !important;
+        }
+
+        .shared-topbar .logo {
+          width: 42px !important;
+          height: 34px !important;
+          flex: 0 0 42px !important;
+          object-fit: contain !important;
+        }
+
+        .shared-topbar .brand {
+          display: block !important;
+          min-width: 0 !important;
+          overflow: hidden !important;
+        }
+
+        .shared-topbar .brand .title {
+          display: block !important;
+          font-size: 14px !important;
+          line-height: 1.05 !important;
+          font-weight: 800 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        .shared-topbar .brand .subtitle {
+          display: block !important;
+          font-size: 8.4px !important;
+          line-height: 1.05 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          opacity: 0.85 !important;
+        }
+
+        .shared-topbar .desktop-nav {
+          display: none !important;
+        }
+
+        .shared-topbar .mobile-menu-wrap {
+          display: block !important;
+          position: relative !important;
+          top: auto !important;
+          right: auto !important;
+          left: auto !important;
+          transform: none !important;
+          z-index: 1100 !important;
+          flex: 0 0 38px !important;
+        }
+
+        .mobile-menu-btn {
+          width: 38px !important;
+          height: 38px !important;
+          min-height: 38px !important;
+          padding: 0 !important;
+          border: 1px solid rgba(255, 255, 255, 0.28) !important;
+          border-radius: 10px !important;
+          background: rgba(255, 255, 255, 0.10) !important;
+          color: #ffffff !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-size: 24px !important;
+          line-height: 1 !important;
+          box-shadow: none !important;
+        }
+
+        .mobile-menu-panel {
+          position: fixed !important;
+          left: 10px !important;
+          right: 10px !important;
+          top: 62px !important;
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          max-height: calc(100vh - 76px) !important;
+          overflow-y: auto !important;
+          padding: 10px !important;
+          border-radius: 14px !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          box-shadow: 0 18px 46px rgba(15, 23, 42, 0.28) !important;
+          border: 1px solid rgba(15, 23, 42, 0.10) !important;
+          z-index: 1099 !important;
+        }
+
+        .mobile-menu-date {
+          padding: 8px 10px 10px !important;
+          color: #64748b !important;
+          font-size: 12px !important;
+          font-weight: 800 !important;
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08) !important;
+          margin-bottom: 6px !important;
+        }
+
+        .mobile-menu-link {
+          min-height: 44px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          padding: 9px 10px !important;
+          border-radius: 10px !important;
+          color: #0f172a !important;
+          text-decoration: none !important;
+          font-size: 14px !important;
+          font-weight: 850 !important;
+          line-height: 1.2 !important;
+        }
+
+        .mobile-menu-link.active,
+        .mobile-menu-link:hover {
+          background: #eaf2ff !important;
+          color: #0b3f73 !important;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .shared-topbar .brand .title { font-size: 13px !important; }
+        .shared-topbar .brand .subtitle { font-size: 7.6px !important; }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
   function pathText() {
     return window.location.pathname.replaceAll("\\", "/").toLowerCase();
   }
@@ -169,6 +332,7 @@
       const open = !wrap.classList.contains("open");
       closeMobileMenus(wrap);
       wrap.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
     });
   }
 
@@ -181,6 +345,8 @@
   window.SPWT.styleActionButtons = styleActionButtons;
 
   window.SPWT.renderAppHeader = function renderAppHeader(options = {}) {
+    ensureHeaderStyles();
+
     const mount = document.getElementById("spAppHeader");
     if (!mount) return;
 
@@ -208,7 +374,7 @@
         </div>
 
         <div class="mobile-menu-wrap">
-          <button class="mobile-menu-btn" type="button" aria-label="Open navigation menu">☰</button>
+          <button class="mobile-menu-btn" type="button" aria-label="Open navigation menu" aria-expanded="false">☰</button>
           <div class="mobile-menu-panel">
             <div class="mobile-menu-date">${todayText()}</div>
             ${mobileMenuLink("home", "index.html", "🏠", "Home / Production Entry")}
