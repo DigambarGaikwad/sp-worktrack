@@ -1,0 +1,154 @@
+/* Mobile entry layout for phones/tablets.
+   Keeps desktop unchanged and makes production entry usable from Android/iPhone browsers. */
+
+@media (max-width: 900px), (pointer: coarse) and (max-width: 1180px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  .app {
+    min-height: 100vh;
+    height: auto;
+  }
+
+  .content {
+    padding: 10px 10px 90px;
+    gap: 12px;
+    overflow-y: visible;
+  }
+
+  .card {
+    border-radius: 14px;
+  }
+
+  .card-head {
+    padding: 12px 14px;
+  }
+
+  .card-title {
+    font-size: 18px;
+  }
+
+  .grid,
+  .work-grid,
+  .grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .grid,
+  .work-list,
+  .summary {
+    padding: 12px;
+  }
+
+  .tip,
+  .workCheckpointField,
+  .qualityCheckpointField {
+    grid-column: 1 / -1 !important;
+  }
+
+  label {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  select,
+  input[type="date"],
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  input[type="time"] {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  .work-card {
+    padding: 12px;
+  }
+
+  .work-card-head {
+    margin-bottom: 12px;
+  }
+
+  .work-title {
+    font-size: 15px;
+  }
+
+  .work-actions-bottom {
+    padding: 0 12px 12px;
+    gap: 8px;
+  }
+
+  .work-actions-bottom .btn,
+  .bottom-actions .btn {
+    flex: 1;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .summary {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+  }
+
+  .metric-value {
+    font-size: 18px;
+  }
+
+  .checkpoint-list,
+  .workCheckpointList,
+  .qualityCheckpointList,
+  .quality-entry-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .booking-point-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .bottom-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    padding: 10px;
+    margin: 0 -10px;
+    background: linear-gradient(180deg, rgba(238, 241, 245, 0.2), #eef1f5 35%);
+  }
+
+  .app-footer {
+    align-items: flex-start;
+  }
+
+  .footer-top,
+  .footer-bottom {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .content {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .work-actions-bottom {
+    flex-direction: column;
+  }
+
+  .work-actions-bottom .btn,
+  .bottom-actions .btn {
+    width: 100%;
+  }
+}
