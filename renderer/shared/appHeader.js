@@ -1,27 +1,43 @@
 (function () {
   const HEADER_STYLE_ID = "spwt-shared-header-style";
 
+  function ensureViewportMeta() {
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "viewport";
+      document.head.appendChild(meta);
+    }
+    meta.content = "width=device-width, initial-scale=1.0";
+  }
+
   function ensureHeaderStyles() {
     if (document.getElementById(HEADER_STYLE_ID)) return;
 
     const style = document.createElement("style");
     style.id = HEADER_STYLE_ID;
     style.textContent = `
-      .mobile-menu-wrap { display: none; }
-      .mobile-menu-panel { display: none; }
-      .mobile-menu-wrap.open .mobile-menu-panel { display: block; }
+      .shared-topbar .mobile-menu-wrap,
+      .shared-topbar .mobile-menu-panel { display: none !important; }
 
       @media (min-width: 769px) {
-        .shared-topbar { flex-direction: row !important; align-items: center !important; justify-content: space-between !important; }
+        .shared-topbar {
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          overflow: visible !important;
+        }
         .shared-topbar .desktop-nav { display: flex !important; }
-        .shared-topbar .mobile-menu-wrap { display: none !important; }
+        .shared-topbar .mobile-menu-wrap,
         .shared-topbar .mobile-menu-panel { display: none !important; }
       }
 
       @media (max-width: 768px) {
+        #spAppHeader { position: sticky !important; top: 0 !important; z-index: 2000 !important; }
+
         .shared-topbar {
-          height: 56px !important;
-          min-height: 56px !important;
+          height: 54px !important;
+          min-height: 54px !important;
           flex-direction: row !important;
           align-items: center !important;
           justify-content: space-between !important;
@@ -34,15 +50,15 @@
         .shared-topbar .left {
           flex: 1 1 auto !important;
           min-width: 0 !important;
-          max-width: calc(100% - 48px) !important;
-          gap: 8px !important;
+          max-width: calc(100% - 46px) !important;
+          gap: 7px !important;
           overflow: hidden !important;
         }
 
         .shared-topbar .logo {
-          width: 42px !important;
+          width: 38px !important;
           height: 34px !important;
-          flex: 0 0 42px !important;
+          flex: 0 0 38px !important;
           object-fit: contain !important;
         }
 
@@ -56,7 +72,7 @@
           display: block !important;
           font-size: 14px !important;
           line-height: 1.05 !important;
-          font-weight: 800 !important;
+          font-weight: 850 !important;
           white-space: nowrap !important;
           overflow: hidden !important;
           text-overflow: ellipsis !important;
@@ -64,30 +80,24 @@
 
         .shared-topbar .brand .subtitle {
           display: block !important;
-          font-size: 8.4px !important;
+          font-size: 8px !important;
           line-height: 1.05 !important;
           white-space: nowrap !important;
           overflow: hidden !important;
           text-overflow: ellipsis !important;
-          opacity: 0.85 !important;
+          opacity: 0.86 !important;
         }
 
-        .shared-topbar .desktop-nav {
-          display: none !important;
-        }
+        .shared-topbar .desktop-nav { display: none !important; }
 
         .shared-topbar .mobile-menu-wrap {
           display: block !important;
-          position: relative !important;
-          top: auto !important;
-          right: auto !important;
-          left: auto !important;
-          transform: none !important;
-          z-index: 1100 !important;
           flex: 0 0 38px !important;
+          position: relative !important;
+          z-index: 2200 !important;
         }
 
-        .mobile-menu-btn {
+        .shared-topbar .mobile-menu-btn {
           width: 38px !important;
           height: 38px !important;
           min-height: 38px !important;
@@ -104,15 +114,16 @@
           box-shadow: none !important;
         }
 
-        .mobile-menu-panel {
+        .shared-topbar .mobile-menu-panel {
+          display: none !important;
           position: fixed !important;
-          left: 10px !important;
-          right: 10px !important;
-          top: 62px !important;
+          left: 8px !important;
+          right: 8px !important;
+          top: 60px !important;
           width: auto !important;
           min-width: 0 !important;
           max-width: none !important;
-          max-height: calc(100vh - 76px) !important;
+          max-height: calc(100vh - 74px) !important;
           overflow-y: auto !important;
           padding: 10px !important;
           border-radius: 14px !important;
@@ -120,8 +131,10 @@
           color: #0f172a !important;
           box-shadow: 0 18px 46px rgba(15, 23, 42, 0.28) !important;
           border: 1px solid rgba(15, 23, 42, 0.10) !important;
-          z-index: 1099 !important;
+          z-index: 2100 !important;
         }
+
+        .shared-topbar .mobile-menu-wrap.open .mobile-menu-panel { display: block !important; }
 
         .mobile-menu-date {
           padding: 8px 10px 10px !important;
@@ -155,7 +168,7 @@
 
       @media (max-width: 360px) {
         .shared-topbar .brand .title { font-size: 13px !important; }
-        .shared-topbar .brand .subtitle { font-size: 7.6px !important; }
+        .shared-topbar .brand .subtitle { font-size: 7.4px !important; }
       }
     `;
 
@@ -168,14 +181,12 @@
 
   function getBasePath() {
     const p = pathText();
-
     if (p.includes("/renderer/dashboard_v2/")) return "../../";
     if (p.includes("/renderer/info/")) return "../../";
     if (p.includes("/renderer/admin/")) return "../../";
     if (p.includes("/renderer/team/")) return "../../";
     if (p.includes("/renderer/capacity/")) return "../../";
     if (p.includes("/renderer/")) return "../";
-
     return "";
   }
 
@@ -194,17 +205,12 @@
 
   function isActive(page) {
     const p = pathText();
-
-    if (page === "home") {
-      return p.endsWith("/index.html") || p.endsWith("/") || !p.includes("/renderer/");
-    }
-
+    if (page === "home") return p.endsWith("/index.html") || p.endsWith("/") || !p.includes("/renderer/");
     if (page === "machine") return p.includes("/renderer/dashboard_v2/");
     if (page === "team") return p.includes("/renderer/team/");
     if (page === "capacity") return p.includes("/renderer/capacity/");
     if (page === "info") return p.includes("/renderer/info/");
     if (page === "admin") return p.includes("/renderer/admin/");
-
     return false;
   }
 
@@ -345,6 +351,7 @@
   window.SPWT.styleActionButtons = styleActionButtons;
 
   window.SPWT.renderAppHeader = function renderAppHeader(options = {}) {
+    ensureViewportMeta();
     ensureHeaderStyles();
 
     const mount = document.getElementById("spAppHeader");
