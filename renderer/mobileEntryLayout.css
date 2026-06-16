@@ -15,6 +15,118 @@
     height: auto;
   }
 
+  .shared-topbar {
+    height: 58px !important;
+    min-height: 58px !important;
+    padding: 0 10px !important;
+    gap: 8px;
+    flex-wrap: nowrap !important;
+    position: relative;
+  }
+
+  .shared-topbar .left {
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 8px !important;
+    overflow: hidden;
+  }
+
+  .shared-topbar .logo {
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 44px;
+  }
+
+  .shared-topbar .brand {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .shared-topbar .brand .title {
+    font-size: 16px !important;
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shared-topbar .brand .subtitle {
+    font-size: 10px !important;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .shared-topbar .desktop-nav {
+    display: none !important;
+  }
+
+  .mobile-menu-wrap {
+    display: block;
+    flex: 0 0 auto;
+    position: relative;
+  }
+
+  .mobile-menu-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 900;
+  }
+
+  .mobile-menu-panel {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 52px;
+    z-index: 200;
+    min-width: 238px;
+    padding: 10px;
+    border-radius: 14px;
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.24);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+  }
+
+  .mobile-menu-wrap.open .mobile-menu-panel {
+    display: block;
+  }
+
+  .mobile-menu-date {
+    padding: 8px 10px 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .mobile-menu-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .mobile-menu-link.active,
+  .mobile-menu-link:hover {
+    background: #f1f5f9;
+    color: #0b3f73;
+  }
+
   .content {
     padding: 10px 10px 90px;
     gap: 12px;
@@ -130,6 +242,12 @@
   .footer-top,
   .footer-bottom {
     flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 901px) and (hover: hover) {
+  .mobile-menu-wrap {
+    display: none;
   }
 }
 
