@@ -218,246 +218,117 @@
   box-shadow: 0 5px 10px rgba(15, 23, 42, 0.12) !important;
 }
 
-.sp-action-btn:focus-visible {
-  outline: 3px solid rgba(59, 130, 246, 0.28) !important;
-  outline-offset: 2px !important;
-}
+/* ===================== COMMON MOBILE HEADER ===================== */
+/* Keep the same one-line header and right-side menu on every page that loads appShell.css. */
 
-.sp-action-btn:disabled,
-.sp-action-btn[aria-disabled="true"] {
-  opacity: 0.55 !important;
-  cursor: not-allowed !important;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-.sp-action-primary {
-  background: var(--sp-action-primary) !important;
-}
-
-.sp-action-primary:hover {
-  background: var(--sp-action-primary-hover) !important;
-}
-
-.sp-action-send {
-  background: var(--sp-action-send) !important;
-}
-
-.sp-action-send:hover {
-  background: var(--sp-action-send-hover) !important;
-}
-
-.sp-action-success {
-  background: var(--sp-action-success) !important;
-}
-
-.sp-action-success:hover {
-  background: var(--sp-action-success-hover) !important;
-}
-
-.sp-action-danger {
-  background: var(--sp-action-danger) !important;
-}
-
-.sp-action-danger:hover {
-  background: var(--sp-action-danger-hover) !important;
-}
-
-.sp-action-edit {
-  background: var(--sp-action-edit) !important;
-}
-
-.sp-action-edit:hover {
-  background: var(--sp-action-edit-hover) !important;
-}
-
-.sp-action-neutral {
-  background: var(--sp-action-neutral) !important;
-  color: #111827 !important;
-}
-
-.sp-action-neutral:hover {
-  background: var(--sp-action-neutral-hover) !important;
-}
-
-.quality-report-actions .sp-action-btn {
-  min-height: 32px !important;
-  padding: 7px 11px !important;
-}
-
-/* ===================== SHARED MODALS ===================== */
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  z-index: 9999;
-}
-
-.modal {
-  width: 98vw;
-  max-width: 1200px;
-  max-height: 90vh;
-  background: #ffffff;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: #0f172a;
-  color: #ffffff;
-}
-
-.modal-title {
-  font-weight: 800;
-  font-size: 16px;
-}
-
-.icon-btn {
-  border: none;
-  background: transparent;
-  color: #ffffff;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.modal-body {
-  padding: 16px;
-  overflow: auto;
-}
-
-.sp-admin-placeholder {
-  padding: 18px;
-  line-height: 1.6;
-}
-
-.sp-admin-placeholder h2 {
-  margin: 0 0 8px;
-}
-
-/* ===================== ADMIN FULL PAGE ===================== */
-
-.admin-page-panel,
-.admin-page-card {
-  max-width: 1560px;
-  margin: 0 auto;
-}
-
-.admin-page-card .card-head {
-  background: #ffffff;
-}
-
-.admin-page-card .card-title {
-  font-size: 24px;
-  font-weight: 900;
-}
-
-.admin-page-body {
-  padding: 20px;
-}
-
-.admin-page-body .admin-login {
-  max-width: 520px;
-  margin: 35px auto;
-  background: #ffffff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 18px;
-  padding: 24px;
-  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.10);
-}
-
-.admin-page-body .admin-login .field {
-  margin-bottom: 14px;
-}
-
-.admin-page-body .admin-login label {
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.admin-page-body .admin-login input {
-  width: 100%;
-  height: 44px;
-  font-size: 16px;
-}
-
-.admin-page-body .admin-login .row {
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-
-.admin-page-body .admin-panel {
-  width: 100%;
-}
-
-.admin-page-body .tabs {
-  position: sticky;
-  top: 80px;
-  z-index: 30;
-  background: #ffffff;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.admin-page-body .tab-page {
-  padding-top: 16px;
-}
-
-.admin-page-body hr {
-  margin: 18px 0;
-  border: none;
-  border-top: 1px solid rgba(15, 23, 42, 0.10);
-}
-
-.admin-page-body > .row-between:last-child,
-.admin-page-body .admin-panel > .row-between:last-child {
-  position: sticky;
-  bottom: 0;
-  z-index: 35;
-  background: linear-gradient(180deg, rgba(255,255,255,0.85), #fff 45%);
-  border-top: 1px solid rgba(15,23,42,0.12);
-  padding: 12px 8px 8px;
-  margin-top: 12px;
-}
-
-.admin-page-body .admin-floating-actions {
-  position: sticky;
-  bottom: 62px;
-  z-index: 25;
-}
-
-/* ===================== RESPONSIVE ===================== */
-
-@media (max-width: 800px) {
-  .shared-topbar {
-    height: auto;
-    min-height: 80px;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 16px;
+@media (min-width: 901px) and (pointer: fine) {
+  .shared-topbar .desktop-nav {
+    display: flex !important;
   }
 
-  .shared-topbar .right {
-    width: 100%;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+  .shared-topbar .mobile-menu-wrap,
+  .shared-topbar .mobile-menu-panel {
+    display: none !important;
+  }
+}
+
+@media (max-width: 900px), (pointer: coarse) and (max-width: 1180px) {
+  .shared-topbar {
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 8px !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow: visible !important;
+    position: relative !important;
+  }
+
+  .shared-topbar .left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 48px) !important;
+    gap: 6px !important;
+    overflow: hidden !important;
+  }
+
+  .shared-topbar .logo {
+    width: 34px !important;
+    height: 34px !important;
+    flex: 0 0 34px !important;
+    object-fit: contain !important;
+  }
+
+  .shared-topbar .brand {
+    display: block !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .shared-topbar .brand .title {
+    display: block !important;
+    font-size: 13px !important;
+    line-height: 1.05 !important;
+    font-weight: 800 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .shared-topbar .brand .subtitle {
+    display: block !important;
+    font-size: 7.8px !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    opacity: 0.85 !important;
+  }
+
+  .shared-topbar .desktop-nav {
+    display: none !important;
+  }
+
+  .shared-topbar .mobile-menu-wrap {
+    display: block !important;
+    position: absolute !important;
+    right: 8px !important;
+    top: 50% !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+    z-index: 300 !important;
+  }
+
+  .shared-topbar .mobile-menu-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    border-radius: 10px !important;
+    font-size: 22px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .shared-topbar .mobile-menu-panel {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: 58px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-height: calc(100vh - 72px) !important;
+    overflow-y: auto !important;
+    z-index: 299 !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .shared-topbar .brand .title {
+    font-size: 12px !important;
+  }
+
+  .shared-topbar .brand .subtitle {
+    font-size: 7px !important;
   }
 }
