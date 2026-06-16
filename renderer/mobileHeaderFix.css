@@ -1,0 +1,102 @@
+/* Mobile header correction: keep logo/title visible and menu on right. */
+
+@media (max-width: 900px), (pointer: coarse) and (max-width: 1180px) {
+  .shared-topbar {
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 8px !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow: visible !important;
+    position: relative !important;
+  }
+
+  .shared-topbar .left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 48px) !important;
+    gap: 6px !important;
+    overflow: hidden !important;
+  }
+
+  .shared-topbar .logo {
+    width: 34px !important;
+    height: 34px !important;
+    flex: 0 0 34px !important;
+    object-fit: contain !important;
+  }
+
+  .shared-topbar .brand {
+    display: block !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .shared-topbar .brand .title {
+    display: block !important;
+    font-size: 13px !important;
+    line-height: 1.05 !important;
+    font-weight: 800 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .shared-topbar .brand .subtitle {
+    display: block !important;
+    font-size: 7.8px !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    opacity: 0.85 !important;
+  }
+
+  .shared-topbar .desktop-nav {
+    display: none !important;
+  }
+
+  .mobile-menu-wrap {
+    display: block !important;
+    position: absolute !important;
+    right: 8px !important;
+    top: 50% !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+    z-index: 300 !important;
+  }
+
+  .mobile-menu-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    border-radius: 10px !important;
+    font-size: 22px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .mobile-menu-panel {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: 58px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-height: calc(100vh - 72px) !important;
+    overflow-y: auto !important;
+    z-index: 299 !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .shared-topbar .brand .title {
+    font-size: 12px !important;
+  }
+
+  .shared-topbar .brand .subtitle {
+    font-size: 7px !important;
+  }
+}
