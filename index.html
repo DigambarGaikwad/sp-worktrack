@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="renderer/shared/appShell.css" />
   <link rel="stylesheet" href="renderer/entryUi.css" />
   <link rel="stylesheet" href="renderer/mobileEntryLayout.css" />
+  <link rel="stylesheet" href="renderer/mobileHeaderFix.css" />
 </head>
 
 <body>
@@ -58,7 +59,7 @@
 
           <div class="field">
             <label>Loss Remark</label>
-            <input type="text" id="lossRemark" placeholder="Optional details..." />
+            <input type="text" id="lossRemark" placeholder="Remarks for major loss" />
           </div>
 
           <div class="tip">
@@ -67,135 +68,51 @@
         </div>
       </div>
 
-      <div class="card">
-        <div id="workContainer" class="work-list"></div>
-
-        <div class="work-actions-bottom">
-          <button class="btn orange" id="addWorkBtnBottom" type="button">+ Add Work</button>
-          <button class="btn grey" id="deleteLastBtn" type="button">Delete Last Work</button>
-        </div>
-      </div>
+      <div id="workContainer" class="work-list"></div>
 
       <div class="card">
         <div class="card-head">
           <div class="card-title">Shift Summary</div>
         </div>
         <div class="summary">
-          <div class="metric">
+          <div>
             <div class="metric-label">Shift Available</div>
-            <div class="metric-value" id="availableMin">0 min</div>
+            <div class="metric-value"><span id="shiftAvailable">0</span> min</div>
           </div>
-          <div class="metric">
+          <div>
             <div class="metric-label">Utilized Time</div>
-            <div class="metric-value" id="utilizedMin">0 min</div>
+            <div class="metric-value"><span id="utilizedTime">0</span> min</div>
           </div>
-          <div class="metric">
+          <div>
             <div class="metric-label">Remaining Time</div>
-            <div class="metric-value" id="remainingMin">0 min</div>
+            <div class="metric-value"><span id="remainingTime">0</span> min</div>
           </div>
-          <div class="metric">
+          <div>
             <div class="metric-label">Productivity</div>
-            <div class="metric-value" id="productivityPct">0%</div>
+            <div class="metric-value"><span id="productivity">0</span>%</div>
           </div>
         </div>
       </div>
 
       <div class="bottom-actions">
-        <button class="btn green" id="submitBtn" type="button">Submit</button>
-        <button class="btn grey" id="saveBtn" type="button">Save Local</button>
+        <button class="btn green" id="submitBtn">Submit</button>
+        <button class="btn green" id="saveLocalBtn">Save Local</button>
       </div>
 
       <footer class="app-footer">
         <div class="footer-top">
-          <span class="footer-title">SP WorkTrack</span>
-          <span class="footer-separator">|</span>
-          <span class="footer-subtitle">Production & Performance Management System</span>
+          <span>SP WorkTrack</span>
+          <span>Production &amp; Performance Management System</span>
         </div>
         <div class="footer-bottom">
-          <span class="footer-developed">Developed by Digambar Gaikwad</span>
-          <span class="footer-separator">|</span>
-          <span class="footer-copyright">© 2026 Sopan Process Technologies</span>
+          <span>Developed by Digambar Gaikwad</span>
+          <span>© 2026 Sopan Process Technologies</span>
         </div>
       </footer>
     </div>
   </div>
 
-  <div class="summary-screen hidden" id="summaryScreen">
-    <div class="summary-wrap">
-      <div class="summary-top">
-        <div>
-          <div class="summary-title">Submission Summary</div>
-          <div class="summary-sub" id="sumMetaLine">—</div>
-        </div>
-        <div class="summary-actions">
-          <button class="btn grey" id="backToEntryBtn" type="button">Back</button>
-          <button class="btn green" id="newEntryBtn" type="button">+ New Entry</button>
-        </div>
-      </div>
-
-      <div class="summary-cards">
-        <div class="sum-card">
-          <div class="sum-card-label">Shift Available</div>
-          <div class="sum-card-val" id="sumShiftAvail">0 min</div>
-        </div>
-        <div class="sum-card">
-          <div class="sum-card-label">Utilized</div>
-          <div class="sum-card-val" id="sumUtilized">0 min</div>
-        </div>
-        <div class="sum-card">
-          <div class="sum-card-label">Remaining</div>
-          <div class="sum-card-val" id="sumRemaining">0 min</div>
-        </div>
-        <div class="sum-card">
-          <div class="sum-card-label">Productivity</div>
-          <div class="sum-card-val" id="sumProductivity">0%</div>
-        </div>
-      </div>
-
-      <div class="sum-table-wrap">
-        <div class="sum-table-title">Work Details</div>
-        <div class="sum-table" id="sumWorksTable"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop hidden" id="aboutModal">
-    <div class="modal">
-      <div class="modal-head">
-        <div class="modal-title">About SP WorkTrack</div>
-        <button class="icon-btn" id="aboutCloseBtn" type="button">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="about-content">
-          <strong>SP WorkTrack v 2.0</strong><br/>
-          Production & Performance Management System<br/><br/>
-
-          <strong>Purpose:</strong><br/>
-          To digitally capture and monitor daily production work in a simple and structured way.
-
-          <br/><br/>
-          <strong>Key Features:</strong>
-          <ul>
-            <li>Production Entry Tracking</li>
-            <li>Machine Category Mapping</li>
-            <li>Department & Sub Work Control</li>
-            <li>Rework Tracking with Root Area</li>
-            <li>Summary Dashboard</li>
-            <li>Google Sheets Integration</li>
-            <li>Real-time multi-device synchronization (simultaneous production entry)</li>
-          </ul>
-
-          <br/>
-          Developed by Digambar Gaikwad<br/>
-          © 2026 Sopan Process Technologies
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="renderer/config.js"></script>
-  <script src="renderer/dbOnlyDataPatch.js"></script>
   <script src="renderer/shared/appHeader.js"></script>
   <script>
     window.SPWT.renderAppHeader({
@@ -203,10 +120,15 @@
       subtitle: "Production & Performance Management System"
     });
   </script>
+  <script src="renderer/dbOnlyDataPatch.js"></script>
   <script src="renderer/app.js"></script>
-  <script src="renderer/dbModeEntryGuard.js"></script>
-  <script src="renderer/entryUiPatch.js"></script>
+  <script src="renderer/entryDb.js"></script>
+  <script src="renderer/entryDbPatch.js"></script>
+  <script src="renderer/entryMobileSubmitPatch.js"></script>
+  <script src="renderer/qualityDbPatch.js"></script>
+  <script src="renderer/workCheckpointDbPatch.js"></script>
+  <script src="renderer/entryLossBridgePatch.js"></script>
   <script src="renderer/adminControlsPatch.js"></script>
-  <script src="renderer/backupControlsPatch.js"></script>
+  <script src="renderer/entryBookingActualPatch.js"></script>
 </body>
 </html>
