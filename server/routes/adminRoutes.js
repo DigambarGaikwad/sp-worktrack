@@ -215,7 +215,7 @@ router.get("/performance-comment", async (req, res) => {
 
 router.post("/performance-comments", async (req, res) => {
   try {
-    requireAdminPermission(req, "adminControls");
+    requireAdminPermission(req, "performanceComments");
     const data = await savePerformanceComment(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
