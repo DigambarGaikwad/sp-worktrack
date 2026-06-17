@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
@@ -81,28 +81,66 @@
         <div class="summary">
           <div>
             <div class="metric-label">Shift Available</div>
-            <div class="metric-value"><span id="shiftAvailable">0</span> min</div>
+            <div class="metric-value"><span id="availableMin">0 min</span></div>
           </div>
           <div>
             <div class="metric-label">Utilized Time</div>
-            <div class="metric-value"><span id="utilizedTime">0</span> min</div>
+            <div class="metric-value"><span id="utilizedMin">0 min</span></div>
           </div>
           <div>
             <div class="metric-label">Remaining Time</div>
-            <div class="metric-value"><span id="remainingTime">0</span> min</div>
+            <div class="metric-value"><span id="remainingMin">0 min</span></div>
           </div>
           <div>
             <div class="metric-label">Productivity</div>
-            <div class="metric-value"><span id="productivity">0</span>%</div>
+            <div class="metric-value"><span id="productivityPct">0%</span></div>
           </div>
         </div>
       </div>
 
       <div class="bottom-actions">
         <button class="btn green" id="submitBtn">Submit</button>
-        <button class="btn green" id="saveLocalBtn">Save Local</button>
       </div>
 
+      <!-- SUMMARY SCREEN (FULL PAGE) -->
+      <div class="summary-screen hidden" id="summaryScreen">
+        <div class="summary-wrap">
+          <div class="summary-top">
+            <div>
+              <div class="summary-title">Submission Summary</div>
+              <div class="summary-sub" id="sumMetaLine">-</div>
+            </div>
+            <div class="summary-actions">
+              <button class="btn grey" id="backToEntryBtn" type="button">Back</button>
+              <button class="btn green" id="newEntryBtn" type="button">+ New Entry</button>
+            </div>
+          </div>
+
+          <div class="summary-cards">
+            <div class="sum-card">
+              <div class="sum-card-label">Shift Available</div>
+              <div class="sum-card-val" id="sumShiftAvail">0 min</div>
+            </div>
+            <div class="sum-card">
+              <div class="sum-card-label">Utilized</div>
+              <div class="sum-card-val" id="sumUtilized">0 min</div>
+            </div>
+            <div class="sum-card">
+              <div class="sum-card-label">Remaining</div>
+              <div class="sum-card-val" id="sumRemaining">0 min</div>
+            </div>
+            <div class="sum-card">
+              <div class="sum-card-label">Productivity</div>
+              <div class="sum-card-val" id="sumProductivity">0%</div>
+            </div>
+          </div>
+
+          <div class="sum-table-wrap">
+            <div class="sum-table-title">Work Details</div>
+            <div class="sum-table" id="sumWorksTable"></div>
+          </div>
+        </div>
+      </div>
       <footer class="app-footer">
         <div class="footer-top">
           <span>SP WorkTrack</span>
@@ -110,7 +148,7 @@
         </div>
         <div class="footer-bottom">
           <span>Developed by Digambar Gaikwad</span>
-          <span>© 2026 Sopan Process Technologies</span>
+          <span>Â© 2026 Sopan Process Technologies</span>
         </div>
       </footer>
     </div>
@@ -135,3 +173,8 @@
   <script src="renderer/entryBookingActualPatch.js"></script>
 </body>
 </html>
+
+
+
+
+

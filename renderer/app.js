@@ -1,4 +1,4 @@
-// renderer/app.js (STABLE BUILD - prevents double listeners + prevents multi popups + smooth typing)
+﻿// renderer/app.js (STABLE BUILD - prevents double listeners + prevents multi popups + smooth typing)
 
 // ===================== DATA STATE =====================
 let machines = [];
@@ -241,10 +241,7 @@ function wireButtonsOnce() {
 
   const delLast = document.getElementById("deleteLastBtn");
   if (delLast) delLast.onclick = () => deleteLastWorkCard();
-
-  // Save/Submit
-  const saveBtn = document.getElementById("saveBtn");
-  if (saveBtn) saveBtn.onclick = () => saveLocal();
+  // Submit
 
   const submitBtn = document.getElementById("submitBtn");
   if (submitBtn) submitBtn.onclick = () => submit();
@@ -320,7 +317,6 @@ function wireButtonsOnce() {
 
   const newEntryBtn = document.getElementById("newEntryBtn");
   if (newEntryBtn) newEntryBtn.onclick = () => {
-    localStorage.removeItem("spwt_last_save");
     window.location.reload();
   };
 }
@@ -703,8 +699,8 @@ function getCheckedBookingPoints(card) {
     .filter(x => x.name && Number(x.bookedTime || 0) > 0);
 }
 
-// ✅ Get completed booking points from backend
-// ✅ Get completed/partial booking points from DB
+// âœ… Get completed booking points from backend
+// âœ… Get completed/partial booking points from DB
 async function getCompletedBookingPointsFromSheet(machine, machineCategory, department, subWork) {
   try {
     const apiBaseUrl = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
@@ -869,7 +865,7 @@ function addWorkCard(scroll = true) {
           ${machines.filter(m => m.active !== false).map(m => {
             const typeObj = (adminOverrides?.machineTypes || machineTypes || []).find(t => String(t.id) === String(m.type));
             const typeName = typeObj?.name || m.type || "";
-            const display = typeName ? `${m.name} • ${typeName}` : m.name;
+            const display = typeName ? `${m.name} â€¢ ${typeName}` : m.name;
             return `<option value="${escapeAttr(m.name)}">${escapeHtml(display)}</option>`;
           }).join("")}
         </select>
@@ -1037,7 +1033,7 @@ function attachCardEvents(card) {
   const subList = catalog?.subWorks?.[deptName] || [];
   const subObj = subList.find(s => s.name === selectedSubWork);
 
-  // 🔥 NEW: Booking Points (priority)
+  // ðŸ”¥ NEW: Booking Points (priority)
   renderBookingPoints(card, subObj);
 
   // Existing logic (keep)
@@ -1185,7 +1181,7 @@ async function renderBookingPoints(card, subObj) {
           : Number(configuredStd || st.standardTime || 0);
 
       const labelText = isDone
-        ? `${name} — Completed`
+        ? `${name} â€” Completed`
         : isPartial
           ? `${name} (${remaining.toFixed(1)} min remaining / ${Number(st.standardTime || configuredStd || 0)} min)`
           : `${name} (${Number(configuredStd || 0)} min)`;
@@ -1345,12 +1341,6 @@ function updateSummary() {
   }
 }
 
-// ===================== SAVE LOCAL =====================
-async function saveLocal() {
-  const data = buildPayload();
-  localStorage.setItem("spwt_last_save", JSON.stringify(data));
-  alert("✅ Saved locally.");
-}
 
 // ===================== BUILD PAYLOAD =====================
 function buildPayload() {
@@ -1702,23 +1692,21 @@ async function submit() {
   isSubmitting = true;
 
   const submitBtn = document.getElementById("submitBtn");
-  const saveBtn = document.getElementById("saveBtn");
 
   try {
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Submitting..."; }
-    if (saveBtn) saveBtn.disabled = true;
 
     const payload = buildPayload();
     const { errs, warnings } = validateEntryPayload(payload);
 
     if (errs.length > 0) {
-      showEntryMessage("Please fix:\n• " + errs.join("\n• "), "error");
+      showEntryMessage("Please fix:\nâ€¢ " + errs.join("\nâ€¢ "), "error");
       focusFirstEntryError();
       return;
     }
 
     if (warnings.length > 0) {
-      showEntryMessage("Warning:\n• " + warnings.join("\n• ") + "\n\nPress Submit again if everything is correct.", "warn");
+      showEntryMessage("Warning:\nâ€¢ " + warnings.join("\nâ€¢ ") + "\n\nPress Submit again if everything is correct.", "warn");
       const now = Date.now();
       if (!window.__spwtLastWarningSubmit || now - window.__spwtLastWarningSubmit > 10000) {
         window.__spwtLastWarningSubmit = now;
@@ -1862,7 +1850,6 @@ async function submit() {
   } finally {
     isSubmitting = false;
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Submit"; }
-    if (saveBtn) saveBtn.disabled = false;
   }
 }
 // ===================== ADMIN MODAL =====================
@@ -1889,7 +1876,7 @@ function adminLogin() {
   const real = adminOverrides?.admin?.pin || "1234";
 
   if (pin !== real) {
-    alert("❌ Wrong PIN");
+    alert("âŒ Wrong PIN");
     return;
   }
 
@@ -1923,11 +1910,11 @@ function switchAdminTab(tabId) {
 
 function mustAdmin() {
   if (!isAdminLoggedIn) {
-    alert("⚠ Admin login required.");
+    alert("âš  Admin login required.");
     return false;
   }
   if (!adminOverrides) {
-    alert("⚠ Admin data not loaded. Close & open settings again.");
+    alert("âš  Admin data not loaded. Close & open settings again.");
     return false;
   }
 
@@ -2843,7 +2830,7 @@ async function adminSaveChanges() {
     const cleanAdminOverrides = getCleanAdminOverridesForSave();
 const res = await window.api.saveAdminOverrides(cleanAdminOverrides);
     if (!res?.ok) {
-      alert("❌ Save failed: " + (res?.error || "Unknown"));
+      alert("âŒ Save failed: " + (res?.error || "Unknown"));
       return;
     }
     // Sync admin data to Google Sheet also
@@ -2858,12 +2845,12 @@ if (webAppUrl && secret && window.api.syncAdminOverridesToSheets) {
 });
 
   if (!syncRes?.ok) {
-    alert("⚠ Local saved, but Google sync failed: " + (syncRes?.error || "Unknown"));
+    alert("âš  Local saved, but Google sync failed: " + (syncRes?.error || "Unknown"));
     return;
   }
 }
 
-    showEntryMessage("✅ Admin changes saved. Admin screen is still open; use ✕ Close when finished.", "success");
+    showEntryMessage("âœ… Admin changes saved. Admin screen is still open; use âœ• Close when finished.", "success");
 
     // Reload runtime data and keep admin screen open for multiple changes
     await loadData();
@@ -2872,7 +2859,7 @@ if (webAppUrl && secret && window.api.syncAdminOverridesToSheets) {
     switchAdminTab(activeTab);
   } catch (e) {
     console.error(e);
-    alert("❌ Save error: " + (e?.message || e));
+    alert("âŒ Save error: " + (e?.message || e));
   } finally {
     isAdminSaving = false;
     if (btn) { btn.disabled = false; btn.textContent = "Save Changes"; }
@@ -2892,11 +2879,11 @@ async function adminSavePin() {
   adminOverrides.admin.pin = p1;
 
   const res = await window.api.saveAdminOverrides(adminOverrides);
-  if (!res?.ok) return alert("❌ Save failed: " + (res?.error || "Unknown"));
+  if (!res?.ok) return alert("âŒ Save failed: " + (res?.error || "Unknown"));
 
   document.getElementById("newPin1").value = "";
   document.getElementById("newPin2").value = "";
-  alert("✅ PIN updated.");
+  alert("âœ… PIN updated.");
 }
 
 // ===================== TYPE HELPERS =====================
@@ -2975,7 +2962,7 @@ function showSummaryScreen(payload){
   const dt = payload.workDate || "";
   const emp = `${payload.teamMemberId || ""} - ${payload.teamMemberName || ""}`.trim();
   const sh = `${payload.shiftName || ""} (${payload.shiftStart || ""}-${payload.shiftEnd || ""})`.trim();
-  if (meta) meta.textContent = `${dt} • ${emp} • ${sh}`;
+  if (meta) meta.textContent = `${dt} â€¢ ${emp} â€¢ ${sh}`;
 
   document.getElementById("sumShiftAvail").textContent = `${Number(payload.summary?.shiftAvailable || 0)} min`;
   document.getElementById("sumUtilized").textContent   = `${Number(payload.summary?.utilized || 0)} min`;
@@ -3053,8 +3040,6 @@ function clearEntryAndStartNew(){
   if (workTypeTop) workTypeTop.value = "Normal";
 
   resetWorkCards(1);
-
-  localStorage.removeItem("spwt_last_save");
   updateSummaryDebounced();
 
   window.scrollTo({ top: 0, behavior: "smooth" });
