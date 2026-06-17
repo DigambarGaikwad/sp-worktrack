@@ -5,6 +5,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+require("./services/adminAccessPermissionExtensions");
 const employeesRoutes = require("./routes/employeesRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const adminRecoveryRoutes = require("./routes/adminRecoveryRoutes");
@@ -49,5 +50,3 @@ app.listen(PORT, () => {
   console.log(`SP WorkTrack API running on http://localhost:${PORT}`);
   startBackupScheduler();
 });
-
-
