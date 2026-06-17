@@ -251,6 +251,18 @@ function normalize(body = {}) {
   };
 }
 
+function recordIdFrom(body = {}) {
+  return clean(
+    body.id ||
+    body._id ||
+    body.record_id ||
+    body.recordId ||
+    body.planned_absence_id ||
+    body.plannedAbsenceId ||
+    body.absenceId
+  );
+}
+
 function isBlankRecord(item) {
   return !clean(item.emp_code) &&
     !clean(item.emp_name) &&
@@ -341,13 +353,14 @@ async function savePlannedAbsence(body = {}) {
   await ensureCollection();
 
   const data = normalize(body);
+  const recordId = recordIdFrom(body);
   if (!data.emp_code && !data.emp_name) throw new Error("Employee is required for planned absence.");
   if (!data.from_date) throw new Error("From date is required for planned absence.");
   if (!data.to_date) data.to_date = data.from_date;
 
-  await assertNoDuplicate(data, body.id);
+  await assertNoDuplicate(data, recordId);
 
-  if (clean(body.id)) return updateRecord(COLLECTION, clean(body.id), data);
+  if (recordId) return updateRecord(COLLECTION, recordId, data);
   return createRecord(COLLECTION, data);
 }
 
