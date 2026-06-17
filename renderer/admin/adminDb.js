@@ -9,6 +9,8 @@
   const REQUEST_TIMEOUT_MS = 12000;
 
   const $ = (id) => document.getElementById(id);
+  let plannedAbsenceItems = [];
+  let editingPlannedAbsenceId = "";
 
   document.addEventListener("DOMContentLoaded", function () {
     if (DATA_SOURCE !== "db") return;
@@ -151,6 +153,10 @@
       .sort((a, b) => (a.empName || a.empCode).localeCompare(b.empName || b.empCode));
   }
 
+  function plannedEmployeeValue(item = {}) {
+    return `${cleanForValue(item.emp_code || item.empCode)}|${cleanForValue(item.emp_name || item.empName)}|${cleanForValue(item.department)}`;
+  }
+
   function populatePlannedAbsentEmployeeSelect() {
     const select = $("plannedAbsentEmployee");
     if (!select) return;
@@ -165,6 +171,25 @@
     }).join("");
 
     if (current) select.value = current;
+  }
+
+  function ensurePlannedEmployeeOption(item = {}) {
+    const select = $("plannedAbsentEmployee");
+    if (!select) return;
+
+    const value = plannedEmployeeValue(item);
+    if (!value.replace(/\|/g, "")) return;
+
+    const exists = Array.from(select.options).some((option) => option.value === value);
+    if (!exists) {
+      const code = cleanForValue(item.emp_code || item.empCode);
+      const name = cleanForValue(item.emp_name || item.empName);
+      const dept = cleanForValue(item.department);
+      const label = `${code ? code + " - " : ""}${name || "Unknown"}${dept ? " (" + dept + ")" : ""}`;
+      select.insertAdjacentHTML("beforeend", `<option value="${escapeAttr(value)}">${escapeHtml(label)}</option>`);
+    }
+
+    select.value = value;
   }
 
   function parseEmployeeOption(value) {
@@ -182,6 +207,7 @@
     try {
       const body = await requestJson("/api/admin/planned-absences", { method: "GET" });
       const items = Array.isArray(body.items) ? body.items : [];
+      plannedAbsenceItems = items;
       if (count) count.textContent = `${items.length} Record${items.length === 1 ? "" : "s"}`;
 
       list.innerHTML = items.length ? items.map(renderPlannedAbsentRow).join("") : `
@@ -191,6 +217,12 @@
           <div class="small-hint">Add one above after creating the PocketBase collection.</div>
         </div>
       `;
+
+      list.querySelectorAll(".edit-planned-absent-btn").forEach((btn) => {
+        btn.onclick = function () {
+          editPlannedAbsence(btn.dataset.id);
+        };
+      });
 
       list.querySelectorAll(".delete-planned-absent-btn").forEach((btn) => {
         btn.onclick = async function () {
@@ -217,10 +249,33 @@
         </div>
         <div class="planned-row-actions">
           <span class="planned-status">${escapeHtml(item.status || "Planned")}</span>
+          <button class="btn grey edit-planned-absent-btn" type="button" data-id="${escapeAttr(item.id || "")}">Edit</button>
           <button class="btn red delete-planned-absent-btn" type="button" data-id="${escapeAttr(item.id || "")}">Delete</button>
         </div>
       </div>
     `;
+  }
+
+  function editPlannedAbsence(id) {
+    const item = plannedAbsenceItems.find((row) => String(row.id || "") === String(id || ""));
+    if (!item?.id) {
+      showAdminDbToast("Planned absent record not found. Refresh and try again.", "error");
+      return;
+    }
+
+    populatePlannedAbsentEmployeeSelect();
+    ensurePlannedEmployeeOption(item);
+
+    editingPlannedAbsenceId = item.id;
+    if ($("plannedAbsentFrom")) $("plannedAbsentFrom").value = item.from_date || "";
+    if ($("plannedAbsentTo")) $("plannedAbsentTo").value = item.to_date || item.from_date || "";
+    if ($("plannedAbsentReason")) $("plannedAbsentReason").value = item.reason || "";
+    if ($("plannedAbsentRemark")) $("plannedAbsentRemark").value = item.remark || "";
+
+    const saveBtn = $("savePlannedAbsentBtn");
+    if (saveBtn) saveBtn.textContent = "Update Planned Absent";
+    showAdminDbToast("Editing planned absent record. Change details and click Update.", "success");
+    $("plannedAbsentEmployee")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function savePlannedAbsence() {
@@ -229,6 +284,7 @@
     const toDate = $("plannedAbsentTo")?.value || fromDate;
     const reason = $("plannedAbsentReason")?.value || "";
     const remark = $("plannedAbsentRemark")?.value || "";
+    const isUpdate = Boolean(editingPlannedAbsenceId);
 
     try {
       if (!selected.empCode && !selected.empName) throw new Error("Select employee.");
@@ -238,6 +294,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingPlannedAbsenceId || undefined,
           empCode: selected.empCode,
           empName: selected.empName,
           department: selected.department,
@@ -249,7 +306,7 @@
         })
       });
 
-      showAdminDbToast("Planned absent saved ✅", "success");
+      showAdminDbToast(isUpdate ? "Planned absent updated ✅" : "Planned absent saved ✅", "success");
       clearPlannedAbsentForm();
       await loadPlannedAbsences();
     } catch (err) {
@@ -265,6 +322,7 @@
 
     try {
       await requestJson(`/api/admin/planned-absences/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (editingPlannedAbsenceId === id) clearPlannedAbsentForm();
       showAdminDbToast("Planned absent deleted ✅", "success");
       await loadPlannedAbsences();
     } catch (err) {
@@ -274,11 +332,15 @@
   }
 
   function clearPlannedAbsentForm() {
+    editingPlannedAbsenceId = "";
     if ($("plannedAbsentEmployee")) $("plannedAbsentEmployee").value = "";
     if ($("plannedAbsentFrom")) $("plannedAbsentFrom").value = "";
     if ($("plannedAbsentTo")) $("plannedAbsentTo").value = "";
     if ($("plannedAbsentReason")) $("plannedAbsentReason").value = "";
     if ($("plannedAbsentRemark")) $("plannedAbsentRemark").value = "";
+
+    const saveBtn = $("savePlannedAbsentBtn");
+    if (saveBtn) saveBtn.textContent = "+ Save Planned Absent";
   }
 
   function showAdminDbToast(message, type) {
@@ -294,6 +356,10 @@
     toast.className = `admin-db-toast show ${type || ""}`;
     clearTimeout(toast._timer);
     toast._timer = setTimeout(() => toast.classList.remove("show"), 3000);
+  }
+
+  function cleanForValue(value) {
+    return String(value ?? "").trim();
   }
 
   function formatDate(value) {
