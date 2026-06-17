@@ -1,5 +1,5 @@
 // server/services/reworkOtherReportEmailService.js
-// Recipients and send service for Rework / Other Work reports.
+// Recipients and send service for Rework / Other Work / Loss Hours reports.
 
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 const { sendEmail } = require("./emailService");
@@ -64,14 +64,22 @@ function buildTargets({ to = "", cc = "", recipients = [] } = {}) {
   return { to: Array.from(new Set(validTo)), cc: Array.from(new Set(ccFiltered)), invalid: Array.from(new Set(invalid)) };
 }
 
+function reportTitle(reportType = "rework") {
+  const type = clean(reportType).toLowerCase();
+  if (type === "other" || type === "other-work" || type === "other work") return "Other Work Report";
+  if (type === "loss" || type === "loss-hours" || type === "loss hours") return "Loss Hours Report";
+  return "Rework Report";
+}
+
 function buildMailBody({ title, period, machine }) {
-  const machineLine = clean(machine) && clean(machine) !== "All" ? ` for machine ${clean(machine)}` : " for all selected machines";
+  const machineText = clean(machine);
+  const machineLine = machineText && machineText !== "All" ? ` for machine ${machineText}` : " for all selected records";
   const plain = [
     "Dear Team,",
     "",
     `Please find attached the ${title}${machineLine} for ${clean(period || "the selected period")}.`,
     "",
-    "The PDF contains machine-wise summary, employee-wise summary, and detailed work nature records for review and action.",
+    "The PDF contains summary and detailed records for review and action.",
     "",
     "Regards,",
     "SP WorkTrack"
@@ -81,7 +89,7 @@ function buildMailBody({ title, period, machine }) {
     <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827;">
       <p>Dear Team,</p>
       <p>Please find attached the <b>${clean(title)}</b>${machineLine} for <b>${clean(period || "the selected period")}</b>.</p>
-      <p>The PDF contains machine-wise summary, employee-wise summary, and detailed work nature records for review and action.</p>
+      <p>The PDF contains summary and detailed records for review and action.</p>
       <p>Regards,<br><b>SP WorkTrack</b></p>
     </div>`;
 
@@ -97,7 +105,7 @@ async function sendReworkOtherReport({ reportType = "rework", period = "", machi
     throw err;
   }
 
-  const title = clean(reportType).toLowerCase() === "other" ? "Other Work Report" : "Rework Report";
+  const title = reportTitle(reportType);
   const subject = `SP WorkTrack ${title} - ${period || "Selected Period"}${machine && machine !== "All" ? " - " + machine : ""}`;
   const reportHtml = clean(pdfHtml || html);
   const attachments = [];
