@@ -1,5 +1,5 @@
 // renderer/reworkOtherReportRecipientsPatch.js
-// Adds Rework / Other Work report recipients inside Admin Report Emails tab.
+// Adds Rework / Other Work / Loss Hours report recipients inside Admin Report Emails tab.
 
 (function () {
   const REQUEST_TIMEOUT_MS = 20000;
@@ -48,8 +48,8 @@
     box.className = "card admin-controls-card";
     box.style.marginTop = "18px";
     box.innerHTML = `
-      <div class="section-title">Rework / Other Work Report Email Recipients</div>
-      <div class="small-hint">These recipients are separate from Quality Report recipients. Same recipients are used for both Rework and Other Work reports.</div>
+      <div class="section-title">Rework / Other Work / Loss Hours Report Email Recipients</div>
+      <div class="small-hint">These recipients are separate from Quality Report recipients. Same recipients are used for Rework, Other Work and Loss Hours reports.</div>
       <div class="grid-2" style="margin-top:10px;">
         <div class="field"><label>Recipient Name</label><input id="rwRecipientName" class="admin-input" type="text" placeholder="Example: Production Head" /></div>
         <div class="field"><label>Email ID</label><input id="rwRecipientEmail" class="admin-input" type="email" placeholder="production@sopan.co.in" /></div>
@@ -59,7 +59,7 @@
       </div>
       <div class="row admin-controls-actions" style="gap:8px; flex-wrap:wrap;">
         <button class="btn orange" id="addRwReportRecipientBtn" type="button">+ Add Recipient</button>
-        <button class="btn green" id="saveRwReportRecipientsBtn" type="button">Save Rework/Other Recipients</button>
+        <button class="btn green" id="saveRwReportRecipientsBtn" type="button">Save Work Nature / Loss Recipients</button>
         <button class="btn grey" id="reloadRwReportRecipientsBtn" type="button">Reload</button>
         <span class="small-hint" id="rwReportRecipientsStatus"></span>
       </div>
