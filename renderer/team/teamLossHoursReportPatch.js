@@ -3,12 +3,29 @@
 
 (function () {
   const API_BASE_URL = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3030";
-  let currentReportData = null;
+  const REQUEST_TIMEOUT_MS = 25000;
+  let latestReport = null;
+  let latestHtml = "";
 
   function $(id) { return document.getElementById(id); }
   function clean(value) { return String(value ?? "").trim(); }
   function esc(value) {
     return String(value ?? "").replace(/[&<>'"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
+  }
+  function n(value) { const x = Number(value); return Number.isFinite(x) ? Number(x.toFixed(1)) : 0; }
+
+  async function requestJson(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const fullUrl = /^https?:\/\//i.test(url) ? url : `${API_BASE_URL}${url}`;
+      const res = await fetch(fullUrl, { ...options, signal: controller.signal });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
+      return payload.data || payload;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function reportUrl() {
@@ -26,183 +43,113 @@
     return `${API_BASE_URL}/api/reports/loss-hours?${params.toString()}`;
   }
 
-  async function requestJson(path, options = {}) {
-    const res = await fetch(`${API_BASE_URL}${path}`, options);
-    const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
-    return payload;
+  function setStatus(message, type = "info") {
+    let el = $("lossHoursReportStatus");
+    const card = document.querySelector(".loss-hours-kpi-clickable");
+    if (!el && card) {
+      el = document.createElement("div");
+      el.id = "lossHoursReportStatus";
+      el.className = "small-hint";
+      el.style.fontWeight = "900";
+      el.style.marginTop = "6px";
+      card.appendChild(el);
+    }
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
   }
 
-  async function requestReport() {
-    const res = await fetch(reportUrl(), { method: "GET" });
-    const payload = await res.json().catch(() => null);
-    if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
-    return payload.data || {};
+  function mini(label, value, color = "#0b3f73") {
+    return `<div class="kpi"><div class="kpi-label">${esc(label)}</div><div class="kpi-value" style="color:${color};">${esc(value)}</div></div>`;
   }
 
-  function n(value) { const x = Number(value); return Number.isFinite(x) ? Number(x.toFixed(1)) : 0; }
-  function mini(label, value) { return `<div class="loss-report-kpi"><div>${esc(label)}</div><strong>${esc(value)}</strong></div>`; }
-  function reportMini(label, value, color = "#0b3f73") { return `<div class="kpi"><div class="kpi-label">${esc(label)}</div><div class="kpi-value" style="color:${color};">${esc(value)}</div></div>`; }
-
-  function reasonRows(rows) {
+  function reasonRows(rows = []) {
     return rows.length
-      ? rows.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.count)}</td><td class="num">${esc(r.hours)}</td></tr>`).join("")
+      ? rows.map(r => `<tr><td>${esc(r.name || "Not Specified")}</td><td>${esc(r.count || 0)}</td><td style="text-align:right;font-weight:900;">${esc(r.hours || 0)}</td></tr>`).join("")
       : `<tr><td colspan="3" class="empty">No reason summary found.</td></tr>`;
   }
 
-  function employeeRows(rows) {
+  function employeeRows(rows = []) {
     return rows.length
-      ? rows.map(r => `<tr><td>${esc(r.employee)}</td><td>${esc(r.count)}</td><td class="num">${esc(r.hours)}</td></tr>`).join("")
+      ? rows.map(r => `<tr><td>${esc(r.employee || "-")}</td><td>${esc(r.count || 0)}</td><td style="text-align:right;font-weight:900;">${esc(r.hours || 0)}</td></tr>`).join("")
       : `<tr><td colspan="3" class="empty">No employee summary found.</td></tr>`;
   }
 
-  function detailRows(rows) {
+  function dateRows(rows = []) {
     return rows.length
-      ? rows.map(r => `<tr><td>${esc(r.workDate)}</td><td>${esc(r.empName)}<br><span>${esc(r.empCode)}</span></td><td>${esc(r.department)}</td><td>${esc(r.shift)}</td><td>${esc(r.reason || "Not Specified")}</td><td>${esc(r.remark || "-")}</td><td class="num">${esc(r.lossHours)}</td></tr>`).join("")
+      ? rows.map(r => `<tr><td>${esc(r.workDate || "-")}</td><td>${esc(r.count || 0)}</td><td style="text-align:right;font-weight:900;">${esc(r.hours || 0)}</td></tr>`).join("")
+      : `<tr><td colspan="3" class="empty">No date summary found.</td></tr>`;
+  }
+
+  function detailRows(rows = []) {
+    return rows.length
+      ? rows.map(r => `<tr><td>${esc(r.workDate || "-")}</td><td>${esc(r.empName || "-")}<br><span class="muted">${esc(r.empCode || "")}</span></td><td>${esc(r.department || "-")}</td><td>${esc(r.shift || "-")}</td><td>${esc(r.reason || "Not Specified")}</td><td>${esc(r.remark || "-")}</td><td style="text-align:right;font-weight:900;">${esc(r.lossHours || 0)}</td></tr>`).join("")
       : `<tr><td colspan="7" class="empty">No loss hour records found.</td></tr>`;
   }
 
-  function standaloneReportHtml(data = {}, includeActions = false) {
+  function reportHtml(data = {}) {
+    const title = data.title || "Loss Hours Report";
     const range = data.range || {};
     const filters = data.filters || {};
     const k = data.kpis || {};
-    const title = data.title || "Loss Hours Report";
     return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${esc(title)}</title><style>
-      body{font-family:Arial,sans-serif;margin:0;background:#f3f6fb;color:#111827}.page{max-width:1220px;margin:24px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.12)}.actions{display:${includeActions ? "flex" : "none"};justify-content:flex-end;gap:10px;margin-bottom:14px}.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer}.print{background:#15803d;color:#fff}.send{background:#0b3f73;color:#fff}.close{background:#e5e7eb;color:#111827}.head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #e5e7eb;padding-bottom:14px}.title{font-size:26px;font-weight:900;color:#0b3f73}.sub{color:#64748b;margin-top:4px}.count{font-size:30px;font-weight:900;color:#b45309;text-align:right}.count small{display:block;font-size:12px;color:#64748b}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc}.kpi-label{font-size:12px;color:#64748b;font-weight:800}.kpi-value{font-size:22px;font-weight:900;margin-top:4px}h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-top:20px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;font-size:12px}td{padding:9px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top}td span,.muted{color:#64748b}.num{text-align:right;font-weight:900}.empty{text-align:center;color:#64748b;font-weight:900;padding:18px}@media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;border-radius:0}.actions{display:none}.grid{grid-template-columns:repeat(5,1fr)}}
+      @page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;margin:0;background:#f3f6fb;color:#111827}.page{max-width:1220px;margin:24px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.12)}.actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px}.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer}.print{background:#15803d;color:#fff}.send{background:#0b3f73;color:#fff}.close{background:#e5e7eb;color:#111827}.head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #e5e7eb;padding-bottom:14px}.title{font-size:26px;font-weight:900;color:#0b3f73}.sub{color:#64748b;margin-top:4px}.count{font-size:30px;font-weight:900;color:#b45309;text-align:right}.count small{display:block;font-size:12px;color:#64748b}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}.kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc}.kpi-label{font-size:12px;color:#64748b;font-weight:800}.kpi-value{font-size:22px;font-weight:900;margin-top:4px}h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-top:20px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;margin-top:10px;page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}th{background:#0b3f73;color:#fff;text-align:left;padding:9px;font-size:12px}td{padding:9px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top}.muted{color:#64748b}.empty{text-align:center;color:#64748b;font-weight:900;padding:18px}@media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;border-radius:0}.actions{display:none}.grid{grid-template-columns:repeat(5,1fr)}}
     </style></head><body><div class="page">
-      <div class="actions"><button class="btn print" onclick="window.print()">Print Report</button><button class="btn close" onclick="window.close()">Close</button></div>
+      <div class="actions"><button class="btn send" id="sendLossHoursReportFromPopup" type="button">Send Report</button><button class="btn print" onclick="window.print()" type="button">Print Report</button><button class="btn close" onclick="window.close()" type="button">Close</button></div>
       <div class="head"><div><div class="title">${esc(title)}</div><div class="sub">Period: ${esc(range.label || "-")} (${esc(range.from || "-")} to ${esc(range.to || "-")})</div><div class="sub">Shift: ${esc(filters.shift || "All")} | Department: ${esc(filters.department || "All")} | Employee: ${esc(filters.employee || "All")}</div><div class="sub">Generated: ${esc(new Date().toLocaleString("en-IN"))}</div></div><div class="count">${esc(k.totalLossHours || 0)}<small>Loss Hours</small></div></div>
-      <div class="grid">${reportMini("Records", k.records || 0)}${reportMini("Total Loss Hours", k.totalLossHours || 0, "#b45309")}${reportMini("Employees", k.employees || 0)}${reportMini("Loss Reasons", k.reasons || 0)}${reportMini("Average / Record", n(k.averageLossHours || 0))}</div>
-      <h2>Major Loss by Reason</h2><div class="table-wrap"><table><thead><tr><th>Reason</th><th>Records</th><th class="num">Hours</th></tr></thead><tbody>${reasonRows(data.byReason || [])}</tbody></table></div>
-      <h2>Employee Summary</h2><div class="table-wrap"><table><thead><tr><th>Employee</th><th>Records</th><th class="num">Hours</th></tr></thead><tbody>${employeeRows(data.byEmployee || [])}</tbody></table></div>
-      <h2>Detailed Loss Records</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>Reason</th><th>Remark</th><th class="num">Hours</th></tr></thead><tbody>${detailRows(data.rows || [])}</tbody></table></div>
+      <div class="grid">${mini("Records", k.records || 0)}${mini("Total Loss Hours", k.totalLossHours || 0, "#b45309")}${mini("Employees", k.employees || 0)}${mini("Loss Reasons", k.reasons || 0)}${mini("Average / Record", n(k.averageLossHours || 0))}</div>
+      <h2>Major Loss by Reason</h2><div class="table-wrap"><table><thead><tr><th>Reason</th><th>Records</th><th style="text-align:right;">Hours</th></tr></thead><tbody>${reasonRows(data.byReason || [])}</tbody></table></div>
+      <h2>Employee Summary</h2><div class="table-wrap"><table><thead><tr><th>Employee</th><th>Records</th><th style="text-align:right;">Hours</th></tr></thead><tbody>${employeeRows(data.byEmployee || [])}</tbody></table></div>
+      <h2>Date Summary</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Records</th><th style="text-align:right;">Hours</th></tr></thead><tbody>${dateRows(data.byDate || [])}</tbody></table></div>
+      <h2>Detailed Loss Records</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>Reason</th><th>Remark</th><th style="text-align:right;">Hours</th></tr></thead><tbody>${detailRows(data.rows || [])}</tbody></table></div>
     </div></body></html>`;
   }
 
-  function ensureModal() {
-    if ($("lossHoursReportModal")) return;
-    const div = document.createElement("div");
-    div.id = "lossHoursReportModal";
-    div.className = "loss-report-backdrop";
-    div.innerHTML = `
-      <div class="loss-report-card">
-        <div class="loss-report-actions">
-          <span class="loss-report-status" id="lossReportSendStatus"></span>
-          <button class="loss-report-btn send" id="lossReportSendBtn" type="button">Send Report</button>
-          <button class="loss-report-btn print" id="lossReportPrintBtn" type="button">Print Report</button>
-          <button class="loss-report-btn close" id="lossReportCloseBtn" type="button">Close</button>
-        </div>
-        <div class="loss-report-head">
-          <div>
-            <div class="loss-report-title" id="lossReportTitle">Loss Hours Report</div>
-            <div class="loss-report-sub" id="lossReportPeriod"></div>
-            <div class="loss-report-sub" id="lossReportFilters"></div>
-            <div class="loss-report-sub" id="lossReportGenerated"></div>
-          </div>
-          <div class="loss-report-count"><span id="lossReportHours">0</span><small>Loss Hours</small></div>
-        </div>
-        <div class="loss-report-grid" id="lossReportKpis"></div>
-        <h2>Major Loss by Reason</h2>
-        <div class="loss-report-table-wrap"><table><thead><tr><th>Reason</th><th>Records</th><th class="num">Hours</th></tr></thead><tbody id="lossReportReasonBody"></tbody></table></div>
-        <h2>Employee Summary</h2>
-        <div class="loss-report-table-wrap"><table><thead><tr><th>Employee</th><th>Records</th><th class="num">Hours</th></tr></thead><tbody id="lossReportEmployeeBody"></tbody></table></div>
-        <h2>Detailed Loss Records</h2>
-        <div class="loss-report-table-wrap"><table><thead><tr><th>Date</th><th>Employee</th><th>Department</th><th>Shift</th><th>Reason</th><th>Remark</th><th class="num">Hours</th></tr></thead><tbody id="lossReportDetailBody"></tbody></table></div>
-      </div>`;
-    document.body.appendChild(div);
-    $("lossReportCloseBtn")?.addEventListener("click", closeReport);
-    $("lossReportPrintBtn")?.addEventListener("click", () => window.print());
-    $("lossReportSendBtn")?.addEventListener("click", sendLossHoursReport);
-    div.addEventListener("click", (event) => { if (event.target === div) closeReport(); });
-  }
-
-  function injectStyles() {
-    if ($("lossHoursReportPatchStyles")) return;
-    const style = document.createElement("style");
-    style.id = "lossHoursReportPatchStyles";
-    style.textContent = `
-      .loss-hours-kpi-clickable{cursor:pointer;position:relative;overflow:hidden}.loss-hours-kpi-clickable::after{content:'↗';position:absolute;top:14px;right:18px;opacity:.28;font-size:18px;font-weight:1000}.loss-hours-kpi-clickable:hover{transform:translateY(-2px);filter:brightness(1.02)}.loss-hours-kpi-clickable:active{transform:translateY(1px) scale(.98);filter:brightness(.96)}
-      .loss-report-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.62);z-index:99999;overflow:auto;padding:22px}.loss-report-backdrop.show{display:block}.loss-report-card{max-width:1220px;margin:0 auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.24);color:#111827}.loss-report-actions{display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap}.loss-report-status{margin-right:auto;font-size:13px;font-weight:900;color:#64748b}.loss-report-status.ok{color:#15803d}.loss-report-status.err{color:#b91c1c}.loss-report-btn{border:0;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer}.loss-report-btn.send{background:#0b3f73;color:#fff}.loss-report-btn.print{background:#15803d;color:#fff}.loss-report-btn.close{background:#e5e7eb;color:#111827}.loss-report-head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #e5e7eb;padding-bottom:14px}.loss-report-title{font-size:26px;font-weight:900;color:#0b3f73}.loss-report-sub{color:#64748b;margin-top:4px}.loss-report-count{font-size:30px;font-weight:900;color:#b45309;text-align:right}.loss-report-count small{display:block;font-size:12px;color:#64748b}.loss-report-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}.loss-report-kpi{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#f8fafc}.loss-report-kpi div{font-size:12px;color:#64748b;font-weight:800}.loss-report-kpi strong{display:block;font-size:22px;margin-top:4px}.loss-report-card h2{font-size:18px;color:#0b3f73;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-top:20px}.loss-report-table-wrap{overflow:auto}.loss-report-card table{width:100%;border-collapse:collapse;margin-top:10px}.loss-report-card th{background:#0b3f73;color:#fff;text-align:left;padding:9px;font-size:12px}.loss-report-card td{padding:9px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top}.loss-report-card td span{color:#64748b}.loss-report-card .num{text-align:right;font-weight:900}.loss-report-card .empty{text-align:center;color:#64748b;font-weight:900;padding:18px}@media print{body>*:not(#lossHoursReportModal){display:none!important}.loss-report-backdrop{display:block!important;position:static;background:#fff;padding:0}.loss-report-card{box-shadow:none;margin:0;max-width:none;border-radius:0}.loss-report-actions{display:none}.loss-report-grid{grid-template-columns:repeat(5,1fr)}}@media(max-width:768px){.loss-report-backdrop{padding:10px}.loss-report-card{padding:14px}.loss-report-head{display:block}.loss-report-grid{grid-template-columns:1fr 1fr}.loss-report-count{text-align:left;margin-top:10px}.loss-report-actions{justify-content:stretch}.loss-report-btn{flex:1 1 100%}.loss-report-status{width:100%;margin:0}}
-    `;
-    document.head.appendChild(style);
-  }
-
-  function closeReport() { $("lossHoursReportModal")?.classList.remove("show"); }
-
-  function sendStatus(message, type = "") {
-    const el = $("lossReportSendStatus");
-    if (!el) return;
-    el.textContent = message || "";
-    el.classList.toggle("ok", type === "ok");
-    el.classList.toggle("err", type === "err");
-  }
-
-  function buildPdfHtml() {
-    return standaloneReportHtml(currentReportData || {}, false);
-  }
-
-  async function sendLossHoursReport() {
-    const btn = $("lossReportSendBtn");
+  async function sendReport() {
     try {
-      if (!currentReportData?.rows?.length) throw new Error("No loss hour records available to send.");
-      if (btn) { btn.disabled = true; btn.textContent = "Sending..."; }
-      sendStatus("Sending report...");
-
-      const range = currentReportData.range || {};
-      const filters = currentReportData.filters || {};
-      const period = range.label || `${range.from || ""} to ${range.to || ""}` || "Selected Period";
-      const reportHtml = buildPdfHtml();
+      if (!latestReport || !latestHtml) {
+        latestReport = await requestJson(reportUrl());
+        latestHtml = reportHtml(latestReport);
+      }
+      if (!latestReport?.rows?.length) throw new Error("No loss hour records available to send.");
+      setStatus("Sending Loss Hours report...");
       const payload = await requestJson("/api/email/rework-other-report/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reportType: "loss-hours",
-          period,
+          period: latestReport.range?.label || "Selected Period",
           machine: "All",
-          html: reportHtml,
-          pdfHtml: reportHtml,
-          filters
+          html: latestHtml,
+          pdfHtml: latestHtml,
+          filters: latestReport.filters || {}
         })
       });
-
-      const sent = payload.data?.sent || 0;
-      const attach = payload.data?.attachmentCount || 0;
-      sendStatus(`Sent to ${sent} recipient(s). Attachment: ${attach}`, "ok");
+      setStatus(`Loss Hours report sent to ${payload.mainRecipients?.length || payload.sent || 0} main recipient(s).`, "success");
+      alert("Loss Hours report sent successfully.");
     } catch (err) {
-      console.error("Loss hours report email failed:", err);
-      sendStatus("Send failed: " + (err?.message || err), "err");
-      alert("Loss Hours Report send failed: " + (err?.message || err));
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "Send Report"; }
+      setStatus("Send failed: " + (err?.message || err), "error");
+      alert("Send failed: " + (err?.message || err));
     }
-  }
-
-  function fillReport(data) {
-    ensureModal();
-    currentReportData = data;
-    const range = data.range || {};
-    const filters = data.filters || {};
-    const k = data.kpis || {};
-    $("lossReportTitle").textContent = data.title || "Loss Hours Report";
-    $("lossReportPeriod").textContent = `Period: ${range.label || "-"} (${range.from || "-"} to ${range.to || "-"})`;
-    $("lossReportFilters").textContent = `Shift: ${filters.shift || "All"} | Department: ${filters.department || "All"} | Employee: ${filters.employee || "All"}`;
-    $("lossReportGenerated").textContent = `Generated: ${new Date().toLocaleString("en-IN")}`;
-    $("lossReportHours").textContent = k.totalLossHours || 0;
-    $("lossReportKpis").innerHTML = [mini("Records", k.records || 0), mini("Total Loss Hours", k.totalLossHours || 0), mini("Employees", k.employees || 0), mini("Loss Reasons", k.reasons || 0), mini("Average / Record", k.averageLossHours || 0)].join("");
-    $("lossReportReasonBody").innerHTML = reasonRows(data.byReason || []);
-    $("lossReportEmployeeBody").innerHTML = employeeRows(data.byEmployee || []);
-    $("lossReportDetailBody").innerHTML = detailRows(data.rows || []);
-    sendStatus("");
-    $("lossHoursReportModal").classList.add("show");
   }
 
   async function openLossHoursReport() {
     try {
-      const data = await requestReport();
-      if (!Array.isArray(data.rows) || !data.rows.length) { alert("No loss hour records found for this selection."); return; }
-      fillReport(data);
+      setStatus("Preparing Loss Hours report...");
+      const data = await requestJson(reportUrl());
+      if (!Array.isArray(data.rows) || !data.rows.length) { alert("No loss hour records found for this selection."); setStatus(""); return; }
+      latestReport = data;
+      latestHtml = reportHtml(data);
+      const w = window.open("", "_blank", "width=1200,height=850");
+      if (!w) throw new Error("Popup blocked. Allow popups for this app.");
+      w.document.open();
+      w.document.write(latestHtml);
+      w.document.close();
+      setTimeout(() => { try { w.document.getElementById("sendLossHoursReportFromPopup")?.addEventListener("click", () => sendReport()); } catch {} }, 300);
+      setStatus("Loss Hours report opened.", "success");
     } catch (err) {
       console.error("Loss hours report failed:", err);
+      setStatus("Report failed: " + (err?.message || err), "error");
       alert("Loss hours report failed: " + (err?.message || err));
     }
   }
@@ -213,14 +160,21 @@
       if (label !== "loss hours" || card.__spwtLossReportWired) return;
       card.__spwtLossReportWired = true;
       card.classList.add("loss-hours-kpi-clickable", "attendance-kpi-clickable");
-      card.title = "Click to view detailed loss hours report";
+      card.title = "Click to view detailed Loss Hours report";
       card.addEventListener("click", openLossHoursReport);
     });
   }
 
+  function injectStyles() {
+    if ($("lossHoursReportPatchStyles")) return;
+    const style = document.createElement("style");
+    style.id = "lossHoursReportPatchStyles";
+    style.textContent = `.loss-hours-kpi-clickable{cursor:pointer;position:relative;overflow:hidden}.loss-hours-kpi-clickable::after{content:'↗';position:absolute;top:14px;right:18px;opacity:.28;font-size:18px;font-weight:1000}.loss-hours-kpi-clickable:hover{transform:translateY(-2px);filter:brightness(1.02)}.loss-hours-kpi-clickable:active{transform:translateY(1px) scale(.98);filter:brightness(.96)}`;
+    document.head.appendChild(style);
+  }
+
   function init() {
     injectStyles();
-    ensureModal();
     markLossCard();
     document.addEventListener("click", () => setTimeout(markLossCard, 100), true);
     setInterval(markLossCard, 1200);
