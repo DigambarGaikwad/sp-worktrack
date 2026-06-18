@@ -17,13 +17,13 @@ function getAccessToken(req) {
   return req.headers["x-spwt-admin-token"] || req.body?.adminToken || req.query?.adminToken || "";
 }
 
-function requireDatabaseTransfer(req) {
-  return requirePermission(getAccessToken(req), "databaseTransfer");
+function requireDbTransfer(req) {
+  return requirePermission(getAccessToken(req), "dbTransfer");
 }
 
 router.get("/status", async (req, res) => {
   try {
-    requireDatabaseTransfer(req);
+    requireDbTransfer(req);
     const data = await getDatabaseTransferStatus();
     res.json({ ok: true, data });
   } catch (err) {
@@ -34,7 +34,7 @@ router.get("/status", async (req, res) => {
 
 router.get("/packages", async (req, res) => {
   try {
-    requireDatabaseTransfer(req);
+    requireDbTransfer(req);
     const data = await listTransferPackages();
     res.json({ ok: true, data });
   } catch (err) {
@@ -45,7 +45,7 @@ router.get("/packages", async (req, res) => {
 
 router.post("/package", async (req, res) => {
   try {
-    requireDatabaseTransfer(req);
+    requireDbTransfer(req);
     const data = await createTransferPackage(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
@@ -56,7 +56,7 @@ router.post("/package", async (req, res) => {
 
 router.get("/package/download/:fileName", async (req, res) => {
   try {
-    requireDatabaseTransfer(req);
+    requireDbTransfer(req);
     const fullPath = await resolvePackagePath(req.params.fileName);
     res.download(fullPath, path.basename(fullPath));
   } catch (err) {
