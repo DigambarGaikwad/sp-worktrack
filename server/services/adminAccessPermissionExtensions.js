@@ -7,14 +7,14 @@ const EXTRA_PERMISSIONS = [
   "backupControls",
   "reportEmails",
   "maintenance",
-  "performanceComments"
+  "performanceComments",
+  "dbTransfer"
 ];
 
 for (const permission of EXTRA_PERMISSIONS) {
   if (!ALL_PERMISSIONS.includes(permission)) ALL_PERMISSIONS.push(permission);
 }
 
-// Keep admin role as full-access role when new permissions are added.
 ROLE_TEMPLATES.admin = ALL_PERMISSIONS;
 
 module.exports = { EXTRA_PERMISSIONS };
