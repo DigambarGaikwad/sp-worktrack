@@ -156,9 +156,42 @@
   color: #fff;
 }
 
+/* Center Admin login without affecting the logged-in Admin panel. */
+.admin-page-body > .admin-login {
+  width: min(460px, 100%);
+  margin: 28px auto 8px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.admin-page-body > .admin-login .field {
+  margin-bottom: 12px;
+}
+
+.admin-page-body > .admin-login input {
+  width: 100%;
+}
+
+.admin-page-body > .admin-login .row {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.admin-page-body > .admin-login .small-hint {
+  line-height: 1.45;
+}
+
 @media (max-width: 800px) {
   .planned-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .admin-page-body > .admin-login {
+    margin: 18px auto 6px;
+    padding: 14px;
   }
 }
