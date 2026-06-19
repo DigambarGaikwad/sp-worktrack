@@ -1,5 +1,5 @@
 // renderer/admin/adminDatabaseTransferPatch.js
-// Adds Database Transfer tab: check DB status, create transfer ZIP, download latest package and transfer guidance.
+// Adds Database Transfer tab: DB package prep, runtime status, and Windows Task Scheduler prep.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -43,7 +43,15 @@
   }
 
   function status(message, type = "") {
-    const el = $("dbTransferStatusLine");
+    setStatus("dbTransferStatusLine", message, type);
+  }
+
+  function runtimeStatus(message, type = "") {
+    setStatus("dbRuntimeStatusLine", message, type);
+  }
+
+  function setStatus(id, message, type = "") {
+    const el = $(id);
     if (!el) return;
     el.textContent = message || "";
     el.classList.remove("spwt-status-error", "spwt-status-success");
@@ -79,11 +87,11 @@
       page.id = "tabDatabaseTransfer";
       page.innerHTML = `
         <div class="section-title">Database Transfer</div>
-        <div class="small-hint">Preparatory export package for moving SP WorkTrack database/config to a new server PC. Restore is handled separately and should not overwrite a running PocketBase database.</div>
+        <div class="small-hint">Preparatory export package for moving SP WorkTrack database/config to a new server PC. No IP, link, or folder is assumed; the server detects current paths, runtime status, and package names.</div>
 
         <div class="card admin-controls-card" style="margin-top:12px;">
           <div class="section-title">Transfer Package Wizard</div>
-          <div class="small-hint">Use these buttons in sequence. No IP, link, or folder is assumed; the server detects current paths and package names.</div>
+          <div class="small-hint">Use these buttons in sequence for database movement preparation. Restore is handled separately and should not overwrite a running PocketBase database.</div>
 
           <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px;">
             <button class="btn grey" id="dbTransferCheckBtn" type="button">1. Check Database Status</button>
@@ -98,6 +106,24 @@
         </div>
 
         <div class="card admin-controls-card" style="margin-top:12px;">
+          <div class="section-title">Runtime / Auto-start Preparation</div>
+          <div class="small-hint">Use this for future app-mode setup. It checks Node + PocketBase status and creates Windows Task Scheduler auto-start tasks for the server PC.</div>
+
+          <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn grey" id="dbRuntimeCheckBtn" type="button">Check Runtime Status</button>
+            <button class="btn green" id="dbRuntimeInstallTasksBtn" type="button">Create / Update Auto-start Tasks</button>
+            <button class="btn grey" id="dbRuntimeStartPbBtn" type="button">Start PocketBase Task</button>
+            <button class="btn red" id="dbRuntimeStopPbBtn" type="button">Stop PocketBase</button>
+            <button class="btn grey" id="dbRuntimeStartNodeBtn" type="button">Start Node Task</button>
+            <button class="btn red" id="dbRuntimeStopNodeBtn" type="button">Stop Node Server</button>
+            <button class="btn grey" id="dbRuntimeRemoveTasksBtn" type="button">Remove Auto-start Tasks</button>
+          </div>
+
+          <div class="small-hint" id="dbRuntimeStatusLine" style="margin-top:10px;"></div>
+          <div id="dbRuntimeOutput" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card admin-controls-card" style="margin-top:12px;">
           <div class="section-title">Step-by-step transfer notes</div>
           <div class="grid-2" style="gap:12px;margin-top:10px;">
             <div class="card" style="padding:12px;">
@@ -106,17 +132,16 @@
                 <li>One server PC runs PocketBase database.</li>
                 <li>The same server PC runs the SP WorkTrack Node server on port 3030.</li>
                 <li>Users open the detected LAN/Tailscale browser URL. They do not need source code.</li>
-                <li>Final app mode should use a launcher, Windows service, or Task Scheduler to start both services automatically.</li>
+                <li>Final app mode should use Windows Task Scheduler or Windows service to start both services automatically.</li>
               </ol>
             </div>
             <div class="card" style="padding:12px;">
-              <div class="section-title">Button sequence meaning</div>
+              <div class="section-title">Runtime button meaning</div>
               <ol class="small-hint" style="line-height:1.65;margin:8px 0 0 18px;">
-                <li><b>Check Database Status</b>: detects actual database folder and record counts.</li>
-                <li><b>Create Transfer Package</b>: creates secure ZIP in detected transfer folder.</li>
-                <li><b>Download Latest Package</b>: downloads the latest ZIP.</li>
-                <li><b>Copy Transfer Folder Path</b>: copies detected folder path.</li>
-                <li><b>Print Transfer Checklist</b>: prints final migration checklist.</li>
+                <li><b>Check Runtime Status</b>: detects Node, PocketBase, and task status.</li>
+                <li><b>Create Auto-start Tasks</b>: creates Windows startup tasks for PocketBase and Node.</li>
+                <li><b>Start PocketBase Task</b>: starts PocketBase using Task Scheduler after tasks are created.</li>
+                <li><b>Stop Node Server</b>: stops this app server, so browser connection will disconnect.</li>
               </ol>
             </div>
           </div>
@@ -140,20 +165,29 @@
     document.querySelectorAll(".tab-page").forEach(p => p.classList.add("hidden"));
     $("tabDatabaseTransfer")?.classList.remove("hidden");
     checkStatus();
+    checkRuntimeStatus();
   }
 
   function wireButtons() {
-    const checkBtn = $("dbTransferCheckBtn");
-    const createBtn = $("dbTransferCreateBtn");
-    const downloadBtn = $("dbTransferDownloadBtn");
-    const copyBtn = $("dbTransferCopyFolderBtn");
-    const checklistBtn = $("dbTransferChecklistBtn");
+    const bindings = [
+      ["dbTransferCheckBtn", checkStatus],
+      ["dbTransferCreateBtn", createPackage],
+      ["dbTransferDownloadBtn", downloadLatest],
+      ["dbTransferCopyFolderBtn", copyFolderPath],
+      ["dbTransferChecklistBtn", printChecklist],
+      ["dbRuntimeCheckBtn", checkRuntimeStatus],
+      ["dbRuntimeInstallTasksBtn", installTasks],
+      ["dbRuntimeStartPbBtn", () => runtimeAction("/api/transfer/runtime/pocketbase/start", "Starting PocketBase task...", "PocketBase task start command sent.")],
+      ["dbRuntimeStopPbBtn", stopPocketBase],
+      ["dbRuntimeStartNodeBtn", startNodeTask],
+      ["dbRuntimeStopNodeBtn", stopNodeServer],
+      ["dbRuntimeRemoveTasksBtn", removeTasks]
+    ];
 
-    if (checkBtn && !checkBtn.__wired) { checkBtn.__wired = true; checkBtn.onclick = checkStatus; }
-    if (createBtn && !createBtn.__wired) { createBtn.__wired = true; createBtn.onclick = createPackage; }
-    if (downloadBtn && !downloadBtn.__wired) { downloadBtn.__wired = true; downloadBtn.onclick = downloadLatest; }
-    if (copyBtn && !copyBtn.__wired) { copyBtn.__wired = true; copyBtn.onclick = copyFolderPath; }
-    if (checklistBtn && !checklistBtn.__wired) { checklistBtn.__wired = true; checklistBtn.onclick = printChecklist; }
+    bindings.forEach(([id, handler]) => {
+      const btn = $(id);
+      if (btn && !btn.__wired) { btn.__wired = true; btn.onclick = handler; }
+    });
   }
 
   function table(headers, rows) {
@@ -170,15 +204,15 @@
 
     const componentRows = (data.components || []).map(item => [
       esc(item.packagePath || item.relPath),
-      item.exists ? "✅ Found" : (item.required ? "❌ Missing" : "Not present"),
+      item.exists ? "Found" : (item.required ? "Missing" : "Not present"),
       esc(item.size || "0 B"),
       esc(item.sourceRelPath ? `Source: ${item.sourceRelPath}` : item.note || "")
     ]);
 
     const countRows = (data.recordCounts || []).map(item => [
       esc(item.collection),
-      item.ok ? esc(item.count) : "Unavailable",
-      item.ok ? "OK" : esc(item.message || "Missing/unavailable")
+      item.ok ? esc(item.count) : (item.optional ? "Optional" : "Unavailable"),
+      item.ok ? "OK" : (item.optional ? esc(item.message || "Optional collection not created. Not a transfer blocker.") : esc(item.message || "Missing/unavailable"))
     ]);
 
     host.innerHTML = `
@@ -189,7 +223,7 @@
           <div class="small-hint"><b>Root:</b> ${esc(data.rootDir || "-")}</div>
           <div class="small-hint"><b>Transfer folder:</b> <span id="dbTransferFolderText">${esc(data.transferDir || "-")}</span></div>
           <div class="small-hint"><b>Total detected size:</b> ${esc(data.totalComponentSize || "-")}</div>
-          <div class="small-hint"><b>Status:</b> ${data.ready ? "✅ Ready for package creation" : "❌ Required component missing"}</div>
+          <div class="small-hint"><b>Status:</b> ${data.ready ? "Ready for package creation" : "Required component missing"}</div>
         </div>
         <div class="card" style="padding:12px;">
           <div class="section-title">Latest Package</div>
@@ -208,13 +242,49 @@
 
       <div class="card" style="padding:12px;margin-top:12px;">
         <div class="section-title">Record Count Preview</div>
-        <div class="small-hint">Counts are for transfer confidence only. Some optional collections may show unavailable if not created yet.</div>
+        <div class="small-hint">Counts are for transfer confidence only. Optional collections may be absent in this build and are not transfer blockers.</div>
         ${table(["Collection", "Records", "Status"], countRows)}
       </div>
 
       <div class="card" style="padding:12px;margin-top:12px;background:#fff7ed;border-color:#fed7aa;">
         <div class="section-title">Important Notes</div>
-        ${(data.warnings || []).map(w => `<div class="small-hint">⚠ ${esc(w)}</div>`).join("")}
+        ${(data.warnings || []).map(w => `<div class="small-hint">- ${esc(w)}</div>`).join("")}
+      </div>
+    `;
+  }
+
+  function renderRuntimeStatus(data) {
+    const host = $("dbRuntimeOutput");
+    if (!host) return;
+
+    const serviceRows = [
+      ["Node / SP WorkTrack", data.node?.running ? "Running" : "Not detected", `Port ${esc(data.server?.nodePort || 3030)} | PID ${esc(data.server?.currentNodePid || "-")}`, esc(data.node?.note || "")],
+      ["PocketBase", data.pocketbase?.running ? "Running" : "Not detected", `Port ${esc(data.server?.pocketBasePort || 8090)} | Processes ${esc(data.pocketbase?.processCount || 0)}`, esc(data.pocketbase?.exePath || "")]
+    ];
+
+    const taskRows = [data.tasks?.pocketbase, data.tasks?.node].filter(Boolean).map(task => [
+      esc(task.taskName),
+      esc(task.exists ? task.status : "Not Created"),
+      esc(task.lastRun || "-"),
+      esc(task.lastResult || task.message || "-")
+    ]);
+
+    host.innerHTML = `
+      <div class="grid-2" style="gap:12px;">
+        <div class="card" style="padding:12px;">
+          <div class="section-title">Current Runtime Status</div>
+          ${table(["Service", "Status", "Details", "Note/Path"], serviceRows)}
+        </div>
+        <div class="card" style="padding:12px;">
+          <div class="section-title">Windows Task Scheduler Status</div>
+          ${table(["Task", "Status", "Last Run", "Last Result / Message"], taskRows)}
+        </div>
+      </div>
+      <div class="card" style="padding:12px;margin-top:12px;background:#eef6ff;border-color:#bfdbfe;">
+        <div class="section-title">Generated Runtime Scripts</div>
+        <div class="small-hint"><b>Runtime folder:</b> ${esc(data.server?.runtimeDir || data.scripts?.runtimeDir || "-")}</div>
+        <div class="small-hint"><b>Log folder:</b> ${esc(data.server?.logDir || data.scripts?.logDir || "-")}</div>
+        ${(data.guidance || []).map(g => `<div class="small-hint">- ${esc(g)}</div>`).join("")}
       </div>
     `;
   }
@@ -230,6 +300,20 @@
       console.error(err);
       status("Status check failed: " + (err.message || err), "error");
       alert("Database transfer status failed:\n\n" + (err.message || err));
+    }
+  }
+
+  async function checkRuntimeStatus() {
+    if (!allowed()) return alert(`No permission: ${PERMISSION_LABEL}`);
+    try {
+      runtimeStatus("Checking runtime status...");
+      const payload = await requestJson("/api/transfer/runtime/status", { method: "GET" });
+      renderRuntimeStatus(payload.data || {});
+      runtimeStatus("Runtime status checked.", "success");
+    } catch (err) {
+      console.error(err);
+      runtimeStatus("Runtime status failed: " + (err.message || err), "error");
+      alert("Runtime status failed:\n\n" + (err.message || err));
     }
   }
 
@@ -300,6 +384,52 @@
     }
   }
 
+  async function runtimeAction(path, workingMsg, doneMsg, options = {}) {
+    if (!allowed()) return alert(`No permission: ${PERMISSION_LABEL}`);
+    const btn = options.btnId ? $(options.btnId) : null;
+    try {
+      if (btn) btn.disabled = true;
+      runtimeStatus(workingMsg);
+      await requestJson(path, { method: "POST", timeoutMs: options.timeoutMs || REQUEST_TIMEOUT_MS });
+      runtimeStatus(doneMsg, "success");
+      if (!options.skipRefresh) setTimeout(checkRuntimeStatus, 800);
+    } catch (err) {
+      console.error(err);
+      runtimeStatus("Action failed: " + (err.message || err), "error");
+      alert("Runtime action failed:\n\n" + (err.message || err));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function installTasks() {
+    return runtimeAction("/api/transfer/runtime/tasks/install", "Creating Windows auto-start tasks...", "Auto-start tasks created/updated.", { btnId: "dbRuntimeInstallTasksBtn", timeoutMs: 120000 });
+  }
+
+  function removeTasks() {
+    const ok = confirm("Remove SP WorkTrack auto-start tasks from Windows Task Scheduler?");
+    if (!ok) return;
+    return runtimeAction("/api/transfer/runtime/tasks/remove", "Removing auto-start tasks...", "Auto-start task remove command completed.", { btnId: "dbRuntimeRemoveTasksBtn" });
+  }
+
+  function stopPocketBase() {
+    const ok = confirm("Stop PocketBase now?\n\nDo not stop it while users are submitting entries.");
+    if (!ok) return;
+    return runtimeAction("/api/transfer/runtime/pocketbase/stop", "Stopping PocketBase...", "PocketBase stop command completed.", { btnId: "dbRuntimeStopPbBtn" });
+  }
+
+  function startNodeTask() {
+    const ok = confirm("Start Node task from Windows Task Scheduler?\n\nUse this only after auto-start task is created. If Node is already running, do not start duplicate servers.");
+    if (!ok) return;
+    return runtimeAction("/api/transfer/runtime/node/start", "Starting Node task...", "Node task start command sent.", { btnId: "dbRuntimeStartNodeBtn" });
+  }
+
+  function stopNodeServer() {
+    const ok = confirm("Stop Node server now?\n\nThis will disconnect this browser/app. Restart Node from Task Scheduler, runtime script, or terminal.");
+    if (!ok) return;
+    runtimeAction("/api/transfer/runtime/node/stop", "Stopping Node server...", "Node server stop command sent. This page will disconnect.", { btnId: "dbRuntimeStopNodeBtn", skipRefresh: true });
+  }
+
   function printChecklist() {
     const folder = $("dbTransferFolderText")?.textContent || "Run Check Database Status first";
     const pkg = latestPackage?.fileName || "Create package first";
@@ -312,6 +442,7 @@
         <li>Create fresh transfer package from Admin &gt; Database Transfer.</li>
         <li>Copy ZIP to external drive or secure shared location.</li>
         <li>On new server PC, install SP WorkTrack runtime.</li>
+        <li>Create Windows auto-start tasks or prepare launcher on new server PC.</li>
         <li>Stop PocketBase before restoring <code>pb_data</code>.</li>
         <li>Restore package contents using restore wizard/procedure.</li>
         <li>Start PocketBase and Node server.</li>
