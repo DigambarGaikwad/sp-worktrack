@@ -51,20 +51,20 @@ const CORE_COMPONENTS = [
 ];
 
 const COUNT_COLLECTIONS = [
-  "employees",
-  "machines",
-  "shifts",
-  "loss_reasons",
-  "root_areas",
-  "machine_categories",
-  "work_subworks",
-  "production_entries",
-  "production_entry_lines",
-  "planned_absences",
-  "quality_logs",
-  "admin_settings",
-  "admin_access_users",
-  "backup_logs"
+  { name: "employees" },
+  { name: "machines" },
+  { name: "shifts" },
+  { name: "loss_reasons" },
+  { name: "root_areas" },
+  { name: "machine_categories", optional: true, note: "Optional legacy/master collection. Some builds store categories inside machine/work records." },
+  { name: "work_subworks", optional: true, note: "Optional legacy/master collection. Some builds store work/subwork through other master tables." },
+  { name: "production_entries" },
+  { name: "production_entry_lines" },
+  { name: "planned_absences" },
+  { name: "quality_logs", optional: true, note: "Optional until quality module is used." },
+  { name: "admin_settings" },
+  { name: "admin_access_users", optional: true, note: "Optional if access users are stored in admin settings or collection is not created yet." },
+  { name: "backup_logs", optional: true, note: "Optional until backup logging collection is created." }
 ];
 
 function pad(n) {
@@ -177,15 +177,26 @@ async function componentStatus() {
 
 async function getRecordCounts() {
   const counts = [];
-  for (const collection of COUNT_COLLECTIONS) {
+  for (const item of COUNT_COLLECTIONS) {
+    const collection = item.name || item;
     try {
       const data = await pocketBaseRequest(`/api/collections/${collection}/records`, {
         method: "GET",
         query: { page: 1, perPage: 1 }
       });
-      counts.push({ collection, count: Number(data.totalItems || 0), ok: true });
+      counts.push({ collection, count: Number(data.totalItems || 0), ok: true, optional: !!item.optional, note: item.note || "" });
     } catch (err) {
-      counts.push({ collection, count: 0, ok: false, message: err?.message || "Unavailable" });
+      if (item.optional) {
+        counts.push({
+          collection,
+          count: null,
+          ok: false,
+          optional: true,
+          message: item.note || "Optional collection is not created in this database. This is not a transfer blocker."
+        });
+      } else {
+        counts.push({ collection, count: 0, ok: false, optional: false, message: err?.message || "Unavailable" });
+      }
     }
   }
   return counts;
@@ -239,7 +250,8 @@ async function getDatabaseTransferStatus() {
     warnings: [
       "Transfer package can contain .env secrets. Store and share it carefully.",
       "For final migration, stop new production entry before creating the last package.",
-      "Restore is a separate step. Do not replace pb_data while PocketBase is running."
+      "Restore is a separate step. Do not replace pb_data while PocketBase is running.",
+      "Optional record-count collections may show as optional/not created. Full pb_data transfer still includes whatever exists in the database."
     ]
   };
 }
