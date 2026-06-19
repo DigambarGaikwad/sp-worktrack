@@ -1,5 +1,5 @@
 // renderer/admin/adminDatabaseTransferPatch.js
-// Adds Database Transfer tab: check DB status, create transfer ZIP, download latest package.
+// Adds Database Transfer tab: check DB status, create transfer ZIP, download latest package and transfer guidance.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -96,6 +96,35 @@
           <div class="small-hint" id="dbTransferStatusLine" style="margin-top:10px;"></div>
           <div id="dbTransferOutput" style="margin-top:12px;"></div>
         </div>
+
+        <div class="card admin-controls-card" style="margin-top:12px;">
+          <div class="section-title">Step-by-step transfer notes</div>
+          <div class="grid-2" style="gap:12px;margin-top:10px;">
+            <div class="card" style="padding:12px;">
+              <div class="section-title">How SP WorkTrack will run as an app</div>
+              <ol class="small-hint" style="line-height:1.65;margin:8px 0 0 18px;">
+                <li>One server PC runs PocketBase database.</li>
+                <li>The same server PC runs the SP WorkTrack Node server on port 3030.</li>
+                <li>Users open the detected LAN/Tailscale browser URL. They do not need source code.</li>
+                <li>Final app mode should use a launcher, Windows service, or Task Scheduler to start both services automatically.</li>
+              </ol>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="section-title">Button sequence meaning</div>
+              <ol class="small-hint" style="line-height:1.65;margin:8px 0 0 18px;">
+                <li><b>Check Database Status</b>: detects actual database folder and record counts.</li>
+                <li><b>Create Transfer Package</b>: creates secure ZIP in detected transfer folder.</li>
+                <li><b>Download Latest Package</b>: downloads the latest ZIP.</li>
+                <li><b>Copy Transfer Folder Path</b>: copies detected folder path.</li>
+                <li><b>Print Transfer Checklist</b>: prints final migration checklist.</li>
+              </ol>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;margin-top:12px;background:#eef6ff;border-color:#bfdbfe;">
+            <div class="section-title">Important restore rule</div>
+            <div class="small-hint">This tab is for export/preparation only. Full restore to a new PC must be done separately while PocketBase is stopped. Do not replace <b>pb_data</b> while PocketBase is running.</div>
+          </div>
+        </div>
       `;
       const footer = panel.querySelector("hr") || panel.lastElementChild;
       panel.insertBefore(page, footer);
@@ -140,10 +169,10 @@
     if (!host) return;
 
     const componentRows = (data.components || []).map(item => [
-      esc(item.relPath),
+      esc(item.packagePath || item.relPath),
       item.exists ? "✅ Found" : (item.required ? "❌ Missing" : "Not present"),
       esc(item.size || "0 B"),
-      esc(item.note || "")
+      esc(item.sourceRelPath ? `Source: ${item.sourceRelPath}` : item.note || "")
     ]);
 
     const countRows = (data.recordCounts || []).map(item => [
@@ -174,7 +203,7 @@
 
       <div class="card" style="padding:12px;margin-top:12px;">
         <div class="section-title">Database Components</div>
-        ${table(["Component", "Status", "Size", "Purpose"], componentRows)}
+        ${table(["Package Component", "Status", "Size", "Detected Source"], componentRows)}
       </div>
 
       <div class="card" style="padding:12px;margin-top:12px;">
