@@ -2,7 +2,6 @@
 // Creates SP WorkTrack database transfer packages for moving DB/config to another server PC.
 
 const fs = require("fs/promises");
-const fssync = require("fs");
 const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
@@ -13,10 +12,42 @@ const TRANSFER_DIR = path.join(ROOT_DIR, "transfer_packages");
 const PACKAGE_PREFIX = "SPWT_TRANSFER";
 
 const CORE_COMPONENTS = [
-  { key: "pb_data", relPath: "pb_data", required: true, type: "directory", note: "PocketBase database and uploaded files." },
-  { key: "pb_migrations", relPath: "pb_migrations", required: false, type: "directory", note: "PocketBase schema migrations." },
-  { key: "env", relPath: ".env", required: false, type: "file", note: "Server configuration. Contains secrets; keep package secure." },
-  { key: "package", relPath: "package.json", required: false, type: "file", note: "App version/package reference." }
+  {
+    key: "pb_data",
+    relPath: "pb_data",
+    packagePath: "pb_data",
+    altRelPaths: ["pb_data", "local-tools/pocketbase/pb_data"],
+    required: true,
+    type: "directory",
+    note: "PocketBase database and uploaded files. The service detects both root pb_data and local-tools/pocketbase/pb_data."
+  },
+  {
+    key: "pb_migrations",
+    relPath: "pb_migrations",
+    packagePath: "pb_migrations",
+    altRelPaths: ["pb_migrations"],
+    required: false,
+    type: "directory",
+    note: "PocketBase schema migrations."
+  },
+  {
+    key: "env",
+    relPath: ".env",
+    packagePath: "env/.env",
+    altRelPaths: [".env"],
+    required: false,
+    type: "file",
+    note: "Server configuration. Contains secrets; keep package secure."
+  },
+  {
+    key: "package",
+    relPath: "package.json",
+    packagePath: "package.json",
+    altRelPaths: ["package.json"],
+    required: false,
+    type: "file",
+    note: "App version/package reference."
+  }
 ];
 
 const COUNT_COLLECTIONS = [
@@ -69,8 +100,7 @@ function formatBytes(bytes) {
 
 async function existsStats(absPath) {
   try {
-    const stat = await fs.stat(absPath);
-    return stat;
+    return await fs.stat(absPath);
   } catch (err) {
     if (err?.code === "ENOENT") return null;
     throw err;
@@ -105,20 +135,41 @@ async function folderStats(absPath) {
   return { exists: true, files, folders, bytes };
 }
 
+async function findComponentSource(component) {
+  const candidates = Array.isArray(component.altRelPaths) && component.altRelPaths.length
+    ? component.altRelPaths
+    : [component.relPath];
+
+  for (const relPath of candidates) {
+    const absPath = path.join(ROOT_DIR, relPath);
+    const info = await folderStats(absPath);
+    if (info.exists) return { relPath, absPath, info };
+  }
+
+  const relPath = candidates[0] || component.relPath;
+  return {
+    relPath,
+    absPath: path.join(ROOT_DIR, relPath),
+    info: { exists: false, files: 0, folders: 0, bytes: 0 }
+  };
+}
+
 async function componentStatus() {
   const components = [];
   for (const item of CORE_COMPONENTS) {
-    const absPath = path.join(ROOT_DIR, item.relPath);
-    const info = await folderStats(absPath);
+    const source = await findComponentSource(item);
     components.push({
       ...item,
-      absPath,
-      exists: info.exists,
-      files: info.files,
-      folders: info.folders,
-      bytes: info.bytes,
-      size: formatBytes(info.bytes),
-      ok: item.required ? info.exists : true
+      sourceRelPath: source.relPath,
+      sourcePath: source.absPath,
+      absPath: source.absPath,
+      packagePath: item.packagePath || item.relPath,
+      exists: source.info.exists,
+      files: source.info.files,
+      folders: source.info.folders,
+      bytes: source.info.bytes,
+      size: formatBytes(source.info.bytes),
+      ok: item.required ? source.info.exists : true
     });
   }
   return components;
@@ -187,7 +238,8 @@ async function getDatabaseTransferStatus() {
     packages,
     warnings: [
       "Transfer package can contain .env secrets. Store and share it carefully.",
-      "For final migration, stop new production entry before creating the last package."
+      "For final migration, stop new production entry before creating the last package.",
+      "Restore is a separate step. Do not replace pb_data while PocketBase is running."
     ]
   };
 }
@@ -238,18 +290,24 @@ async function createTransferPackage(options = {}) {
   await fs.mkdir(workDir, { recursive: true });
 
   const copied = [];
-  for (const item of CORE_COMPONENTS) {
-    const src = path.join(ROOT_DIR, item.relPath);
-    const dest = path.join(workDir, item.relPath === ".env" ? "env/.env" : item.relPath);
+  for (const item of status.components) {
+    const dest = path.join(workDir, item.packagePath || item.relPath);
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    const ok = await copyIfExists(src, dest);
-    copied.push({ key: item.key, relPath: item.relPath, copied: ok, note: item.note });
+    const ok = item.exists ? await copyIfExists(item.absPath, dest) : false;
+    copied.push({
+      key: item.key,
+      relPath: item.relPath,
+      sourceRelPath: item.sourceRelPath,
+      packagePath: item.packagePath,
+      copied: ok,
+      note: item.note
+    });
   }
 
   const manifest = {
     app: "SP WorkTrack",
     packageType: "database-transfer",
-    packageVersion: 1,
+    packageVersion: 2,
     createdAt,
     createdOnServer: status.server,
     rootDir: ROOT_DIR,
@@ -268,9 +326,10 @@ async function createTransferPackage(options = {}) {
     `Created: ${createdAt}`,
     `Server: ${status.server.hostname}`,
     "",
-    "Contains pb_data, pb_migrations, and server config if present.",
+    "Contains PocketBase data, migrations, and server config if present.",
     "Keep this ZIP secure. It may contain database records and configuration secrets.",
     "For restore, stop PocketBase first, then restore folders on the new server PC.",
+    "After restore, start PocketBase and Node/SP WorkTrack Server again.",
     ""
   ].join("\r\n"), "utf8");
 
