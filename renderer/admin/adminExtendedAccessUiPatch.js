@@ -14,7 +14,8 @@
     { key: "maintenance", label: "Maintenance", tabId: "tabMaintenance" },
     { key: "performanceComments", label: "Performance Comments", tabId: "tabPerformanceComments" },
     { key: "dbTransfer", label: "Database Transfer", tabId: "tabDatabaseTransfer" },
-    { key: "systemInfo", label: "System Info", tabId: "tabSystemInfo" }
+    { key: "systemInfo", label: "System Info", tabId: "tabSystemInfo" },
+    { key: "systemConfig", label: "System Settings", tabId: "tabSystemConfig" }
   ];
 
   let cachedUsers = [];
