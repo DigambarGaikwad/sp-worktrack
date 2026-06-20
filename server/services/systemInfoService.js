@@ -1,9 +1,7 @@
 // server/services/systemInfoService.js
-// Detects current app URLs, network addresses, and safe configuration details.
+// Detects current app URLs and non-sensitive server/network details.
 
-const fs = require("fs");
 const os = require("os");
-const path = require("path");
 const { execFile } = require("child_process");
 
 function clean(value) {
@@ -73,100 +71,6 @@ function buildRequestUrl(req, port) {
   return `${protocol}://${host}`;
 }
 
-function isSensitiveEnvKey(key) {
-  return /(?:PASS|PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE|CREDENTIAL)/i.test(clean(key));
-}
-
-function maskSecret(value) {
-  return clean(value) ? "********" : "";
-}
-
-function maskEmail(value) {
-  const email = clean(value);
-  return email ? email.replace(/^(.{2}).*(@.*)$/u, "$1***$2") : "";
-}
-
-function safeEnvValue(key, value) {
-  return isSensitiveEnvKey(key) ? maskSecret(value) : clean(value);
-}
-
-function readTextFile(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return "";
-    return fs.readFileSync(filePath, "utf8");
-  } catch (err) {
-    return "";
-  }
-}
-
-function sanitizeEnvContent(text = "") {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) return line;
-      const key = trimmed.split("=")[0].trim();
-      if (!isSensitiveEnvKey(key)) return line;
-      return `${key}=${maskSecret(trimmed.slice(key.length + 1))}`;
-    })
-    .join("\n");
-}
-
-function envSummary(keys = []) {
-  return keys.map(key => ({ key, value: safeEnvValue(key, process.env[key] || ""), sensitive: isSensitiveEnvKey(key) }));
-}
-
-function getConfigInfo(rootDir) {
-  const envPath = path.join(rootDir, ".env");
-  const envExamplePath = path.join(rootDir, ".env.example");
-  const envContent = readTextFile(envPath);
-
-  return {
-    files: {
-      env: { path: envPath, exists: fs.existsSync(envPath) },
-      envExample: { path: envExamplePath, exists: fs.existsSync(envExamplePath) }
-    },
-    sanitizedEnvContent: sanitizeEnvContent(envContent),
-    envSummary: envSummary([
-      "SPWT_API_PORT",
-      "SPWT_STORAGE_MODE",
-      "POCKETBASE_URL",
-      "POCKETBASE_SUPERUSER_EMAIL",
-      "POCKETBASE_SUPERUSER_PASSWORD",
-      "SMTP_HOST",
-      "SMTP_PORT",
-      "SMTP_SECURE",
-      "SMTP_USER",
-      "SMTP_PASS",
-      "MAIL_FROM",
-      "GOOGLE_SHEET_BACKUP_ENABLED",
-      "GOOGLE_SHEET_WEBAPP_URL",
-      "GOOGLE_SHEET_BACKUP_SECRET",
-      "GOOGLE_SHEET_BACKUP_TIMEOUT_MS"
-    ]),
-    pocketbase: {
-      url: clean(process.env.POCKETBASE_URL || "http://127.0.0.1:8090"),
-      superuserEmail: maskEmail(process.env.POCKETBASE_SUPERUSER_EMAIL || process.env.POCKETBASE_ADMIN_EMAIL || ""),
-      hasSuperuserPassword: !!clean(process.env.POCKETBASE_SUPERUSER_PASSWORD || process.env.POCKETBASE_ADMIN_PASSWORD || "")
-    },
-    email: {
-      host: clean(process.env.SMTP_HOST || ""),
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-      user: maskEmail(process.env.SMTP_USER || ""),
-      hasPassword: !!clean(process.env.SMTP_PASS || ""),
-      from: clean(process.env.MAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || "")
-    },
-    googleSheetBackup: {
-      enabled: String(process.env.GOOGLE_SHEET_BACKUP_ENABLED || "false").toLowerCase() === "true",
-      webAppUrl: clean(process.env.GOOGLE_SHEET_WEBAPP_URL || ""),
-      hasSecret: !!clean(process.env.GOOGLE_SHEET_BACKUP_SECRET || ""),
-      timeoutMs: Number(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS || 15000),
-      schedulerIntervalMs: Number(process.env.GOOGLE_SHEET_BACKUP_SCHEDULER_INTERVAL_MS || 60000)
-    }
-  };
-}
-
 async function getSystemInfo(req) {
   const port = Number(process.env.SPWT_API_PORT || 3030);
   const rootDir = process.cwd();
@@ -202,12 +106,11 @@ async function getSystemInfo(req) {
       interfaces,
       tailscaleCli: tsCli.ok ? "ok" : `not available: ${tsCli.error || "unknown"}`
     },
-    config: getConfigInfo(rootDir),
     notes: [
       "Use LAN URL for devices on the same WiFi/LAN.",
       "Use Tailscale URL for approved VPN devices.",
       "localhost works only on the server PC.",
-      "Passwords and secrets are masked in System Info. Update them only from .env or the future Email Settings screen."
+      "Email, PocketBase, and Google Sheet settings are managed from the protected System Settings tab."
     ]
   };
 }
