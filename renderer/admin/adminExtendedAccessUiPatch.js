@@ -12,7 +12,9 @@
     { key: "backupControls", label: "Backup to Google Sheet", tabId: "tabBackupControls" },
     { key: "reportEmails", label: "Report Emails", tabId: "tabQualityReportEmails" },
     { key: "maintenance", label: "Maintenance", tabId: "tabMaintenance" },
-    { key: "performanceComments", label: "Performance Comments", tabId: "tabPerformanceComments" }
+    { key: "performanceComments", label: "Performance Comments", tabId: "tabPerformanceComments" },
+    { key: "dbTransfer", label: "Database Transfer", tabId: "tabDatabaseTransfer" },
+    { key: "systemInfo", label: "System Info", tabId: "tabSystemInfo" }
   ];
 
   let cachedUsers = [];
