@@ -9,7 +9,8 @@ const EXTRA_PERMISSIONS = [
   "maintenance",
   "performanceComments",
   "dbTransfer",
-  "systemInfo"
+  "systemInfo",
+  "systemConfig"
 ];
 
 for (const permission of EXTRA_PERMISSIONS) {
