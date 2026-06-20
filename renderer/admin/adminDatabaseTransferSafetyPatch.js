@@ -1,10 +1,11 @@
 // renderer/admin/adminDatabaseTransferSafetyPatch.js
-// Safety polish for Database Transfer tab: hide unused optional count rows and guard start buttons until tasks exist.
+// Safety polish for Database Transfer tab: hide unused optional count rows and guard runtime buttons.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
   if ((CONFIG.DATA_SOURCE || "local") !== "db") return;
 
+  const API_BASE_URL = CONFIG.API_BASE_URL || "http://localhost:3030";
   const OPTIONAL_COLLECTIONS = new Set([
     "machine_categories",
     "work_subworks",
@@ -21,6 +22,19 @@
 
   function text(el) {
     return String(el?.textContent || "").trim();
+  }
+
+  function token() {
+    return window.SPWT_ADMIN_ACCESS?.getToken?.() || window.SPWT_ADMIN_TOKEN || localStorage.getItem("spwt_admin_token") || "";
+  }
+
+  function setRuntimeStatus(message, type = "") {
+    const el = $("dbRuntimeStatusLine");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.remove("spwt-status-error", "spwt-status-success");
+    if (type === "error") el.classList.add("spwt-status-error");
+    if (type === "success") el.classList.add("spwt-status-success");
   }
 
   function findCardByTitle(title) {
@@ -113,12 +127,56 @@
     }
   }
 
+  async function stopNodeBestEffort() {
+    const ok = confirm("Stop Node server now?\n\nThis will disconnect this browser/app because Node serves SP WorkTrack. Restart it from terminal, Task Scheduler, or the runtime script.");
+    if (!ok) return;
+
+    const btn = $("dbRuntimeStopNodeBtn");
+    if (btn) btn.disabled = true;
+    setRuntimeStatus("Node stop command sent. If this page disconnects, that is expected.", "success");
+
+    const headers = {};
+    const t = token();
+    if (t) headers["x-spwt-admin-token"] = t;
+
+    try {
+      await fetch(`${API_BASE_URL}/api/transfer/runtime/node/stop`, {
+        method: "POST",
+        headers,
+        keepalive: true
+      });
+    } catch (err) {
+      // Expected in many browsers because the request itself stops the server that is answering it.
+      console.warn("Node stop request disconnected as expected:", err);
+    }
+
+    setTimeout(() => {
+      setRuntimeStatus("Node server is stopping/stopped. Restart from server terminal: npm run server", "success");
+    }, 600);
+  }
+
+  function explainStopPocketBase() {
+    const line = $("dbRuntimeStatusLine");
+    if (!line) return;
+    line.title = "After PocketBase stops, data/API features that need DB will fail until PocketBase is started again.";
+  }
+
   function runPolish() {
     cleanOptionalCountRows();
     guardRuntimeButtons();
+    explainStopPocketBase();
   }
 
   document.addEventListener("click", (event) => {
+    const stopNode = event.target?.closest?.("#dbRuntimeStopNodeBtn");
+    if (stopNode) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      stopNodeBestEffort();
+      return;
+    }
+
     const guarded = event.target?.closest?.("#dbRuntimeStartPbBtn,#dbRuntimeStartNodeBtn");
     if (guarded && guarded.disabled) {
       event.preventDefault();
@@ -126,6 +184,7 @@
       alert(guarded.title || "Create auto-start tasks first.");
       return;
     }
+
     setTimeout(runPolish, 300);
     setTimeout(runPolish, 1200);
   }, true);
