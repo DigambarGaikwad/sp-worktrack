@@ -16,6 +16,7 @@ const backupRoutes = require("./routes/backupRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const transferRoutes = require("./routes/transferRoutes");
+const systemRoutes = require("./routes/systemRoutes");
 const { startBackupScheduler } = require("./services/backupScheduler");
 
 dotenv.config();
@@ -37,6 +38,7 @@ app.use("/api/backup", backupRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/transfer", transferRoutes);
+app.use("/api/system", systemRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, app: "SP WorkTrack API", mode: process.env.SPWT_STORAGE_MODE || "pocketbase", timestamp: new Date().toISOString() });
