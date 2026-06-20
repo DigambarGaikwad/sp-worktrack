@@ -76,7 +76,7 @@
       <div class="section-title">Desktop Runtime Shortcuts</div>
       <div class="small-hint"><b>Status:</b> ${esc(data.message || "Shortcut action completed.")}</div>
       <div class="small-hint"><b>Desktop:</b> ${esc(data.desktop || "Server PC desktop")}</div>
-      <div class="small-hint"><b>Runtime folder:</b> ${esc(data.scripts?.runtimeDir || data.scripts?.runtimeDir || "runtime_scripts")}</div>
+      <div class="small-hint"><b>Runtime folder:</b> ${esc(data.scripts?.runtimeDir || "runtime_scripts")}</div>
       ${rows.length ? `
         <div style="overflow:auto;margin-top:8px;">
           <table class="admin-table" style="width:100%;border-collapse:collapse;">
@@ -135,7 +135,7 @@
     const row = removeBtn?.parentElement || $("dbRuntimeCheckBtn")?.parentElement;
     if (!row) return;
 
-    if (!$ ("dbRuntimeCreateShortcutsBtn")) {
+    if (!$("dbRuntimeCreateShortcutsBtn")) {
       const btn = document.createElement("button");
       btn.className = "btn green";
       btn.id = "dbRuntimeCreateShortcutsBtn";
