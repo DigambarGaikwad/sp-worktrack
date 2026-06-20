@@ -1,5 +1,5 @@
 // renderer/admin/adminSystemInfoPatch.js
-// Adds Admin -> System Info with detected LAN/Tailscale URLs and copy/open buttons.
+// Adds Admin -> System Info with detected LAN/Tailscale URLs and safe config paths.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -56,7 +56,7 @@
       page.id = "tabSystemInfo";
       page.innerHTML = `
         <div class="section-title">System Info</div>
-        <div class="small-hint">Detected app addresses for local LAN and Tailscale access. No IP or link is assumed.</div>
+        <div class="small-hint">Detected app addresses, server paths, and masked configuration details. No IP/link/path is assumed.</div>
 
         <div class="card admin-controls-card" style="margin-top:12px;">
           <div class="row admin-controls-actions" style="gap:10px;flex-wrap:wrap;">
@@ -107,6 +107,10 @@
     return `<tr><td style="font-weight:900;width:220px;">${esc(label)}</td><td><code>${esc(value || "-")}</code>${note ? `<div class="small-hint">${esc(note)}</div>` : ""}</td></tr>`;
   }
 
+  function boolText(value) {
+    return value ? "Yes" : "No";
+  }
+
   function urlCard(title, value, note, copyId, openId) {
     return `
       <div class="mini-metric" style="min-height:112px;">
@@ -116,6 +120,64 @@
         <div class="row" style="margin-top:10px;gap:8px;">
           <button class="btn grey" type="button" data-system-copy="${esc(copyId)}">Copy</button>
           <button class="btn grey" type="button" data-system-open="${esc(openId)}">Open</button>
+        </div>
+      </div>`;
+  }
+
+  function renderConfigTables(config = {}) {
+    const files = config.files || {};
+    const google = config.googleSheetBackup || {};
+    const email = config.email || {};
+    const pocketbase = config.pocketbase || {};
+    const envContent = config.sanitizedEnvContent || "";
+
+    return `
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card admin-controls-card">
+          <div class="section-title">Configuration Files / Paths</div>
+          <table class="admin-table" style="margin-top:8px;">
+            <tbody>
+              ${row(".env Path", files.env?.path, files.env?.exists ? "Found" : "Not found")}
+              ${row(".env.example Path", files.envExample?.path, files.envExample?.exists ? "Found" : "Not found")}
+              ${row("PocketBase URL", pocketbase.url)}
+              ${row("PocketBase Superuser", pocketbase.superuserEmail, pocketbase.hasSuperuserPassword ? "Password saved but hidden" : "Password not detected")}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card admin-controls-card">
+          <div class="section-title">Google Sheet Backup Path</div>
+          <table class="admin-table" style="margin-top:8px;">
+            <tbody>
+              ${row("Backup Enabled", boolText(google.enabled))}
+              ${row("Web App URL", google.webAppUrl || "Not configured", "This is the Apps Script backup endpoint from .env")}
+              ${row("Backup Secret", google.hasSecret ? "********" : "Not configured")}
+              ${row("Timeout", `${google.timeoutMs || 15000} ms`)}
+              ${row("Scheduler Check", `${google.schedulerIntervalMs || 60000} ms`)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card admin-controls-card">
+          <div class="section-title">Email Sender Configuration</div>
+          <table class="admin-table" style="margin-top:8px;">
+            <tbody>
+              ${row("SMTP Host", email.host || "Not configured")}
+              ${row("SMTP Port", email.port || 587)}
+              ${row("SMTP Secure", boolText(email.secure))}
+              ${row("SMTP User", email.user || "Not configured")}
+              ${row("SMTP Password", email.hasPassword ? "********" : "Not configured")}
+              ${row("Mail From", email.from || "Not configured")}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card admin-controls-card">
+          <div class="section-title">Sanitized .env Content</div>
+          <div class="small-hint">Passwords, secrets, and tokens are hidden. Use this only for setup verification.</div>
+          <pre style="white-space:pre-wrap;word-break:break-word;max-height:280px;overflow:auto;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:12px;font-size:12px;line-height:1.45;margin-top:10px;">${esc(envContent || ".env file not found")}</pre>
         </div>
       </div>`;
   }
@@ -163,6 +225,8 @@
         </div>
       </div>
 
+      ${renderConfigTables(info.config || {})}
+
       <div class="card admin-controls-card" style="margin-top:14px;background:#fff7ed;border-color:#fed7aa;">
         <div class="section-title">Usage Notes</div>
         <div class="small-hint" style="line-height:1.7;">
@@ -200,7 +264,7 @@
     if (!hasPermission("systemInfo")) return status("No permission: System Info", "error");
     loading = true;
     try {
-      status("Detecting network info...");
+      status("Detecting network and config info...");
       const currentUrl = encodeURIComponent(window.location.href);
       const payload = await requestJson(`/api/system/info?currentUrl=${currentUrl}`, { method: "GET" });
       lastInfo = payload.data || {};
