@@ -165,7 +165,7 @@
             Open the Gmail account -> <b>Manage your Google Account</b> -> <b>Security</b> -> <b>2-Step Verification</b> -> Turn ON. This is required before Google allows App Passwords.
           </div>
           <div class="spwt-help-step"><b>Step 3 - Generate App Password</b><br>
-            Open <code>https://myaccount.google.com/apppasswords</code>, type app name <b>SP WorkTrack</b>, click <b>Create</b>, then copy the 16-character password. Do not paste it in chat or share it.
+            Open <code>https://myaccount.google.com/apppasswords</code>, type app name <b>SP WorkTrack</b>, click <b>Create</b>, then copy the 16-character password. This is very sensitive information: do not paste it in any online AI tool, chat app, email, screenshot, or share it with anyone.
           </div>
           <div class="spwt-help-step"><b>Step 4 - Fill Email Sender Settings</b><br>
             SMTP Host: <code>smtp.gmail.com</code><br>
