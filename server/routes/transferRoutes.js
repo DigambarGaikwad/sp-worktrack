@@ -14,6 +14,8 @@ const {
   POCKETBASE_TASK,
   getRuntimeStatus,
   createOrUpdateTasks,
+  createRuntimeShortcuts,
+  openRuntimeFolder,
   removeTasks,
   runTask,
   stopPocketBaseProcesses
@@ -94,6 +96,28 @@ router.post("/runtime/tasks/install", async (req, res) => {
   } catch (err) {
     console.error("POST /api/transfer/runtime/tasks/install failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to create auto-start tasks.", details: err.details || null });
+  }
+});
+
+router.post("/runtime/shortcuts/create", async (req, res) => {
+  try {
+    requireDbTransfer(req);
+    const data = await createRuntimeShortcuts();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/transfer/runtime/shortcuts/create failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to create runtime shortcuts.", details: err.details || null });
+  }
+});
+
+router.post("/runtime/folder/open", async (req, res) => {
+  try {
+    requireDbTransfer(req);
+    const data = await openRuntimeFolder();
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/transfer/runtime/folder/open failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to open runtime folder.", details: err.details || null });
   }
 });
 
