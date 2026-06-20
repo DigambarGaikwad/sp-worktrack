@@ -8,7 +8,8 @@ const EXTRA_PERMISSIONS = [
   "reportEmails",
   "maintenance",
   "performanceComments",
-  "dbTransfer"
+  "dbTransfer",
+  "systemInfo"
 ];
 
 for (const permission of EXTRA_PERMISSIONS) {
