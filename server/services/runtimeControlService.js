@@ -119,6 +119,9 @@ async function writeRuntimeScripts() {
   const pocketbaseScript = path.join(RUNTIME_DIR, "start-pocketbase.ps1");
   const nodeScript = path.join(RUNTIME_DIR, "start-node-server.ps1");
   const launcherScript = path.join(RUNTIME_DIR, "start-sp-worktrack.ps1");
+  const stopScript = path.join(RUNTIME_DIR, "stop-sp-worktrack.ps1");
+  const restartScript = path.join(RUNTIME_DIR, "restart-sp-worktrack.ps1");
+  const openScript = path.join(RUNTIME_DIR, "open-sp-worktrack.ps1");
 
   await fs.writeFile(pocketbaseScript, [
     "$ErrorActionPreference = 'Stop'",
@@ -137,6 +140,34 @@ async function writeRuntimeScripts() {
     `& $npm run server *> '${quotePs(path.join(LOG_DIR, "node-server.log"))}'`
   ].join("\r\n"), "utf8");
 
+  await fs.writeFile(openScript, [
+    "$ErrorActionPreference = 'Continue'",
+    `Start-Process 'http://localhost:${DEFAULT_NODE_PORT}'`
+  ].join("\r\n"), "utf8");
+
+  await fs.writeFile(stopScript, [
+    "$ErrorActionPreference = 'Continue'",
+    `New-Item -ItemType Directory -Path '${quotePs(LOG_DIR)}' -Force | Out-Null`,
+    `$root = '${quotePs(ROOT_DIR)}'`,
+    `$pbDir = '${quotePs(POCKETBASE_DIR)}'`,
+    "$procs = Get-CimInstance Win32_Process | Where-Object {",
+    "  (($_.Name -eq 'pocketbase.exe') -and ($_.CommandLine -like \"*$pbDir*\")) -or",
+    "  (($_.Name -eq 'node.exe') -and ($_.CommandLine -like \"*$root*\"))",
+    "}",
+    "$count = 0",
+    "foreach ($p in $procs) {",
+    "  try { Invoke-CimMethod -InputObject $p -MethodName Terminate | Out-Null; $count++ } catch {}",
+    "}",
+    `\"Stopped processes: $count\" | Out-File -FilePath '${quotePs(path.join(LOG_DIR, "stop-sp-worktrack.log"))}' -Append -Encoding utf8`
+  ].join("\r\n"), "utf8");
+
+  await fs.writeFile(restartScript, [
+    "$ErrorActionPreference = 'Continue'",
+    `& '${quotePs(stopScript)}'`,
+    "Start-Sleep -Seconds 3",
+    `& '${quotePs(launcherScript)}'`
+  ].join("\r\n"), "utf8");
+
   await fs.writeFile(launcherScript, [
     "$ErrorActionPreference = 'Continue'",
     `Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${quotePs(pocketbaseScript)}"' -WindowStyle Minimized`,
@@ -145,7 +176,16 @@ async function writeRuntimeScripts() {
     `Start-Process 'http://localhost:${DEFAULT_NODE_PORT}'`
   ].join("\r\n"), "utf8");
 
-  return { pocketbaseScript, nodeScript, launcherScript, runtimeDir: RUNTIME_DIR, logDir: LOG_DIR };
+  return {
+    pocketbaseScript,
+    nodeScript,
+    launcherScript,
+    stopScript,
+    restartScript,
+    openScript,
+    runtimeDir: RUNTIME_DIR,
+    logDir: LOG_DIR
+  };
 }
 
 function taskCommand(scriptPath) {
@@ -169,6 +209,63 @@ async function createOrUpdateTasks() {
     nodeTask: nodeResult,
     message: ok ? "Auto-start tasks created/updated." : "Task creation failed. Run server/terminal as Administrator and try again."
   };
+}
+
+async function createRuntimeShortcuts() {
+  if (!isWindows()) throw new Error("Runtime shortcut creation is supported only on Windows.");
+  const scripts = await writeRuntimeScripts();
+  const pb = await pathExists(POCKETBASE_EXE);
+  if (!pb.exists) throw new Error(`PocketBase executable not found: ${POCKETBASE_EXE}`);
+
+  const script = `
+$ErrorActionPreference = 'Stop'
+$desktop = [Environment]::GetFolderPath('Desktop')
+$root = '${quotePs(ROOT_DIR)}'
+$shell = New-Object -ComObject WScript.Shell
+$items = @(
+  @{ Name = 'Start SP WorkTrack.lnk'; Script = '${quotePs(scripts.launcherScript)}'; Description = 'Start PocketBase, Node server, and open SP WorkTrack' },
+  @{ Name = 'Stop SP WorkTrack.lnk'; Script = '${quotePs(scripts.stopScript)}'; Description = 'Stop SP WorkTrack Node server and PocketBase' },
+  @{ Name = 'Restart SP WorkTrack.lnk'; Script = '${quotePs(scripts.restartScript)}'; Description = 'Restart SP WorkTrack runtime services' },
+  @{ Name = 'Open SP WorkTrack.lnk'; Script = '${quotePs(scripts.openScript)}'; Description = 'Open SP WorkTrack in browser' }
+)
+$result = @()
+foreach ($i in $items) {
+  $shortcutPath = Join-Path $desktop $i.Name
+  $shortcut = $shell.CreateShortcut($shortcutPath)
+  $shortcut.TargetPath = 'powershell.exe'
+  $shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $i.Script + '"'
+  $shortcut.WorkingDirectory = $root
+  $shortcut.WindowStyle = 7
+  $shortcut.Description = $i.Description
+  $shortcut.Save()
+  $result += @{ name = $i.Name; path = $shortcutPath }
+}
+$result | ConvertTo-Json -Compress
+`;
+
+  const result = await runPowerShell(script);
+  let shortcuts = [];
+  try {
+    const parsed = JSON.parse(result.stdout || "[]");
+    shortcuts = Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    shortcuts = [];
+  }
+
+  return {
+    scripts,
+    shortcuts,
+    desktop: shortcuts[0]?.path ? path.dirname(shortcuts[0].path) : "",
+    message: shortcuts.length ? "Runtime desktop shortcuts created." : "Runtime scripts created; shortcut list could not be read."
+  };
+}
+
+async function openRuntimeFolder() {
+  if (!isWindows()) throw new Error("Open folder action is supported only on Windows.");
+  await writeRuntimeScripts();
+  const result = await runPowerShell(`Start-Process '${quotePs(RUNTIME_DIR)}'`, { allowFailure: true });
+  if (result.code !== 0) throw new Error(result.stderr || result.stdout || "Failed to open runtime folder.");
+  return { runtimeDir: RUNTIME_DIR, message: "Runtime folder open command sent on server PC." };
 }
 
 async function removeTasks() {
@@ -242,9 +339,10 @@ async function getRuntimeStatus() {
     scripts: await writeRuntimeScripts(),
     guidance: [
       "Create Auto-Start Tasks once on the server PC, preferably from an Administrator terminal.",
+      "Create Desktop Shortcuts gives Start, Stop, Restart, and Open shortcuts on the server PC desktop.",
       "Start PocketBase can be triggered from this screen after task creation.",
       "Stopping Node will disconnect this browser because Node serves the app.",
-      "If Node is stopped, start it from Task Scheduler or Start SP WorkTrack script on the server PC."
+      "If Node is stopped, use Start SP WorkTrack desktop shortcut or Task Scheduler on the server PC."
     ]
   };
 }
@@ -254,6 +352,8 @@ module.exports = {
   POCKETBASE_TASK,
   getRuntimeStatus,
   createOrUpdateTasks,
+  createRuntimeShortcuts,
+  openRuntimeFolder,
   removeTasks,
   runTask,
   stopPocketBaseProcesses
