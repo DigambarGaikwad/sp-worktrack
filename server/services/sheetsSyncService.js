@@ -161,14 +161,37 @@ async function pbListAll(collectionName) {
   return all;
 }
 
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null || value === "") return [];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      return [];
+    }
+  }
+  return Array.isArray(value.items) ? value.items : [];
+}
+
+function pointName(item) {
+  return clean(item?.point_name || item?.point_code || item?.pointName || item?.bookingPoint || item?.qualityPoint || item?.name || item?.point || item?.label || item?.title || item?.value);
+}
+
+function pointInputType(item) { return clean(item?.input_type || item?.inputType || item?.type || item?.dataType); }
+function pointReading(item) { return clean(item?.reading || item?.reading_value || item?.readingValue || item?.value || item?.status || item?.result || item?.remark); }
+function pointResult(item) { return clean(item?.result || item?.status || (pointReading(item) ? "DONE" : "")); }
+function pointStdMinutes(item) { return toNumber(item?.original_minutes ?? item?.standard_minutes ?? item?.standardMinutes ?? item?.standardTime ?? item?.stdMinutes ?? item?.bookedTime, 0); }
+function pointActualMinutes(item) { return toNumber(item?.booked_minutes ?? item?.bookedMinutes ?? item?.actual_minutes ?? item?.actualMinutes ?? item?.actualTime ?? item?.time, 0); }
+
 function summarizePointList(value) {
-  const list = Array.isArray(value) ? value : [];
-  return list.map((item) => {
+  return asArray(value).map((item) => {
     if (item == null) return "";
     if (typeof item === "string") return item;
-    const name = clean(item.name || item.point || item.pointName || item.value);
-    const minutes = clean(item.bookedTime || item.bookedMinutes || item.standardTime || item.standardMinutes || "");
-    const reading = clean(item.reading || item.status || item.result || "");
+    const name = pointName(item);
+    const minutes = clean(item.bookedTime || item.bookedMinutes || item.standardTime || item.standardMinutes || item.standard_minutes || item.booked_minutes || "");
+    const reading = pointReading(item);
     return [name, minutes ? `${minutes} min` : "", reading].filter(Boolean).join(" - ");
   }).filter(Boolean).join("; ");
 }
@@ -178,35 +201,81 @@ function buildLogRows(entries, lines, workDate, syncedAt) {
   return lines.map((line) => {
     const entryNo = clean(line.entry_no);
     const header = headerByEntryNo.get(entryNo) || {};
-    return [clean(header.created || line.created || syncedAt), clean(line.work_date || header.work_date || workDate), clean(header.shift_name || header.shift_code), clean(header.shift_start), clean(header.shift_end), toNumber(header.break_minutes, 0), clean(header.work_type || "Normal"), clean(line.emp_code || header.emp_code), clean(line.emp_name || header.emp_name), toNumber(header.shift_available, 0), toNumber(header.total_actual_minutes, 0), toNumber(header.remaining_minutes, 0), toNumber(header.productivity_percent, 0), clean(line.machine_no), clean(line.machine_category), clean(line.department_name || line.department_code), clean(line.subwork_name || line.subwork_code), clean(line.work_nature || "Normal"), clean(line.description), clean(line.root_area), toNumber(line.standard_minutes, 0), toNumber(line.actual_minutes, 0), clean(line.efficiency_reason), clean(header.major_loss_reason), clean(header.remarks), toNumber(header.flexible_shift_minutes, 0), summarizePointList(line.booking_points_json), summarizePointList(line.quality_points_json), entryNo, toNumber(line.line_no, 0), syncedAt];
+    return [clean(header.created || line.created || syncedAt), clean(line.work_date || header.work_date || workDate), clean(header.shift_name || header.shift_code || line.shift_name || line.shift_code), clean(header.shift_start || line.shift_start), clean(header.shift_end || line.shift_end), toNumber(header.break_minutes ?? line.break_minutes, 0), clean(header.work_type || line.work_type || "Normal"), clean(line.emp_code || header.emp_code), clean(line.emp_name || header.emp_name), toNumber(header.shift_available ?? line.shift_available, 0), toNumber(header.total_actual_minutes ?? line.total_actual_minutes, 0), toNumber(header.remaining_minutes ?? line.remaining_minutes, 0), toNumber(header.productivity_percent ?? line.productivity_percent, 0), clean(line.machine_no), clean(line.machine_category), clean(line.department_name || line.department_code), clean(line.subwork_name || line.subwork_code), clean(line.work_nature || "Normal"), clean(line.description), clean(line.root_area), toNumber(line.standard_minutes, 0), toNumber(line.actual_minutes, 0), clean(line.efficiency_reason), clean(header.major_loss_reason || line.major_loss_reason), clean(header.remarks || line.remarks), toNumber(header.flexible_shift_minutes ?? line.flexible_shift_minutes, 0), summarizePointList(line.booking_points_json), summarizePointList(line.quality_points_json), entryNo, toNumber(line.line_no, 0), syncedAt];
   });
 }
 
-function buildAttendanceRows(entries, workDate, syncedAt) {
-  return entries.map((entry) => {
-    const shiftAvailable = toNumber(entry.shift_available, 0);
-    const utilized = toNumber(entry.total_actual_minutes, 0);
-    const otMinutes = Math.max(0, utilized - shiftAvailable);
-    return [clean(entry.created || syncedAt), clean(entry.work_date || workDate), clean(entry.emp_code), clean(entry.emp_name), clean(entry.shift_name || entry.shift_code), clean(entry.work_type || "Normal"), clean(entry.status || "SUBMITTED"), shiftAvailable, utilized, round2(utilized / 60), otMinutes, round2(otMinutes / 60), toNumber(entry.productivity_percent, 0), clean(entry.major_loss_reason), clean(entry.remarks), toNumber(entry.flexible_shift_minutes, 0), clean(entry.entry_no), syncedAt];
+function buildAttendanceRows(entries, lines, workDate, syncedAt) {
+  if (entries.length) {
+    return entries.map((entry) => {
+      const shiftAvailable = toNumber(entry.shift_available, 0);
+      const utilized = toNumber(entry.total_actual_minutes, 0);
+      const otMinutes = Math.max(0, utilized - shiftAvailable);
+      return [clean(entry.created || syncedAt), clean(entry.work_date || workDate), clean(entry.emp_code), clean(entry.emp_name), clean(entry.shift_name || entry.shift_code), clean(entry.work_type || "Normal"), clean(entry.status || "SUBMITTED"), shiftAvailable, utilized, round2(utilized / 60), otMinutes, round2(otMinutes / 60), toNumber(entry.productivity_percent, 0), clean(entry.major_loss_reason), clean(entry.remarks), toNumber(entry.flexible_shift_minutes, 0), clean(entry.entry_no), syncedAt];
+    });
+  }
+
+  const groups = new Map();
+  lines.forEach((line) => {
+    const key = clean(line.entry_no) || [dateKey(line.work_date), clean(line.emp_code), clean(line.shift_name || line.shift_code)].join("|");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(line);
+  });
+
+  return [...groups.values()].map((group) => {
+    const first = group[0] || {};
+    const shiftAvailable = toNumber(first.shift_available ?? first.gross_shift_available, 0);
+    const utilized = group.reduce((sum, line) => sum + toNumber(line.actual_minutes, 0), 0);
+    const standard = group.reduce((sum, line) => sum + toNumber(line.standard_minutes, 0), 0);
+    const otMinutes = shiftAvailable > 0 ? Math.max(0, utilized - shiftAvailable) : 0;
+    return [clean(first.created || syncedAt), clean(first.work_date || workDate), clean(first.emp_code), clean(first.emp_name), clean(first.shift_name || first.shift_code), clean(first.work_type || "Normal"), clean(first.status || "SUBMITTED"), shiftAvailable, utilized, round2(utilized / 60), otMinutes, round2(otMinutes / 60), shiftAvailable > 0 ? round2((standard / shiftAvailable) * 100) : 0, clean(first.major_loss_reason), clean(first.remarks), toNumber(first.flexible_shift_minutes, 0), clean(first.entry_no), syncedAt];
   });
 }
 
-function buildQualityRows(qualityLogs, entries, workDate, syncedAt) {
+function buildQualityRows(qualityLogs, entries, lines, workDate, syncedAt) {
   const headerByEntryNo = new Map(entries.map((entry) => [clean(entry.entry_no), entry]));
-  return qualityLogs.map((q) => {
-    const entryNo = clean(q.entry_no);
+  if (qualityLogs.length) {
+    return qualityLogs.map((q) => {
+      const entryNo = clean(q.entry_no);
+      const header = headerByEntryNo.get(entryNo) || {};
+      return [clean(q.created || header.created || syncedAt), clean(q.work_date || header.work_date || workDate), clean(q.machine_no), clean(q.machine_category), clean(q.department_name || q.department_code), clean(q.subwork_name || q.subwork_code), clean(q.point_name || q.point_code), clean(q.input_type), clean(q.value), clean(q.status || "DONE"), clean(q.emp_code || header.emp_code), clean(q.emp_name || header.emp_name), clean(header.shift_name || header.shift_code), clean(header.status || "SUBMITTED"), entryNo, syncedAt];
+    });
+  }
+
+  const rows = [];
+  lines.forEach((line) => {
+    const entryNo = clean(line.entry_no);
     const header = headerByEntryNo.get(entryNo) || {};
-    return [clean(q.created || header.created || syncedAt), clean(q.work_date || header.work_date || workDate), clean(q.machine_no), clean(q.machine_category), clean(q.department_name || q.department_code), clean(q.subwork_name || q.subwork_code), clean(q.point_name || q.point_code), clean(q.input_type), clean(q.value), clean(q.status || "DONE"), clean(q.emp_code || header.emp_code), clean(q.emp_name || header.emp_name), clean(header.shift_name || header.shift_code), clean(header.status || "SUBMITTED"), entryNo, syncedAt];
+    asArray(line.quality_points_json).forEach((point) => {
+      const name = typeof point === "string" ? point : pointName(point);
+      if (!name) return;
+      rows.push([clean(line.created || header.created || syncedAt), clean(line.work_date || header.work_date || workDate), clean(line.machine_no), clean(line.machine_category), clean(line.department_name || line.department_code), clean(line.subwork_name || line.subwork_code), name, typeof point === "string" ? "" : pointInputType(point), typeof point === "string" ? "" : pointReading(point), typeof point === "string" ? "DONE" : clean(pointResult(point) || "DONE"), clean(line.emp_code || header.emp_code), clean(line.emp_name || header.emp_name), clean(header.shift_name || header.shift_code || line.shift_name || line.shift_code), clean(header.status || line.status || "SUBMITTED"), entryNo, syncedAt]);
+    });
   });
+  return rows;
 }
 
-function buildBookingLogRows(bookingLogs, entries, workDate, syncedAt) {
+function buildBookingLogRows(bookingLogs, entries, lines, workDate, syncedAt) {
   const headerByEntryNo = new Map(entries.map((entry) => [clean(entry.entry_no), entry]));
-  return bookingLogs.map((b) => {
-    const entryNo = clean(b.entry_no);
+  if (bookingLogs.length) {
+    return bookingLogs.map((b) => {
+      const entryNo = clean(b.entry_no);
+      const header = headerByEntryNo.get(entryNo) || {};
+      return [clean(b.created || header.created || syncedAt), clean(b.work_date || header.work_date || workDate), clean(b.machine_no), clean(b.machine_category), clean(b.department_name || b.department_code), clean(b.subwork_name || b.subwork_code), clean(b.point_name || b.point_code), toNumber(b.original_minutes, 0), toNumber(b.booked_minutes, 0), clean(b.emp_code || header.emp_code), clean(b.emp_name || header.emp_name), clean(header.shift_name || header.shift_code), clean(header.work_type || "Normal"), clean(b.status_after || "BOOKED"), entryNo, syncedAt];
+    });
+  }
+
+  const rows = [];
+  lines.forEach((line) => {
+    const entryNo = clean(line.entry_no);
     const header = headerByEntryNo.get(entryNo) || {};
-    return [clean(b.created || header.created || syncedAt), clean(b.work_date || header.work_date || workDate), clean(b.machine_no), clean(b.machine_category), clean(b.department_name || b.department_code), clean(b.subwork_name || b.subwork_code), clean(b.point_name || b.point_code), toNumber(b.original_minutes, 0), toNumber(b.booked_minutes, 0), clean(b.emp_code || header.emp_code), clean(b.emp_name || header.emp_name), clean(header.shift_name || header.shift_code), clean(header.work_type || "Normal"), clean(b.status_after || "BOOKED"), entryNo, syncedAt];
+    asArray(line.booking_points_json).forEach((point) => {
+      const name = typeof point === "string" ? point : pointName(point);
+      if (!name) return;
+      rows.push([clean(line.created || header.created || syncedAt), clean(line.work_date || header.work_date || workDate), clean(line.machine_no), clean(line.machine_category), clean(line.department_name || line.department_code), clean(line.subwork_name || line.subwork_code), name, typeof point === "string" ? 0 : pointStdMinutes(point), typeof point === "string" ? 0 : pointActualMinutes(point), clean(line.emp_code || header.emp_code), clean(line.emp_name || header.emp_name), clean(header.shift_name || header.shift_code || line.shift_name || line.shift_code), clean(header.work_type || line.work_type || "Normal"), typeof point === "string" ? "BOOKED" : clean(pointResult(point) || "BOOKED"), entryNo, syncedAt]);
+    });
   });
+  return rows;
 }
 
 function buildBookingStatusRows(bookingStatus, syncedAt) {
@@ -254,9 +323,9 @@ async function syncPreparedData({ workDate = "", fromDate = "", toDate = "", sou
   const bookingLogs = data.bookingLogs.filter(inScope);
 
   const logRows = buildLogRows(entries, lines, workDate, syncedAt);
-  const attendanceRows = buildAttendanceRows(entries, workDate, syncedAt);
-  const qualityRows = buildQualityRows(qualityLogs, entries, workDate, syncedAt);
-  const bookingLogRows = buildBookingLogRows(bookingLogs, entries, workDate, syncedAt);
+  const attendanceRows = buildAttendanceRows(entries, lines, workDate, syncedAt);
+  const qualityRows = buildQualityRows(qualityLogs, entries, lines, workDate, syncedAt);
+  const bookingLogRows = buildBookingLogRows(bookingLogs, entries, lines, workDate, syncedAt);
   const bookingStatusRows = buildBookingStatusRows(data.bookingStatus, syncedAt);
 
   await postToWebApp({ action: "ensureSheets" });
@@ -274,8 +343,8 @@ async function syncPreparedData({ workDate = "", fromDate = "", toDate = "", sou
   }
   if (!Object.keys(attGroups).length) sheets.attendance = emptySheetSummary(`ATT_${getYearFromDate(workDate || fromDate || localDateISO())}`);
 
-  const qualityResult = await appendRowsBatched("QUALITY_LOG", QUALITY_HEADERS, qualityRows, ["Source Entry No", "Quality Point"]);
-  const bookingLogResult = await appendRowsBatched("BOOKING_LOG", BOOKING_LOG_HEADERS, bookingLogRows, ["Source Entry No", "Booking Point"]);
+  const qualityResult = await appendRowsBatched("QUALITY_LOG", QUALITY_HEADERS, qualityRows, ["Source Entry No", "Machine", "Department", "Sub Work", "Quality Point"]);
+  const bookingLogResult = await appendRowsBatched("BOOKING_LOG", BOOKING_LOG_HEADERS, bookingLogRows, ["Source Entry No", "Machine", "Department", "Sub Work", "Booking Point"]);
   const bookingStatusResult = await upsertRowsBatched("BOOKING_STATUS", BOOKING_STATUS_HEADERS, bookingStatusRows, ["Machine", "Department", "Sub Work", "Booking Point"]);
 
   if (qualityResult?.ok === false || bookingLogResult?.ok === false || bookingStatusResult?.ok === false) ok = false;
@@ -293,7 +362,7 @@ async function syncPreparedData({ workDate = "", fromDate = "", toDate = "", sou
   }
   if (!Object.keys(logGroups).length) sheets.log = emptySheetSummary(`LOG_${getYearFromDate(workDate || fromDate || localDateISO())}`);
 
-  return { ok, sheets, entries, lines, qualityLogs, bookingLogs, bookingStatusRows };
+  return { ok, sheets, entries, lines, qualityLogs, bookingLogs, qualityRows, bookingLogRows, bookingStatusRows };
 }
 
 async function testConnection() {
@@ -306,7 +375,7 @@ async function syncToday(options = {}) {
   const prepared = await syncPreparedData({ workDate });
   const firstLogKey = Object.keys(prepared.sheets).find((k) => k.startsWith("log")) || "log";
   const logSheet = prepared.sheets[firstLogKey] || {};
-  return { ok: prepared.ok, implemented: true, workDate, sheets: prepared.sheets, entryCount: prepared.entries.length, lineCount: prepared.lines.length, qualityCount: prepared.qualityLogs.length, bookingLogCount: prepared.bookingLogs.length, bookingStatusCount: prepared.bookingStatusRows.length, rowCount: prepared.lines.length, appended: logSheet.appended ?? 0, skippedDuplicates: logSheet.skippedDuplicates ?? 0 };
+  return { ok: prepared.ok, implemented: true, workDate, sheets: prepared.sheets, entryCount: prepared.entries.length, lineCount: prepared.lines.length, qualityCount: prepared.qualityRows.length, bookingLogCount: prepared.bookingLogRows.length, sourceQualityLogCount: prepared.qualityLogs.length, sourceBookingLogCount: prepared.bookingLogs.length, bookingStatusCount: prepared.bookingStatusRows.length, rowCount: prepared.lines.length, appended: logSheet.appended ?? 0, skippedDuplicates: logSheet.skippedDuplicates ?? 0 };
 }
 
 async function getFirstProductionEntryDate() {
@@ -326,7 +395,7 @@ async function syncRange(options = {}) {
   const sourceData = await loadBackupSourceData();
   const prepared = await syncPreparedData({ fromDate, toDate, sourceData });
 
-  return { ok: prepared.ok, implemented: true, mode, fromDate, toDate, dateCount: dates.length, workDate: `${fromDate} to ${toDate}`, sheets: prepared.sheets, entryCount: prepared.entries.length, lineCount: prepared.lines.length, qualityCount: prepared.qualityLogs.length, bookingLogCount: prepared.bookingLogs.length, bookingStatusCount: prepared.bookingStatusRows.length, results: [] };
+  return { ok: prepared.ok, implemented: true, mode, fromDate, toDate, dateCount: dates.length, workDate: `${fromDate} to ${toDate}`, sheets: prepared.sheets, entryCount: prepared.entries.length, lineCount: prepared.lines.length, qualityCount: prepared.qualityRows.length, bookingLogCount: prepared.bookingLogRows.length, sourceQualityLogCount: prepared.qualityLogs.length, sourceBookingLogCount: prepared.bookingLogs.length, bookingStatusCount: prepared.bookingStatusRows.length, results: [] };
 }
 
 module.exports = { getStatus, testConnection, syncToday, syncRange };
