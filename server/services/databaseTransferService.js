@@ -25,10 +25,10 @@ const CORE_COMPONENTS = [
     key: "pb_migrations",
     relPath: "pb_migrations",
     packagePath: "pb_migrations",
-    altRelPaths: ["pb_migrations"],
+    altRelPaths: ["pb_migrations", "local-tools/pocketbase/pb_migrations"],
     required: false,
     type: "directory",
-    note: "PocketBase schema migrations."
+    note: "PocketBase schema migrations. The service detects both root pb_migrations and local-tools/pocketbase/pb_migrations."
   },
   {
     key: "env",
