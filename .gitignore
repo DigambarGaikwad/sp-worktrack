@@ -4,6 +4,7 @@ release/
 .env
 .env.local
 .env.*.local
+.env.bak_*
 
 # Google Apps Script local deployment config
 # Keep project IDs/local clasp auth mapping out of GitHub.
@@ -13,5 +14,10 @@ google_apps_script/.clasp.json
 local-tools/
 pb_data/
 pb_migrations/
+
+# Local generated runtime/transfer outputs
+runtime_logs/
+runtime_scripts/
+transfer_packages/
 
 backups/
