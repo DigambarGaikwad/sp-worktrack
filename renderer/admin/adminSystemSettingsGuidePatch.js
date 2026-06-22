@@ -147,6 +147,55 @@
     document.getElementById("testSystemEmailBtn")?.click();
   }
 
+  function databaseHelpHtml() {
+    return `
+      <div class="spwt-email-help-head">
+        <div>
+          <div class="section-title">PocketBase / Database Runtime Help</div>
+          <div style="font-size:12px;opacity:.9;">Use this when creating/changing the PocketBase superuser used by SP WorkTrack backend.</div>
+        </div>
+        <button class="btn grey" type="button" data-close-database-help="true">Close</button>
+      </div>
+      <div class="spwt-email-help-body">
+        <div class="spwt-help-step"><b>What this setting is used for</b><br>
+          PocketBase is the internal database. Node backend uses the PocketBase URL and superuser login to read/write production entries, admin master data, reports, permissions, backup status, and system settings.
+        </div>
+        <div class="spwt-help-grid">
+          <div class="spwt-help-step"><b>Step 1 - Keep PocketBase running</b><br>
+            On the server PC, PocketBase must be running on port <code>8090</code>. Default API URL is <code>http://127.0.0.1:8090</code>. Do not change this unless PocketBase is moved to another PC or port.
+          </div>
+          <div class="spwt-help-step"><b>Step 2 - Open PocketBase Admin</b><br>
+            Copy the PocketBase URL and add <code>/_/</code> at the end.<br>
+            Example: <code>http://127.0.0.1:8090/_/</code><br>
+            Paste it in browser address bar, not Google search. <code>127.0.0.1</code> works only on the same PC where PocketBase is running.
+          </div>
+          <div class="spwt-help-step"><b>Step 3 - Create dedicated superuser</b><br>
+            In PocketBase Admin, open <b>Manage superusers</b> or <b>_superusers</b>, then create a dedicated superuser such as <code>spworktrack.spt@gmail.com</code>. Keep the password in a safe place only.
+          </div>
+          <div class="spwt-help-step"><b>Step 4 - Fill Database Runtime Settings</b><br>
+            PocketBase URL: <code>http://127.0.0.1:8090</code><br>
+            PocketBase Superuser Email: dedicated superuser email<br>
+            PocketBase Superuser Password: dedicated superuser password<br>
+            Keep <b>Clear saved PocketBase password</b> unchecked unless you want to remove the saved password.
+          </div>
+          <div class="spwt-help-step"><b>Step 5 - Save and restart Node</b><br>
+            Click <b>Save Database Settings</b>. Then restart Node server so backend starts using the new PocketBase login. After restart, test app login, entry save, dashboard, and backup.
+          </div>
+          <div class="spwt-help-step"><b>Safe check command</b><br>
+            In PowerShell, check only non-secret values:<br>
+            <code>Get-Content .env | findstr "POCKETBASE_URL POCKETBASE_SUPERUSER_EMAIL"</code>
+          </div>
+        </div>
+        <div class="spwt-help-step" style="background:#fff7ed;border-color:#fed7aa;"><b>Important safety</b><br>
+          PocketBase superuser password is very sensitive. Do not paste it in any online AI tool, chat app, email, screenshot, or share it with anyone. Normal operators/admin PIN users should never use PocketBase Admin.
+        </div>
+        <div class="spwt-help-step" style="background:#f0fdf4;border-color:#bbf7d0;"><b>When old superuser can be removed</b><br>
+          Remove old superuser only after the new superuser is created, saved in SP WorkTrack System Settings, Node is restarted, and app functions are tested successfully.
+        </div>
+      </div>
+    `;
+  }
+
   function emailHelpHtml() {
     return `
       <div class="spwt-email-help-head">
@@ -186,6 +235,26 @@
     `;
   }
 
+  function showDatabaseSetupHelp() {
+    ensureStyle();
+    let backdrop = document.getElementById("spwtDatabaseHelpBackdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "spwtDatabaseHelpBackdrop";
+      backdrop.className = "spwt-email-help-backdrop hidden";
+      backdrop.innerHTML = `<div class="spwt-email-help-modal">${databaseHelpHtml()}</div>`;
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === backdrop || event.target?.closest?.("[data-close-database-help]")) hideDatabaseSetupHelp();
+      });
+    }
+    backdrop.classList.remove("hidden");
+  }
+
+  function hideDatabaseSetupHelp() {
+    document.getElementById("spwtDatabaseHelpBackdrop")?.classList.add("hidden");
+  }
+
   function showEmailSetupHelp() {
     ensureStyle();
     let backdrop = document.getElementById("spwtEmailHelpBackdrop");
@@ -218,7 +287,7 @@
 
       if (title.includes("pocketbase")) {
         note = `<b>What this is:</b> Internal database connection used by Node. Keep URL as <code>http://127.0.0.1:8090</code> unless PocketBase is moved/port changed. Update superuser password only when PocketBase admin password is changed.`;
-        actions = `<button class="btn green" type="button" data-system-save-section="database">Save Database Settings</button>`;
+        actions = `<button class="btn green" type="button" data-system-save-section="database">Save Database Settings</button><button class="btn grey" type="button" data-system-database-help="true">Help</button>`;
       } else if (title.includes("google sheet")) {
         note = `<b>What this is:</b> Backup/sync receiver. Get Web App URL from Apps Script deployment. Backup Secret must be exactly same in app and Apps Script. Enable only after Test/backup receiver is ready.`;
         actions = `<button class="btn green" type="button" data-system-save-section="google">Save Google Backup Settings</button>`;
@@ -259,6 +328,11 @@
       btn.__wired = true;
       btn.addEventListener("click", clickTestEmail);
     });
+    document.querySelectorAll("[data-system-database-help]").forEach((btn) => {
+      if (btn.__wired) return;
+      btn.__wired = true;
+      btn.addEventListener("click", showDatabaseSetupHelp);
+    });
     document.querySelectorAll("[data-system-email-help]").forEach((btn) => {
       if (btn.__wired) return;
       btn.__wired = true;
@@ -277,7 +351,9 @@
 
   document.addEventListener("click", () => setTimeout(enhance, 160), true);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hideEmailSetupHelp();
+    if (event.key !== "Escape") return;
+    hideDatabaseSetupHelp();
+    hideEmailSetupHelp();
   });
   document.addEventListener("DOMContentLoaded", () => setTimeout(enhance, 1200));
   setInterval(enhance, 1500);
