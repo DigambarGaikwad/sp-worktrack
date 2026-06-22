@@ -4,8 +4,8 @@
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 const MODE = "google_apps_script";
-const TIMEOUT_MS = Number(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS || 15000);
 const MAX_RANGE_DAYS = Number(process.env.GOOGLE_SHEET_BACKUP_MAX_RANGE_DAYS || 370);
+const DEFAULT_BATCH_SIZE = Number(process.env.GOOGLE_SHEET_BACKUP_BATCH_SIZE || 150);
 
 const LOG_HEADERS = ["Timestamp", "Work Date", "Shift", "Shift Start", "Shift End", "Break Minutes", "Work Type", "Emp ID", "Emp Name", "Shift Available", "Utilized", "Remaining", "Productivity %", "Machine", "Machine Category", "Department", "Sub Work", "Type", "Description", "Root Area", "Standard Time", "Actual Time", "Efficiency Reason", "Major Loss Reason", "Major Loss Remark", "Flexible Shift Minutes", "Work Checkpoints", "Quality Checkpoints", "Source Entry No", "Source Line No", "Synced At"];
 const ATTENDANCE_HEADERS = ["Timestamp", "Work Date", "Emp ID", "Emp Name", "Shift", "Work Type", "Status", "Shift Available (min)", "Utilized (min)", "Total Hours", "OT Minutes", "OT Hours", "Productivity %", "Major Loss Reason", "Major Loss Remark", "Flexible Shift Minutes", "Source Entry No", "Synced At"];
@@ -18,6 +18,8 @@ function toNumber(value, defaultValue = 0) { const n = Number(value); return Num
 function sameDate(a, b) { return clean(a).slice(0, 10) === clean(b).slice(0, 10); }
 function round2(value) { return Math.round(toNumber(value, 0) * 100) / 100; }
 function dateKey(value) { return clean(value).slice(0, 10); }
+function getTimeoutMs() { return Math.max(5000, toNumber(process.env.GOOGLE_SHEET_BACKUP_TIMEOUT_MS, 15000)); }
+function getBatchSize() { return Math.max(1, toNumber(process.env.GOOGLE_SHEET_BACKUP_BATCH_SIZE, DEFAULT_BATCH_SIZE)); }
 
 function localDateISO() {
   const now = new Date();
@@ -71,7 +73,16 @@ function getSecret() { return clean(process.env.GOOGLE_SHEET_BACKUP_SECRET || ""
 function getStatus() {
   const hasWebAppUrl = !!getWebAppUrl();
   const hasSecret = !!getSecret();
-  return { enabled: isEnabled(), configured: hasWebAppUrl && hasSecret, mode: MODE, hasWebAppUrl, hasSecret, timeoutMs: TIMEOUT_MS, message: hasWebAppUrl && hasSecret ? "Google Sheets sync is configured." : "Google Sheets sync route is ready. Add GOOGLE_SHEET_WEBAPP_URL and GOOGLE_SHEET_BACKUP_SECRET in .env." };
+  return {
+    enabled: isEnabled(),
+    configured: hasWebAppUrl && hasSecret,
+    mode: MODE,
+    hasWebAppUrl,
+    hasSecret,
+    timeoutMs: getTimeoutMs(),
+    batchSize: getBatchSize(),
+    message: hasWebAppUrl && hasSecret ? "Google Sheets sync is configured." : "Google Sheets sync route is ready. Add GOOGLE_SHEET_WEBAPP_URL and GOOGLE_SHEET_BACKUP_SECRET in .env."
+  };
 }
 
 async function postToWebApp(payload = {}) {
@@ -79,8 +90,9 @@ async function postToWebApp(payload = {}) {
   if (!status.enabled) { const err = new Error("Google Sheets sync is disabled. Set GOOGLE_SHEET_BACKUP_ENABLED=true in .env."); err.status = 400; throw err; }
   if (!status.configured) { const err = new Error("Google Sheets sync is not configured. Set GOOGLE_SHEET_WEBAPP_URL and GOOGLE_SHEET_BACKUP_SECRET in .env."); err.status = 400; throw err; }
 
+  const timeoutMs = getTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(getWebAppUrl(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: getSecret(), ...payload }), signal: controller.signal });
     const text = await res.text();
@@ -89,11 +101,43 @@ async function postToWebApp(payload = {}) {
     if (!res.ok) { const err = new Error(`Google Apps Script request failed with HTTP ${res.status}`); err.status = 502; err.details = body; throw err; }
     return body || { ok: true, raw: text };
   } catch (err) {
-    if (err?.name === "AbortError") { const timeoutErr = new Error("Google Sheets sync request timeout. Check Apps Script Web App URL/network."); timeoutErr.status = 504; throw timeoutErr; }
+    if (err?.name === "AbortError") { const timeoutErr = new Error(`Google Sheets sync request timeout after ${timeoutMs} ms. Try smaller date range or increase timeout.`); timeoutErr.status = 504; throw timeoutErr; }
     throw err;
   } finally {
     clearTimeout(timer);
   }
+}
+
+function chunkRows(rows, size = getBatchSize()) {
+  const out = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}
+
+async function appendRowsBatched(sheetName, headers, rows, uniqueKeyColumns) {
+  if (!rows.length) return { ok: true, rowCount: 0, appended: 0, skippedDuplicates: 0, batches: 0 };
+  const summary = { ok: true, rowCount: rows.length, appended: 0, skippedDuplicates: 0, batches: 0 };
+  for (const batch of chunkRows(rows)) {
+    const result = await postToWebApp({ action: "appendRows", sheetName, headers, rows: batch, uniqueKeyColumns });
+    if (result?.ok === false) summary.ok = false;
+    summary.appended += toNumber(result?.appended, 0);
+    summary.skippedDuplicates += toNumber(result?.skippedDuplicates, 0);
+    summary.batches += 1;
+  }
+  return summary;
+}
+
+async function upsertRowsBatched(sheetName, headers, rows, uniqueKeyColumns) {
+  if (!rows.length) return { ok: true, rowCount: 0, inserted: 0, updated: 0, batches: 0 };
+  const summary = { ok: true, rowCount: rows.length, inserted: 0, updated: 0, batches: 0 };
+  for (const batch of chunkRows(rows)) {
+    const result = await postToWebApp({ action: "upsertRows", sheetName, headers, rows: batch, uniqueKeyColumns });
+    if (result?.ok === false) summary.ok = false;
+    summary.inserted += toNumber(result?.inserted, 0);
+    summary.updated += toNumber(result?.updated, 0);
+    summary.batches += 1;
+  }
+  return summary;
 }
 
 async function pbListAll(collectionName) {
@@ -169,9 +213,9 @@ function buildBookingStatusRows(bookingStatus, syncedAt) {
   return bookingStatus.map((b) => [clean(b.machine_no), clean(b.machine_category), clean(b.department_name || b.department_code), clean(b.subwork_name || b.subwork_code), clean(b.point_name || b.point_code), toNumber(b.standard_minutes, 0), toNumber(b.consumed_minutes, 0), toNumber(b.remaining_minutes, 0), toNumber(b.completion_percent, 0), clean(b.status), clean(b.last_work_date), clean(b.last_emp_code), clean(b.last_emp_name), "", clean(b.last_entry_no), syncedAt]);
 }
 
-function emptySheetSummary(sheetName) { return { sheetName, rowCount: 0, appended: 0, skippedDuplicates: 0, inserted: 0, updated: 0 }; }
-function addAppendSummary(out, key, sheetName, rows, result) { out[key] = { sheetName, rowCount: rows.length, appended: result?.appended ?? 0, skippedDuplicates: result?.skippedDuplicates ?? 0 }; }
-function addUpsertSummary(out, key, sheetName, rows, result) { out[key] = { sheetName, rowCount: rows.length, inserted: result?.inserted ?? 0, updated: result?.updated ?? 0 }; }
+function emptySheetSummary(sheetName) { return { sheetName, rowCount: 0, appended: 0, skippedDuplicates: 0, inserted: 0, updated: 0, batches: 0 }; }
+function addAppendSummary(out, key, sheetName, rows, result) { out[key] = { sheetName, rowCount: rows.length, appended: result?.appended ?? 0, skippedDuplicates: result?.skippedDuplicates ?? 0, batches: result?.batches ?? 0 }; }
+function addUpsertSummary(out, key, sheetName, rows, result) { out[key] = { sheetName, rowCount: rows.length, inserted: result?.inserted ?? 0, updated: result?.updated ?? 0, batches: result?.batches ?? 0 }; }
 
 function groupRowsByYear(rows, dateColumnIndex) {
   const groups = {};
@@ -220,34 +264,34 @@ async function syncPreparedData({ workDate = "", fromDate = "", toDate = "", sou
   const sheets = {};
   let ok = true;
 
-  const logGroups = groupRowsByYear(logRows, 1);
-  for (const year of Object.keys(logGroups)) {
-    const sheetName = `LOG_${year}`;
-    const rows = logGroups[year];
-    const result = await postToWebApp({ action: "appendRows", sheetName, headers: LOG_HEADERS, rows, uniqueKeyColumns: ["Source Entry No", "Source Line No"] });
-    if (result?.ok === false) ok = false;
-    addAppendSummary(sheets, `log${year}`, sheetName, rows, result);
-  }
-  if (!Object.keys(logGroups).length) sheets.log = emptySheetSummary(`LOG_${getYearFromDate(workDate || fromDate || localDateISO())}`);
-
   const attGroups = groupRowsByYear(attendanceRows, 1);
   for (const year of Object.keys(attGroups)) {
     const sheetName = `ATT_${year}`;
     const rows = attGroups[year];
-    const result = await postToWebApp({ action: "appendRows", sheetName, headers: ATTENDANCE_HEADERS, rows, uniqueKeyColumns: ["Source Entry No"] });
+    const result = await appendRowsBatched(sheetName, ATTENDANCE_HEADERS, rows, ["Source Entry No"]);
     if (result?.ok === false) ok = false;
     addAppendSummary(sheets, `attendance${year}`, sheetName, rows, result);
   }
   if (!Object.keys(attGroups).length) sheets.attendance = emptySheetSummary(`ATT_${getYearFromDate(workDate || fromDate || localDateISO())}`);
 
-  const qualityResult = await postToWebApp({ action: "appendRows", sheetName: "QUALITY_LOG", headers: QUALITY_HEADERS, rows: qualityRows, uniqueKeyColumns: ["Source Entry No", "Quality Point"] });
-  const bookingLogResult = await postToWebApp({ action: "appendRows", sheetName: "BOOKING_LOG", headers: BOOKING_LOG_HEADERS, rows: bookingLogRows, uniqueKeyColumns: ["Source Entry No", "Booking Point"] });
-  const bookingStatusResult = await postToWebApp({ action: "upsertRows", sheetName: "BOOKING_STATUS", headers: BOOKING_STATUS_HEADERS, rows: bookingStatusRows, uniqueKeyColumns: ["Machine", "Department", "Sub Work", "Booking Point"] });
+  const qualityResult = await appendRowsBatched("QUALITY_LOG", QUALITY_HEADERS, qualityRows, ["Source Entry No", "Quality Point"]);
+  const bookingLogResult = await appendRowsBatched("BOOKING_LOG", BOOKING_LOG_HEADERS, bookingLogRows, ["Source Entry No", "Booking Point"]);
+  const bookingStatusResult = await upsertRowsBatched("BOOKING_STATUS", BOOKING_STATUS_HEADERS, bookingStatusRows, ["Machine", "Department", "Sub Work", "Booking Point"]);
 
   if (qualityResult?.ok === false || bookingLogResult?.ok === false || bookingStatusResult?.ok === false) ok = false;
   addAppendSummary(sheets, "quality", "QUALITY_LOG", qualityRows, qualityResult);
   addAppendSummary(sheets, "bookingLog", "BOOKING_LOG", bookingLogRows, bookingLogResult);
   addUpsertSummary(sheets, "bookingStatus", "BOOKING_STATUS", bookingStatusRows, bookingStatusResult);
+
+  const logGroups = groupRowsByYear(logRows, 1);
+  for (const year of Object.keys(logGroups)) {
+    const sheetName = `LOG_${year}`;
+    const rows = logGroups[year];
+    const result = await appendRowsBatched(sheetName, LOG_HEADERS, rows, ["Source Entry No", "Source Line No"]);
+    if (result?.ok === false) ok = false;
+    addAppendSummary(sheets, `log${year}`, sheetName, rows, result);
+  }
+  if (!Object.keys(logGroups).length) sheets.log = emptySheetSummary(`LOG_${getYearFromDate(workDate || fromDate || localDateISO())}`);
 
   return { ok, sheets, entries, lines, qualityLogs, bookingLogs, bookingStatusRows };
 }
