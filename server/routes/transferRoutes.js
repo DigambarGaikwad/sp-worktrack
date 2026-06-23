@@ -1,5 +1,5 @@
 // server/routes/transferRoutes.js
-// Admin-only database transfer package and runtime prep endpoints.
+// Admin-only database transfer package, restore preview, and runtime prep endpoints.
 
 const express = require("express");
 const path = require("path");
@@ -9,6 +9,10 @@ const {
   listTransferPackages,
   resolvePackagePath
 } = require("../services/databaseTransferService");
+const {
+  validateTransferPackage,
+  restoreTransferPackage
+} = require("../services/databaseRestoreService");
 const {
   NODE_TASK,
   POCKETBASE_TASK,
@@ -30,6 +34,10 @@ function getAccessToken(req) {
 
 function requireDbTransfer(req) {
   return requirePermission(getAccessToken(req), "dbTransfer");
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 router.get("/status", async (req, res) => {
@@ -73,6 +81,32 @@ router.get("/package/download/:fileName", async (req, res) => {
   } catch (err) {
     console.error("GET /api/transfer/package/download failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to download transfer package.", details: err.details || null });
+  }
+});
+
+router.get("/restore/preview/:fileName", async (req, res) => {
+  try {
+    requireDbTransfer(req);
+    const data = await validateTransferPackage(req.params.fileName);
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/transfer/restore/preview failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to preview transfer package.", details: err.details || null });
+  }
+});
+
+router.post("/restore/:fileName", async (req, res) => {
+  try {
+    requireDbTransfer(req);
+    if (req.body?.stopPocketBase) {
+      await stopPocketBaseProcesses();
+      await sleep(1200);
+    }
+    const data = await restoreTransferPackage(req.params.fileName, req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/transfer/restore failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to restore transfer package.", details: err.details || null });
   }
 });
 
