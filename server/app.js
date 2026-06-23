@@ -5,6 +5,10 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+
+// Load .env before route/service modules because some services read env values at module load time.
+dotenv.config();
+
 require("./services/adminAccessPermissionExtensions");
 const employeesRoutes = require("./routes/employeesRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -19,8 +23,6 @@ const transferRoutes = require("./routes/transferRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const systemConfigRoutes = require("./routes/systemConfigRoutes");
 const { startBackupScheduler } = require("./services/backupScheduler");
-
-dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.SPWT_API_PORT || 3030);
