@@ -5,16 +5,14 @@
   "main": "main.js",
   "author": "SP WorkTrack",
   "license": "ISC",
-
-
   "scripts": {
-  "start": "electron .",
-  "server": "node server/app.js",
-  "db:setup": "node server/db/setupPocketBaseSchema.js",
-  "db:seed": "node server/db/seedFromAdminOverrides.js",
-  "import:v1": "node server/scripts/importV1SheetToDb.js",
-  "dist": "electron-builder"
-},
+    "start": "electron .",
+    "server": "node server/app.js",
+    "db:setup": "node server/db/setupPocketBaseSchema.js",
+    "db:seed": "node server/db/seedFromAdminOverrides.js",
+    "import:v1": "node server/scripts/importV1SheetToDb.js",
+    "dist": "electron-builder"
+  },
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^24.9.1"
@@ -36,7 +34,15 @@
     },
     "files": [
       "**/*",
-      "!release/**"
+      "!release/**",
+      "!transfer_packages/**",
+      "!runtime_logs/**",
+      "!runtime_scripts/**",
+      "!.git/**",
+      "!.env.bak_*"
+    ],
+    "asarUnpack": [
+      "local-tools/pocketbase/**"
     ],
     "win": {
       "target": "nsis",
