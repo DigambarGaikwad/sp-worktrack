@@ -11,6 +11,7 @@
     "db:setup": "node server/db/setupPocketBaseSchema.js",
     "db:seed": "node server/db/seedFromAdminOverrides.js",
     "import:v1": "node server/scripts/importV1SheetToDb.js",
+    "build": "electron-builder",
     "dist": "electron-builder"
   },
   "devDependencies": {
