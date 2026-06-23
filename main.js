@@ -1,148 +1,218 @@
 // main.js
-const { app, BrowserWindow, ipcMain } = require("electron");
-const path = require("path");
+// SP WorkTrack Electron Server Launcher
+const { app, BrowserWindow, dialog } = require("electron");
+const { spawn } = require("child_process");
 const fs = require("fs");
+const path = require("path");
+const dotenv = require("dotenv");
 
-function dataPath(...parts) {
-  return path.join(__dirname, "data", ...parts);
+let mainWindow = null;
+let pocketBaseProcess = null;
+
+function appRoot() {
+  return __dirname;
 }
 
-function readJsonFile(fileName, fallback) {
-  const p = dataPath(fileName);
+function runtimeRoot() {
+  return app.isPackaged ? path.dirname(process.execPath) : appRoot();
+}
+
+function logLine(message, extra) {
+  const line = `[${new Date().toISOString()}] ${message}${extra ? ` ${extra}` : ""}\n`;
+  console.log(line.trim());
   try {
-    if (!fs.existsSync(p)) {
-      if (fallback !== undefined) {
-        fs.writeFileSync(p, JSON.stringify(fallback, null, 2), "utf-8");
-        return fallback;
-      }
-      throw new Error(`Missing file: ${p}`);
-    }
-    const raw = fs.readFileSync(p, "utf-8");
-    return JSON.parse(raw || "{}");
-  } catch (e) {
-    console.error("readJsonFile error:", fileName, e);
-    throw e;
+    const dir = path.join(runtimeRoot(), "runtime_logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, "electron-runtime.log"), line, "utf8");
+  } catch (_) {}
+}
+
+function findExistingFile(candidates) {
+  return candidates.find((p) => p && fs.existsSync(p)) || "";
+}
+
+function loadEnv() {
+  const exeDir = path.dirname(process.execPath);
+  const envPath = findExistingFile([
+    path.join(runtimeRoot(), ".env"),
+    path.join(exeDir, ".env"),
+    path.join(process.resourcesPath || "", ".env"),
+    path.join(appRoot(), ".env")
+  ]);
+
+  if (envPath) {
+    dotenv.config({ path: envPath });
+    logLine("Loaded env", envPath);
+  } else {
+    logLine("No .env found; using defaults/env vars");
   }
 }
 
-function writeJsonFile(fileName, obj) {
-  const p = dataPath(fileName);
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf-8");
+function getApiPort() {
+  return Number(process.env.SPWT_API_PORT || 3030);
 }
 
-async function postJSON(url, data) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
+function getApiUrl() {
+  return `http://127.0.0.1:${getApiPort()}`;
+}
+
+function getPocketBaseUrl() {
+  return String(process.env.POCKETBASE_URL || "http://127.0.0.1:8090").replace(/\/$/, "");
+}
+
+async function fetchJson(url, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function isHealthy(url) {
+  try {
+    const r = await fetchJson(`${url}/api/health`, 2500);
+    return !!(r && (r.ok || r.code === 200 || String(r.message || "").toLowerCase().includes("healthy")));
+  } catch (_) {
+    return false;
+  }
+}
+
+async function waitForHealthy(url, label, timeoutMs = 20000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    if (await isHealthy(url)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${label} did not become ready at ${url}`);
+}
+
+function pocketBaseExePath() {
+  return findExistingFile([
+    path.join(appRoot(), "local-tools", "pocketbase", "pocketbase.exe"),
+    path.join(process.resourcesPath || "", "app.asar.unpacked", "local-tools", "pocketbase", "pocketbase.exe"),
+    path.join(process.resourcesPath || "", "local-tools", "pocketbase", "pocketbase.exe"),
+    path.join(runtimeRoot(), "local-tools", "pocketbase", "pocketbase.exe")
+  ]);
+}
+
+function pocketBaseListenArg() {
+  const u = new URL(getPocketBaseUrl());
+  const host = u.hostname || "127.0.0.1";
+  const port = u.port || "8090";
+  return `${host}:${port}`;
+}
+
+async function ensurePocketBase() {
+  const pbUrl = getPocketBaseUrl();
+  if (await isHealthy(pbUrl)) {
+    logLine("PocketBase already running", pbUrl);
+    return;
+  }
+
+  const exe = pocketBaseExePath();
+  if (!exe) {
+    throw new Error("PocketBase executable not found. Expected local-tools\\pocketbase\\pocketbase.exe.");
+  }
+
+  const cwd = path.dirname(exe);
+  const arg = pocketBaseListenArg();
+  logLine("Starting PocketBase", `${exe} --http=${arg}`);
+
+  pocketBaseProcess = spawn(exe, ["serve", `--http=${arg}`], {
+    cwd,
+    windowsHide: true,
+    stdio: "pipe"
   });
-  return await res.json();
+
+  pocketBaseProcess.stdout.on("data", (data) => logLine("PocketBase", String(data).trim()));
+  pocketBaseProcess.stderr.on("data", (data) => logLine("PocketBase error", String(data).trim()));
+  pocketBaseProcess.on("exit", (code) => logLine("PocketBase exited", String(code)));
+
+  await waitForHealthy(pbUrl, "PocketBase", 25000);
+}
+
+async function ensureServer() {
+  const apiUrl = getApiUrl();
+  if (await isHealthy(apiUrl)) {
+    logLine("SP WorkTrack API already running", apiUrl);
+    return;
+  }
+
+  try {
+    require.resolve("express");
+  } catch (_) {
+    throw new Error("Server dependency missing: express. Reinstall or use the packaged SP WorkTrack Server App.");
+  }
+
+  logLine("Starting SP WorkTrack API", apiUrl);
+  require(path.join(appRoot(), "server", "app.js"));
+  await waitForHealthy(apiUrl, "SP WorkTrack API", 25000);
+}
+
+function loadingHtml() {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`
+    <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#f7f9fc;color:#1f2937;">
+      <h2>SP WorkTrack is starting...</h2>
+      <p>Starting PocketBase database and SP WorkTrack server. Please wait.</p>
+    </body></html>
+  `)}`;
+}
+
+function errorHtml(message) {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`
+    <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#fff7f7;color:#7f1d1d;">
+      <h2>SP WorkTrack could not start</h2>
+      <p style="white-space:pre-wrap;line-height:1.5;">${String(message || "Unknown error").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</p>
+      <p>Check <b>runtime_logs/electron-runtime.log</b> in the app folder.</p>
+    </body></html>
+  `)}`;
 }
 
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1300,
-    height: 850,
-    icon: path.join(__dirname, "assets", "app.ico"),
+  mainWindow = new BrowserWindow({
+    width: 1320,
+    height: 860,
+    minWidth: 1100,
+    minHeight: 720,
+    icon: path.join(appRoot(), "assets", "app.ico"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
 
-  win.loadFile("index.html");
+  mainWindow.loadURL(loadingHtml());
 }
 
-// ===================== IPC HANDLERS =====================
-ipcMain.handle("get-admin-overrides", async () => {
-  const def = {
-    admin: { pin: "1234" },
-    machines: [],
-    employees: [],
-    shifts: [],
-    mainWorks: [],
-    subWorks: {},
-    machineTypes: [
-      { id: "Online", name: "Online" },
-      { id: "Booster-AirCooled", name: "Booster - Air Cooled" },
-      { id: "Booster-WaterCooled", name: "Booster - Water Cooled" },
-      { id: "600SCMC", name: "600 SCMC" },
-      { id: "400SCMH", name: "400 SCMH" }
-    ],
-    workCatalogByType: {}
-  };
-
-  return readJsonFile("adminOverrides.json", def);
-});
-
-ipcMain.handle("save-admin-overrides", async (_event, overrides) => {
-  try {
-    writeJsonFile("adminOverrides.json", overrides || {});
-    return { ok: true };
-  } catch (e) {
-    console.error("save-admin-overrides error:", e);
-    return { ok: false, error: e.message };
-  }
-});
-//for data in google sheet 
-ipcMain.handle("sync-admin-overrides-to-sheets", async (_event, payload) => {
-  try {
-    if (!payload || !payload.webAppUrl) throw new Error("Missing webAppUrl");
-    if (!payload.secret) throw new Error("Missing secret");
-    if (!payload.adminOverrides) throw new Error("Missing adminOverrides");
-
-    return await postJSON(payload.webAppUrl, {
-      secret: payload.secret,
-      action: "saveAdminOverrides",
-      adminOverrides: payload.adminOverrides
-    });
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
-  }
-});
-
-
-// Submit → Google Sheets web app
-ipcMain.handle("submit-to-sheets", async (_event, payload) => {
-  try {
-    if (!payload || !payload.webAppUrl) throw new Error("Missing webAppUrl");
-    if (!payload.data) throw new Error("Missing data payload");
-    const result = await postJSON(payload.webAppUrl, payload.data);
-    return result;
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
-  }
-});
-
-// ✅ Dashboard feed (Sheets → App)
-ipcMain.handle("get-dashboard-feed", async (_event, payload) => {
-  try {
-    if (!payload || !payload.webAppUrl) throw new Error("Missing webAppUrl");
-    if (!payload.secret) throw new Error("Missing secret");
-
-    const year = payload.year || new Date().getFullYear();
-
-    const result = await postJSON(payload.webAppUrl, {
-      secret: payload.secret,
-      action: "getDashboardFeed",
-      year
-    });
-
-    return result;
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
-  }
-});
-
-// ===================== APP LIFE CYCLE =====================
-app.whenReady().then(() => {
+async function startApp() {
+  loadEnv();
   createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
+
+  try {
+    await ensurePocketBase();
+    await ensureServer();
+    await mainWindow.loadURL(getApiUrl());
+    logLine("SP WorkTrack opened", getApiUrl());
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    logLine("Startup failed", message);
+    if (mainWindow) mainWindow.loadURL(errorHtml(message));
+    dialog.showErrorBox("SP WorkTrack startup failed", message);
+  }
+}
+
+app.whenReady().then(startApp);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  if (pocketBaseProcess && !pocketBaseProcess.killed) {
+    try { pocketBaseProcess.kill(); } catch (_) {}
+  }
 });
