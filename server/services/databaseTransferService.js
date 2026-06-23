@@ -47,6 +47,15 @@ const CORE_COMPONENTS = [
     required: false,
     type: "file",
     note: "App version/package reference."
+  },
+  {
+    key: "package_lock",
+    relPath: "package-lock.json",
+    packagePath: "package-lock.json",
+    altRelPaths: ["package-lock.json"],
+    required: false,
+    type: "file",
+    note: "Dependency lock file for repeatable production installs."
   }
 ];
 
@@ -338,7 +347,7 @@ async function createTransferPackage(options = {}) {
     `Created: ${createdAt}`,
     `Server: ${status.server.hostname}`,
     "",
-    "Contains PocketBase data, migrations, and server config if present.",
+    "Contains PocketBase data, migrations, server config, and package reference files if present.",
     "Keep this ZIP secure. It may contain database records and configuration secrets.",
     "For restore, stop PocketBase first, then restore folders on the new server PC.",
     "After restore, start PocketBase and Node/SP WorkTrack Server again.",
@@ -355,31 +364,20 @@ async function createTransferPackage(options = {}) {
   return {
     fileName: path.basename(zipPath),
     fullPath: zipPath,
-    transferDir: TRANSFER_DIR,
     bytes: stat.size,
     size: formatBytes(stat.size),
     createdAt,
-    manifest,
-    note: options.note || "Transfer package created. Store securely."
+    componentCount: copied.filter(item => item.copied).length,
+    recordCounts: status.recordCounts,
+    warnings: status.warnings
   };
 }
 
-async function resolvePackagePath(fileName) {
-  const safeName = safeTransferName(fileName);
-  const fullPath = path.join(TRANSFER_DIR, safeName);
-  const stat = await existsStats(fullPath);
-  if (!stat || !stat.isFile()) {
-    const err = new Error("Transfer package not found.");
-    err.status = 404;
-    throw err;
-  }
-  return fullPath;
-}
-
 module.exports = {
-  TRANSFER_DIR,
   getDatabaseTransferStatus,
   createTransferPackage,
   listTransferPackages,
-  resolvePackagePath
+  safeTransferName,
+  TRANSFER_DIR,
+  PACKAGE_PREFIX
 };
