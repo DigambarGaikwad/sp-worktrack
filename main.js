@@ -27,8 +27,20 @@ function logLine(message, extra) {
   } catch (_) {}
 }
 
+function asarUnpackedPath(filePath) {
+  return filePath && filePath.includes("app.asar")
+    ? filePath.replace("app.asar", "app.asar.unpacked")
+    : filePath;
+}
+
 function findExistingFile(candidates) {
-  return candidates.find((p) => p && fs.existsSync(p)) || "";
+  const checked = [];
+  for (const p of candidates) {
+    if (!p) continue;
+    checked.push(p);
+    if (fs.existsSync(p)) return p;
+  }
+  return "";
 }
 
 function loadEnv() {
@@ -91,12 +103,18 @@ async function waitForHealthy(url, label, timeoutMs = 20000) {
 }
 
 function pocketBaseExePath() {
-  return findExistingFile([
-    path.join(appRoot(), "local-tools", "pocketbase", "pocketbase.exe"),
-    path.join(process.resourcesPath || "", "app.asar.unpacked", "local-tools", "pocketbase", "pocketbase.exe"),
-    path.join(process.resourcesPath || "", "local-tools", "pocketbase", "pocketbase.exe"),
-    path.join(runtimeRoot(), "local-tools", "pocketbase", "pocketbase.exe")
-  ]);
+  const exeRel = path.join("local-tools", "pocketbase", "pocketbase.exe");
+  const candidates = [
+    path.join(process.resourcesPath || "", "app.asar.unpacked", exeRel),
+    asarUnpackedPath(path.join(appRoot(), exeRel)),
+    path.join(process.resourcesPath || "", exeRel),
+    path.join(runtimeRoot(), exeRel),
+    path.join(appRoot(), exeRel)
+  ];
+
+  const exe = findExistingFile(candidates);
+  if (!exe) logLine("PocketBase executable search failed", candidates.join(" | "));
+  return exe;
 }
 
 function pocketBaseListenArg() {
@@ -115,7 +133,7 @@ async function ensurePocketBase() {
 
   const exe = pocketBaseExePath();
   if (!exe) {
-    throw new Error("PocketBase executable not found. Expected local-tools\\pocketbase\\pocketbase.exe.");
+    throw new Error("PocketBase executable not found. Expected local-tools\\pocketbase\\pocketbase.exe in the app package.");
   }
 
   const cwd = path.dirname(exe);
@@ -131,6 +149,7 @@ async function ensurePocketBase() {
   pocketBaseProcess.stdout.on("data", (data) => logLine("PocketBase", String(data).trim()));
   pocketBaseProcess.stderr.on("data", (data) => logLine("PocketBase error", String(data).trim()));
   pocketBaseProcess.on("exit", (code) => logLine("PocketBase exited", String(code)));
+  pocketBaseProcess.on("error", (err) => logLine("PocketBase start error", err && err.message ? err.message : String(err)));
 
   await waitForHealthy(pbUrl, "PocketBase", 25000);
 }
