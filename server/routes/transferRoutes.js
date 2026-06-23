@@ -13,6 +13,7 @@ const {
   validateTransferPackage,
   restoreTransferPackage
 } = require("../services/databaseRestoreService");
+const { testExtractTransferPackage } = require("../services/databaseRestoreTestService");
 const {
   NODE_TASK,
   POCKETBASE_TASK,
@@ -92,6 +93,17 @@ router.get("/restore/preview/:fileName", async (req, res) => {
   } catch (err) {
     console.error("GET /api/transfer/restore/preview failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to preview transfer package.", details: err.details || null });
+  }
+});
+
+router.post("/restore/test-extract/:fileName", async (req, res) => {
+  try {
+    requireDbTransfer(req);
+    const data = await testExtractTransferPackage(req.params.fileName);
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/transfer/restore/test-extract failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to test extract transfer package.", details: err.details || null });
   }
 });
 
