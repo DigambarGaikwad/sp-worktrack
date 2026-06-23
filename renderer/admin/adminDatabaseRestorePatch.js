@@ -83,6 +83,7 @@
       <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:12px;">
         <button class="btn grey" id="dbRestoreRefreshBtn" type="button">Refresh Packages</button>
         <button class="btn grey" id="dbRestorePreviewBtn" type="button">Preview / Validate Package</button>
+        <button class="btn grey" id="dbRestoreTestExtractBtn" type="button">Test Extract to Folder</button>
         <label class="quality-recheck-line small-hint" style="align-items:center;gap:6px;margin:0 8px 0 0;"><input id="dbRestoreStopPbCheck" type="checkbox" checked /> Stop PocketBase before restore</label>
         <button class="btn red" id="dbRestoreApplyBtn" type="button">Restore Selected Package</button>
       </div>
@@ -92,7 +93,9 @@
 
       <div class="card" style="padding:12px;margin-top:12px;background:#fff7ed;border-color:#fed7aa;">
         <div class="section-title">Restore safety rules</div>
-        <div class="small-hint">- Restore replaces current <b>pb_data</b>, <b>pb_migrations</b>, and <b>.env</b>.</div>
+        <div class="small-hint">- <b>Preview</b> checks ZIP content only.</div>
+        <div class="small-hint">- <b>Test Extract</b> extracts to a test folder and does not touch live database.</div>
+        <div class="small-hint">- <b>Restore</b> replaces current <b>pb_data</b>, <b>pb_migrations</b>, and <b>.env</b>.</div>
         <div class="small-hint">- A pre-restore backup folder is created first inside <b>transfer_packages/pre_restore_backups</b>.</div>
         <div class="small-hint">- PocketBase must be stopped before replacing database files.</div>
         <div class="small-hint">- After restore, start PocketBase and restart Node/SP WorkTrack server.</div>
@@ -111,6 +114,7 @@
     const bindings = [
       ["dbRestoreRefreshBtn", () => refreshPackages(true)],
       ["dbRestorePreviewBtn", previewPackage],
+      ["dbRestoreTestExtractBtn", testExtractPackage],
       ["dbRestoreApplyBtn", restorePackage]
     ];
     bindings.forEach(([id, handler]) => {
@@ -185,6 +189,23 @@
     `;
   }
 
+  function renderTestExtractDone(data) {
+    const host = $("dbRestoreOutput");
+    if (!host) return;
+    host.innerHTML = `
+      <div class="card" style="padding:12px;background:#ecfdf5;border-color:#bbf7d0;">
+        <div class="section-title">Safe Test Extract Completed</div>
+        <div class="small-hint"><b>Package:</b> ${esc(data.fileName || "-")}</div>
+        <div class="small-hint"><b>Test folder:</b> ${esc(data.testDir || "-")}</div>
+        <div class="small-hint"><b>Live DB changed:</b> No</div>
+      </div>
+      <div class="card" style="padding:12px;margin-top:12px;background:#eef6ff;border-color:#bfdbfe;">
+        <div class="section-title">Notes</div>
+        ${(data.warnings || []).map(w => `<div class="small-hint">- ${esc(w)}</div>`).join("")}
+      </div>
+    `;
+  }
+
   function renderRestoreDone(data) {
     const host = $("dbRestoreOutput");
     if (!host) return;
@@ -227,6 +248,30 @@
       console.error(err);
       setStatus("Preview failed: " + (err.message || err), "error");
       alert("Restore preview failed:\n\n" + (err.message || err));
+    }
+  }
+
+  async function testExtractPackage() {
+    if (!allowed()) return alert("No permission: Database Transfer");
+    const fileName = selectedPackage();
+    if (!fileName) return alert("Select a transfer package first.");
+
+    const ok = confirm("Safely extract this transfer package into a test folder?\n\nLive pb_data, pb_migrations, and .env will not be changed.");
+    if (!ok) return;
+
+    const btn = $("dbRestoreTestExtractBtn");
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = "Extracting..."; }
+      setStatus("Testing package extraction...");
+      const payload = await requestJson(`/api/transfer/restore/test-extract/${encodeURIComponent(fileName)}`, { method: "POST", timeoutMs: REQUEST_TIMEOUT_MS });
+      renderTestExtractDone(payload.data || {});
+      setStatus("Safe test extract completed. Live database not changed.", "success");
+    } catch (err) {
+      console.error(err);
+      setStatus("Test extract failed: " + (err.message || err), "error");
+      alert("Test extract failed:\n\n" + (err.message || err));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Test Extract to Folder"; }
     }
   }
 
