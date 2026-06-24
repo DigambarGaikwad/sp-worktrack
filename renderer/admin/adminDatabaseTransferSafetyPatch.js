@@ -1,5 +1,5 @@
 // renderer/admin/adminDatabaseTransferSafetyPatch.js
-// Safety polish for Database Transfer tab: hide unused optional count rows and guard runtime buttons.
+// Safety polish for Database Transfer tab: hide unused optional count rows, guard runtime buttons, and use direct ZIP downloads.
 
 (function () {
   const CONFIG = window.SPWT_CONFIG || {};
@@ -30,6 +30,15 @@
 
   function setRuntimeStatus(message, type = "") {
     const el = $("dbRuntimeStatusLine");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.remove("spwt-status-error", "spwt-status-success");
+    if (type === "error") el.classList.add("spwt-status-error");
+    if (type === "success") el.classList.add("spwt-status-success");
+  }
+
+  function setTransferStatus(message, type = "") {
+    const el = $("dbTransferStatusLine");
     if (!el) return;
     el.textContent = message || "";
     el.classList.remove("spwt-status-error", "spwt-status-success");
@@ -127,6 +136,48 @@
     }
   }
 
+  async function latestPackageName() {
+    const fromPath = text($("dbTransferLatestPath"));
+    const file = fromPath.split(/[\\/]/).pop();
+    if (file && file.startsWith("SPWT_TRANSFER") && file.endsWith(".zip")) return file;
+
+    const headers = {};
+    const t = token();
+    if (t) headers["x-spwt-admin-token"] = t;
+    const res = await fetch(`${API_BASE_URL}/api/transfer/packages`, { headers });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.ok) throw new Error(payload?.message || `Package list failed ${res.status}`);
+    const latest = Array.isArray(payload.data) ? payload.data[0] : null;
+    if (!latest?.fileName) throw new Error("No transfer package available. Create package first.");
+    return latest.fileName;
+  }
+
+  async function downloadLatestDirect(button) {
+    try {
+      if (button) button.disabled = true;
+      setTransferStatus("Preparing direct ZIP download...");
+      const fileName = await latestPackageName();
+      const params = new URLSearchParams();
+      const t = token();
+      if (t) params.set("adminToken", t);
+      const url = `${API_BASE_URL}/api/transfer/package/download/${encodeURIComponent(fileName)}${params.toString() ? `?${params}` : ""}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTransferStatus("Download requested. Browser should keep only the final ZIP file after completion.", "success");
+    } catch (err) {
+      console.error(err);
+      setTransferStatus("Download failed: " + (err.message || err), "error");
+      alert("Download failed:\n\n" + (err.message || err));
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   async function stopNodeBestEffort() {
     const ok = confirm("Stop Node server now?\n\nThis will disconnect this browser/app because Node serves SP WorkTrack. Restart it from terminal, Task Scheduler, or the runtime script.");
     if (!ok) return;
@@ -168,6 +219,15 @@
   }
 
   document.addEventListener("click", (event) => {
+    const downloadBtn = event.target?.closest?.("#dbTransferDownloadBtn");
+    if (downloadBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      downloadLatestDirect(downloadBtn);
+      return;
+    }
+
     const stopNode = event.target?.closest?.("#dbRuntimeStopNodeBtn");
     if (stopNode) {
       event.preventDefault();
