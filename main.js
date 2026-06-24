@@ -1,10 +1,19 @@
 // main.js
-// SP WorkTrack Electron Server Launcher
+// SP WorkTrack V2 Electron Server Launcher
 const { app, BrowserWindow, dialog } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const dotenv = require("dotenv");
+
+const APP_PRODUCT_NAME = "SP WorkTrack V2";
+const APP_USER_DATA_DIR = "sp-worktrack-v2";
+
+try {
+  app.setName(APP_PRODUCT_NAME);
+  const appDataRoot = process.env.APPDATA || path.join(process.env.USERPROFILE || process.cwd(), "AppData", "Roaming");
+  app.setPath("userData", path.join(appDataRoot, APP_USER_DATA_DIR));
+} catch (_) {}
 
 let mainWindow = null;
 let pocketBaseProcess = null;
@@ -237,7 +246,7 @@ async function ensureServer() {
   try {
     require.resolve("express");
   } catch (_) {
-    throw new Error("Server dependency missing: express. Reinstall or use the packaged SP WorkTrack Server App.");
+    throw new Error("Server dependency missing: express. Reinstall or use the packaged SP WorkTrack V2 Server App.");
   }
 
   logLine("Starting SP WorkTrack API", apiUrl);
@@ -248,7 +257,7 @@ async function ensureServer() {
 function loadingHtml() {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`
     <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#f7f9fc;color:#1f2937;">
-      <h2>SP WorkTrack is starting...</h2>
+      <h2>SP WorkTrack V2 is starting...</h2>
       <p>Starting PocketBase database and SP WorkTrack server. Please wait.</p>
     </body></html>
   `)}`;
@@ -257,7 +266,7 @@ function loadingHtml() {
 function errorHtml(message) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`
     <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#fff7f7;color:#7f1d1d;">
-      <h2>SP WorkTrack could not start</h2>
+      <h2>SP WorkTrack V2 could not start</h2>
       <p style="white-space:pre-wrap;line-height:1.5;">${String(message || "Unknown error").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</p>
       <p>Check <b>runtime_logs/electron-runtime.log</b> in the writable app data folder.</p>
     </body></html>
@@ -266,6 +275,7 @@ function errorHtml(message) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: APP_PRODUCT_NAME,
     width: 1320,
     height: 860,
     minWidth: 1100,
@@ -288,12 +298,12 @@ async function startApp() {
     await ensurePocketBase();
     await ensureServer();
     await mainWindow.loadURL(getApiUrl());
-    logLine("SP WorkTrack opened", getApiUrl());
+    logLine("SP WorkTrack V2 opened", getApiUrl());
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
     logLine("Startup failed", message);
     if (mainWindow) mainWindow.loadURL(errorHtml(message));
-    dialog.showErrorBox("SP WorkTrack startup failed", message);
+    dialog.showErrorBox("SP WorkTrack V2 startup failed", message);
   }
 }
 
