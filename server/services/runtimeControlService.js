@@ -6,7 +6,8 @@ const path = require("path");
 const net = require("net");
 const { spawn } = require("child_process");
 
-const ROOT_DIR = path.resolve(__dirname, "../..");
+const APP_ROOT_DIR = process.env.SPWT_APP_ROOT || path.resolve(__dirname, "../..");
+const ROOT_DIR = process.env.SPWT_RUNTIME_ROOT || APP_ROOT_DIR;
 const RUNTIME_DIR = path.join(ROOT_DIR, "runtime_scripts");
 const LOG_DIR = path.join(ROOT_DIR, "runtime_logs");
 const POCKETBASE_DIR = path.join(ROOT_DIR, "local-tools", "pocketbase");
@@ -67,7 +68,7 @@ async function pathExists(absPath) {
     const stat = await fs.stat(absPath);
     return { exists: true, isFile: stat.isFile(), isDirectory: stat.isDirectory(), size: stat.size };
   } catch (err) {
-    if (err?.code === "ENOENT") return { exists: false, isFile: false, isDirectory: false, size: 0 };
+    if (["ENOENT", "ENOTDIR"].includes(err?.code)) return { exists: false, isFile: false, isDirectory: false, size: 0 };
     throw err;
   }
 }
@@ -132,7 +133,7 @@ async function writeRuntimeScripts() {
 
   await fs.writeFile(nodeScript, [
     "$ErrorActionPreference = 'Stop'",
-    `Set-Location '${quotePs(ROOT_DIR)}'`,
+    `Set-Location '${quotePs(APP_ROOT_DIR)}'`,
     `New-Item -ItemType Directory -Path '${quotePs(LOG_DIR)}' -Force | Out-Null`,
     "$npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source",
     "if (-not $npm) { $npm = (Get-Command npm -ErrorAction SilentlyContinue).Source }",
@@ -148,11 +149,11 @@ async function writeRuntimeScripts() {
   await fs.writeFile(stopScript, [
     "$ErrorActionPreference = 'Continue'",
     `New-Item -ItemType Directory -Path '${quotePs(LOG_DIR)}' -Force | Out-Null`,
-    `$root = '${quotePs(ROOT_DIR)}'`,
-    `$pbDir = '${quotePs(POCKETBASE_DIR)}'`,
+    `$root = '${quotePs(APP_ROOT_DIR)}'`,
+    `$runtime = '${quotePs(ROOT_DIR)}'`,
     "$procs = Get-CimInstance Win32_Process | Where-Object {",
-    "  (($_.Name -eq 'pocketbase.exe') -and ($_.CommandLine -like \"*$pbDir*\")) -or",
-    "  (($_.Name -eq 'node.exe') -and ($_.CommandLine -like \"*$root*\"))",
+    "  (($_.Name -eq 'pocketbase.exe') -and ($_.CommandLine -like \"*$runtime*\")) -or",
+    "  (($_.Name -eq 'node.exe') -and (($_.CommandLine -like \"*$root*\") -or ($_.CommandLine -like \"*$runtime*\")))",
     "}",
     "$count = 0",
     "foreach ($p in $procs) {",
@@ -309,6 +310,7 @@ async function getRuntimeStatus() {
   return {
     server: {
       rootDir: ROOT_DIR,
+      appSourceDir: APP_ROOT_DIR,
       runtimeDir: RUNTIME_DIR,
       logDir: LOG_DIR,
       nodePort: DEFAULT_NODE_PORT,
@@ -338,11 +340,10 @@ async function getRuntimeStatus() {
     },
     scripts: await writeRuntimeScripts(),
     guidance: [
-      "Create Auto-Start Tasks once on the server PC, preferably from an Administrator terminal.",
-      "Create Desktop Shortcuts gives Start, Stop, Restart, and Open shortcuts on the server PC desktop.",
-      "Start PocketBase can be triggered from this screen after task creation.",
-      "Stopping Node will disconnect this browser because Node serves the app.",
-      "If Node is stopped, use Start SP WorkTrack desktop shortcut or Task Scheduler on the server PC."
+      "Installed Electron app starts/stops PocketBase and Node automatically; runtime scripts are mainly for development/server-browser mode.",
+      "Runtime scripts and logs are stored in the writable runtime folder, not Program Files/app.asar.",
+      "Create Auto-Start Tasks only for browser-server deployment, preferably from an Administrator terminal.",
+      "Stopping Node will disconnect this browser because Node serves the app."
     ]
   };
 }
