@@ -3,6 +3,7 @@
 
 const express = require("express");
 const { getSystemConfig, saveSystemConfig } = require("../services/systemConfigService");
+const { cleanupEnvBackups } = require("../services/envBackupCleanupService");
 const { sendTestEmail } = require("../services/emailService");
 const { requirePermission } = require("../services/adminAccessService");
 
@@ -29,7 +30,9 @@ router.get("/settings", async (req, res) => {
 router.post("/settings", async (req, res) => {
   try {
     requireSystemConfig(req);
-    res.json({ ok: true, data: saveSystemConfig(req.body || {}) });
+    const data = saveSystemConfig(req.body || {});
+    const cleanup = cleanupEnvBackups();
+    res.json({ ok: true, data: { ...data, cleanup } });
   } catch (err) {
     console.error("POST /api/system-config/settings failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save system settings.", details: err.details || null });
