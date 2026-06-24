@@ -7,7 +7,8 @@ const os = require("os");
 const { spawn } = require("child_process");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
-const ROOT_DIR = path.resolve(__dirname, "../..");
+const CODE_ROOT = process.env.SPWT_APP_ROOT || path.resolve(__dirname, "../..");
+const ROOT_DIR = process.env.SPWT_RUNTIME_ROOT || CODE_ROOT;
 const TRANSFER_DIR = path.join(ROOT_DIR, "transfer_packages");
 const PACKAGE_PREFIX = "SPWT_TRANSFER";
 
@@ -46,6 +47,7 @@ const CORE_COMPONENTS = [
     altRelPaths: ["package.json"],
     required: false,
     type: "file",
+    preferCodeRoot: true,
     note: "App version/package reference."
   },
   {
@@ -55,6 +57,7 @@ const CORE_COMPONENTS = [
     altRelPaths: ["package-lock.json"],
     required: false,
     type: "file",
+    preferCodeRoot: true,
     note: "Dependency lock file for repeatable production installs."
   }
 ];
@@ -144,21 +147,29 @@ async function folderStats(absPath) {
   return { exists: true, files, folders, bytes };
 }
 
+function uniqueRoots(component) {
+  const roots = component.preferCodeRoot ? [CODE_ROOT, ROOT_DIR] : [ROOT_DIR, CODE_ROOT];
+  return roots.filter((root, index, arr) => root && arr.indexOf(root) === index);
+}
+
 async function findComponentSource(component) {
   const candidates = Array.isArray(component.altRelPaths) && component.altRelPaths.length
     ? component.altRelPaths
     : [component.relPath];
 
-  for (const relPath of candidates) {
-    const absPath = path.join(ROOT_DIR, relPath);
-    const info = await folderStats(absPath);
-    if (info.exists) return { relPath, absPath, info };
+  for (const root of uniqueRoots(component)) {
+    for (const relPath of candidates) {
+      const absPath = path.join(root, relPath);
+      const info = await folderStats(absPath);
+      if (info.exists) return { root, relPath, absPath, info };
+    }
   }
 
   const relPath = candidates[0] || component.relPath;
   return {
+    root: uniqueRoots(component)[0] || ROOT_DIR,
     relPath,
-    absPath: path.join(ROOT_DIR, relPath),
+    absPath: path.join(uniqueRoots(component)[0] || ROOT_DIR, relPath),
     info: { exists: false, files: 0, folders: 0, bytes: 0 }
   };
 }
@@ -169,6 +180,7 @@ async function componentStatus() {
     const source = await findComponentSource(item);
     components.push({
       ...item,
+      sourceRoot: source.root,
       sourceRelPath: source.relPath,
       sourcePath: source.absPath,
       absPath: source.absPath,
@@ -242,6 +254,7 @@ async function getDatabaseTransferStatus() {
 
   return {
     rootDir: ROOT_DIR,
+    appRoot: CODE_ROOT,
     transferDir: TRANSFER_DIR,
     server: {
       hostname: os.hostname(),
@@ -318,6 +331,7 @@ async function createTransferPackage(options = {}) {
     copied.push({
       key: item.key,
       relPath: item.relPath,
+      sourceRoot: item.sourceRoot,
       sourceRelPath: item.sourceRelPath,
       packagePath: item.packagePath,
       copied: ok,
@@ -328,10 +342,11 @@ async function createTransferPackage(options = {}) {
   const manifest = {
     app: "SP WorkTrack",
     packageType: "database-transfer",
-    packageVersion: 2,
+    packageVersion: 3,
     createdAt,
     createdOnServer: status.server,
     rootDir: ROOT_DIR,
+    appRoot: CODE_ROOT,
     transferDir: TRANSFER_DIR,
     components: status.components,
     copied,
@@ -373,11 +388,16 @@ async function createTransferPackage(options = {}) {
   };
 }
 
+function resolvePackagePath(fileName) {
+  return Promise.resolve(path.join(TRANSFER_DIR, safeTransferName(fileName)));
+}
+
 module.exports = {
   getDatabaseTransferStatus,
   createTransferPackage,
   listTransferPackages,
   safeTransferName,
+  resolvePackagePath,
   TRANSFER_DIR,
   PACKAGE_PREFIX
 };
