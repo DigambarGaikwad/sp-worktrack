@@ -38,12 +38,17 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function runtimeRoot(rootDir = process.cwd()) {
+  return process.env.SPWT_RUNTIME_ROOT || rootDir;
+}
+
 function envPath(rootDir = process.cwd()) {
-  return path.join(rootDir, ".env");
+  return process.env.SPWT_ENV_FILE || path.join(runtimeRoot(rootDir), ".env");
 }
 
 function envExamplePath(rootDir = process.cwd()) {
-  return path.join(rootDir, ".env.example");
+  const appRoot = process.env.SPWT_APP_ROOT || rootDir;
+  return path.join(appRoot, ".env.example");
 }
 
 function readEnvFile(rootDir = process.cwd()) {
@@ -124,11 +129,12 @@ function getSystemConfig(rootDir = process.cwd()) {
     envExists: fs.existsSync(file),
     envExamplePath: example,
     envExampleExists: fs.existsSync(example),
+    runtimeRoot: runtimeRoot(rootDir),
     sections: buildSections(values),
     notes: [
       "Secret fields are not displayed. Leave secret inputs blank to keep the existing saved value.",
       "Email and Google Sheet settings update process.env immediately for the running Node server.",
-      "PocketBase superuser changes are saved to .env for future runtime setup; direct PocketBase user password changes still belong in PocketBase admin/maintenance flow.",
+      "PocketBase superuser changes are saved to the writable runtime .env for future runtime setup; direct PocketBase user password changes still belong in PocketBase admin/maintenance flow.",
       "Restart SP WorkTrack after major configuration changes if any service still uses old values."
     ]
   };
@@ -207,6 +213,7 @@ function saveSystemConfig(raw = {}, rootDir = process.cwd()) {
   const updates = normalizeIncoming(raw);
   const existing = readEnvFile(rootDir);
 
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file)) fs.writeFileSync(file, "", "utf8");
   if (existing) {
     const backupPath = `${file}.bak_${new Date().toISOString().replace(/[:.]/g, "-")}`;
