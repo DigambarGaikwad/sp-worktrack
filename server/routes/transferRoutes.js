@@ -14,6 +14,7 @@ const {
   restoreTransferPackage
 } = require("../services/databaseRestoreService");
 const { testExtractTransferPackage } = require("../services/databaseRestoreTestService");
+const { cleanupTransferFolder } = require("../services/transferCleanupService");
 const {
   NODE_TASK,
   POCKETBASE_TASK,
@@ -44,6 +45,7 @@ function sleep(ms) {
 router.get("/status", async (req, res) => {
   try {
     requireDbTransfer(req);
+    await cleanupTransferFolder();
     const data = await getDatabaseTransferStatus();
     res.json({ ok: true, data });
   } catch (err) {
@@ -55,6 +57,7 @@ router.get("/status", async (req, res) => {
 router.get("/packages", async (req, res) => {
   try {
     requireDbTransfer(req);
+    await cleanupTransferFolder();
     const data = await listTransferPackages();
     res.json({ ok: true, data });
   } catch (err) {
@@ -67,6 +70,7 @@ router.post("/package", async (req, res) => {
   try {
     requireDbTransfer(req);
     const data = await createTransferPackage(req.body || {});
+    await cleanupTransferFolder();
     res.json({ ok: true, data });
   } catch (err) {
     console.error("POST /api/transfer/package failed:", err);
