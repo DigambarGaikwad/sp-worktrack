@@ -1,7 +1,7 @@
 {
-  "name": "sp-worktrack",
-  "version": "1.0.0",
-  "description": "Production Entry Application",
+  "name": "sp-worktrack-v2",
+  "version": "2.1.0",
+  "description": "SP WorkTrack DB Edition - Production Entry Application",
   "main": "main.js",
   "author": "SP WorkTrack",
   "license": "ISC",
@@ -28,14 +28,16 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.sopan.spworktrack",
-    "productName": "SP WorkTrack",
+    "appId": "com.sopan.spworktrack.v2",
+    "productName": "SP WorkTrack V2",
+    "artifactName": "SP WorkTrack V2 Setup ${version}.${ext}",
     "directories": {
-      "output": "release"
+      "output": "release-v2"
     },
     "files": [
       "**/*",
       "!release/**",
+      "!release-v2/**",
       "!transfer_packages/**",
       "!runtime_logs/**",
       "!runtime_scripts/**",
@@ -53,7 +55,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "SP WorkTrack V2"
     }
   }
 }
