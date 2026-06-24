@@ -7,7 +7,7 @@ const net = require("net");
 const { spawn } = require("child_process");
 const { TRANSFER_DIR, resolvePackagePath } = require("./databaseTransferService");
 
-const ROOT_DIR = path.resolve(__dirname, "../..");
+const ROOT_DIR = process.env.SPWT_RUNTIME_ROOT || path.resolve(__dirname, "../..");
 const RESTORE_CONFIRM_TOKEN = "RESTORE_DB";
 const POCKETBASE_PORT = 8090;
 
@@ -172,7 +172,7 @@ async function inspectComponent(workDir, item) {
 function restoreTargets() {
   const pbBase = path.join(ROOT_DIR, "local-tools", "pocketbase");
   return {
-    env: path.join(ROOT_DIR, ".env"),
+    env: process.env.SPWT_ENV_FILE || path.join(ROOT_DIR, ".env"),
     pb_data: path.join(pbBase, "pb_data"),
     pb_migrations: path.join(pbBase, "pb_migrations")
   };
@@ -241,7 +241,7 @@ async function extractAndInspect(fileName, mode = "preview") {
     warnings: [
       "Restore package contains database records and .env secrets. Keep it private.",
       "PocketBase must be stopped before actual restore.",
-      "Restore replaces current pb_data, pb_migrations, and .env. A pre-restore backup folder is created first.",
+      "Restore replaces current pb_data, pb_migrations, and .env in the writable runtime folder. A pre-restore backup folder is created first.",
       "App source code/package.json is not overwritten by restore. Install/update the app separately."
     ]
   };
@@ -300,10 +300,10 @@ async function restoreTransferPackage(fileName, options = {}) {
       preRestoreBackupDir: backup.backupRoot,
       backedUp: backup.copied,
       restored,
-      message: "Transfer package restored. Start PocketBase, then restart Node/SP WorkTrack server.",
+      message: "Transfer package restored. Restart SP WorkTrack so PocketBase and Node load restored runtime files.",
       warnings: [
-        "Start PocketBase after restore.",
-        "Restart Node/SP WorkTrack server so new .env is loaded.",
+        "Close SP WorkTrack completely after restore.",
+        "Open SP WorkTrack again so restored .env and database are loaded.",
         "Open Admin and verify employees, machines, attendance, reports, email, and Google backup settings."
       ]
     };
