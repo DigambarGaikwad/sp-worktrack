@@ -182,6 +182,12 @@ function pocketBaseRuntimeDir() {
   return dir;
 }
 
+function pocketBaseDataDir() {
+  const dir = path.join(pocketBaseRuntimeDir(), "pb_data");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 function pocketBaseListenArg() {
   const u = new URL(getPocketBaseUrl());
   const host = u.hostname || "127.0.0.1";
@@ -201,11 +207,13 @@ async function ensurePocketBase() {
     throw new Error("PocketBase executable not found. Expected local-tools\\pocketbase\\pocketbase.exe in the app package.");
   }
 
-  const cwd = app.isPackaged ? pocketBaseRuntimeDir() : path.dirname(exe);
+  const cwd = pocketBaseRuntimeDir();
+  const dataDir = pocketBaseDataDir();
   const arg = pocketBaseListenArg();
-  logLine("Starting PocketBase", `${exe} --http=${arg} cwd=${cwd}`);
+  const args = ["serve", `--http=${arg}`, `--dir=${dataDir}`];
+  logLine("Starting PocketBase", `${exe} ${args.join(" ")} cwd=${cwd}`);
 
-  pocketBaseProcess = spawn(exe, ["serve", `--http=${arg}`], {
+  pocketBaseProcess = spawn(exe, args, {
     cwd,
     windowsHide: true,
     stdio: "pipe"
