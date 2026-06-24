@@ -14,7 +14,9 @@ function appRoot() {
 }
 
 function runtimeRoot() {
-  return app.isPackaged ? path.dirname(process.execPath) : appRoot();
+  // In packaged mode, Program Files/app.asar is read-only for normal users.
+  // Keep DB, .env, transfer packages and logs in Electron userData instead.
+  return app.isPackaged ? path.join(app.getPath("userData"), "runtime") : appRoot();
 }
 
 function logLine(message, extra) {
@@ -43,9 +45,66 @@ function findExistingFile(candidates) {
   return "";
 }
 
+function copyFileIfMissing(src, dest) {
+  if (!src || !fs.existsSync(src) || fs.existsSync(dest)) return false;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+  return true;
+}
+
+function copyDirIfMissing(src, dest, requiredChild = "") {
+  if (!src || !fs.existsSync(src)) return false;
+  if (requiredChild && fs.existsSync(path.join(dest, requiredChild))) return false;
+  if (!requiredChild && fs.existsSync(dest)) return false;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(src, dest, { recursive: true, force: true });
+  return true;
+}
+
+function packagedPath(relPath) {
+  const candidates = [
+    path.join(process.resourcesPath || "", "app.asar.unpacked", relPath),
+    asarUnpackedPath(path.join(appRoot(), relPath)),
+    path.join(process.resourcesPath || "", relPath),
+    path.join(appRoot(), relPath)
+  ];
+  return findExistingFile(candidates);
+}
+
+function ensureWritableRuntime() {
+  const root = runtimeRoot();
+  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(path.join(root, "local-tools", "pocketbase"), { recursive: true });
+
+  if (!app.isPackaged) return;
+
+  const envTarget = path.join(root, ".env");
+  const envSource = findExistingFile([
+    path.join(path.dirname(process.execPath), ".env"),
+    path.join(process.resourcesPath || "", ".env"),
+    path.join(appRoot(), ".env")
+  ]);
+  if (copyFileIfMissing(envSource, envTarget)) logLine("Seeded writable .env", envTarget);
+
+  const pbDataSource = packagedPath(path.join("local-tools", "pocketbase", "pb_data"));
+  const pbDataTarget = path.join(root, "local-tools", "pocketbase", "pb_data");
+  if (copyDirIfMissing(pbDataSource, pbDataTarget, "data.db")) logLine("Seeded writable pb_data", pbDataTarget);
+
+  const pbMigrationSource = packagedPath(path.join("local-tools", "pocketbase", "pb_migrations"));
+  const pbMigrationTarget = path.join(root, "local-tools", "pocketbase", "pb_migrations");
+  if (copyDirIfMissing(pbMigrationSource, pbMigrationTarget)) logLine("Seeded writable pb_migrations", pbMigrationTarget);
+}
+
 function loadEnv() {
+  ensureWritableRuntime();
+
+  process.env.SPWT_RUNTIME_ROOT = runtimeRoot();
+  process.env.SPWT_APP_ROOT = appRoot();
+  process.env.SPWT_ENV_FILE = path.join(runtimeRoot(), ".env");
+
   const exeDir = path.dirname(process.execPath);
   const envPath = findExistingFile([
+    process.env.SPWT_ENV_FILE,
     path.join(runtimeRoot(), ".env"),
     path.join(exeDir, ".env"),
     path.join(process.resourcesPath || "", ".env"),
@@ -53,7 +112,7 @@ function loadEnv() {
   ]);
 
   if (envPath) {
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, override: true });
     logLine("Loaded env", envPath);
   } else {
     logLine("No .env found; using defaults/env vars");
@@ -117,6 +176,12 @@ function pocketBaseExePath() {
   return exe;
 }
 
+function pocketBaseRuntimeDir() {
+  const dir = path.join(runtimeRoot(), "local-tools", "pocketbase");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 function pocketBaseListenArg() {
   const u = new URL(getPocketBaseUrl());
   const host = u.hostname || "127.0.0.1";
@@ -136,9 +201,9 @@ async function ensurePocketBase() {
     throw new Error("PocketBase executable not found. Expected local-tools\\pocketbase\\pocketbase.exe in the app package.");
   }
 
-  const cwd = path.dirname(exe);
+  const cwd = app.isPackaged ? pocketBaseRuntimeDir() : path.dirname(exe);
   const arg = pocketBaseListenArg();
-  logLine("Starting PocketBase", `${exe} --http=${arg}`);
+  logLine("Starting PocketBase", `${exe} --http=${arg} cwd=${cwd}`);
 
   pocketBaseProcess = spawn(exe, ["serve", `--http=${arg}`], {
     cwd,
@@ -186,7 +251,7 @@ function errorHtml(message) {
     <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#fff7f7;color:#7f1d1d;">
       <h2>SP WorkTrack could not start</h2>
       <p style="white-space:pre-wrap;line-height:1.5;">${String(message || "Unknown error").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</p>
-      <p>Check <b>runtime_logs/electron-runtime.log</b> in the app folder.</p>
+      <p>Check <b>runtime_logs/electron-runtime.log</b> in the writable app data folder.</p>
     </body></html>
   `)}`;
 }
