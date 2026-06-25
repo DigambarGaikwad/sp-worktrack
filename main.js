@@ -8,6 +8,8 @@ const dotenv = require("dotenv");
 
 const APP_PRODUCT_NAME = "SP WorkTrack V2";
 const APP_USER_DATA_DIR = "sp-worktrack-v2";
+const DEFAULT_API_PORT = 3032;
+const DEFAULT_POCKETBASE_URL = "http://127.0.0.1:8092";
 
 try {
   app.setName(APP_PRODUCT_NAME);
@@ -124,12 +126,12 @@ function loadEnv() {
     dotenv.config({ path: envPath, override: true });
     logLine("Loaded env", envPath);
   } else {
-    logLine("No .env found; using defaults/env vars");
+    logLine("No .env found; using V2 defaults/env vars");
   }
 }
 
 function getApiPort() {
-  return Number(process.env.SPWT_API_PORT || 3030);
+  return Number(process.env.SPWT_API_PORT || DEFAULT_API_PORT);
 }
 
 function getApiUrl() {
@@ -137,7 +139,7 @@ function getApiUrl() {
 }
 
 function getPocketBaseUrl() {
-  return String(process.env.POCKETBASE_URL || "http://127.0.0.1:8090").replace(/\/$/, "");
+  return String(process.env.POCKETBASE_URL || DEFAULT_POCKETBASE_URL).replace(/\/$/, "");
 }
 
 async function fetchJson(url, timeoutMs = 3000) {
@@ -200,7 +202,7 @@ function pocketBaseDataDir() {
 function pocketBaseListenArg() {
   const u = new URL(getPocketBaseUrl());
   const host = u.hostname || "127.0.0.1";
-  const port = u.port || "8090";
+  const port = u.port || "8092";
   return `${host}:${port}`;
 }
 
@@ -239,7 +241,7 @@ async function ensurePocketBase() {
 async function ensureServer() {
   const apiUrl = getApiUrl();
   if (await isHealthy(apiUrl)) {
-    logLine("SP WorkTrack API already running", apiUrl);
+    logLine("SP WorkTrack V2 API already running", apiUrl);
     return;
   }
 
@@ -249,16 +251,16 @@ async function ensureServer() {
     throw new Error("Server dependency missing: express. Reinstall or use the packaged SP WorkTrack V2 Server App.");
   }
 
-  logLine("Starting SP WorkTrack API", apiUrl);
+  logLine("Starting SP WorkTrack V2 API", apiUrl);
   require(path.join(appRoot(), "server", "app.js"));
-  await waitForHealthy(apiUrl, "SP WorkTrack API", 25000);
+  await waitForHealthy(apiUrl, "SP WorkTrack V2 API", 25000);
 }
 
 function loadingHtml() {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`
     <html><body style="font-family:Segoe UI,Arial;margin:40px;background:#f7f9fc;color:#1f2937;">
       <h2>SP WorkTrack V2 is starting...</h2>
-      <p>Starting PocketBase database and SP WorkTrack server. Please wait.</p>
+      <p>Starting PocketBase database and SP WorkTrack V2 server. Please wait.</p>
     </body></html>
   `)}`;
 }
