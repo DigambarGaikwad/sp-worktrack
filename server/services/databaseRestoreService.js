@@ -9,7 +9,7 @@ const { TRANSFER_DIR, resolvePackagePath } = require("./databaseTransferService"
 
 const ROOT_DIR = process.env.SPWT_RUNTIME_ROOT || path.resolve(__dirname, "../..");
 const RESTORE_CONFIRM_TOKEN = "RESTORE_DB";
-const POCKETBASE_PORT = 8090;
+const DEFAULT_POCKETBASE_URL = "http://127.0.0.1:8092";
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -38,6 +38,19 @@ function formatBytes(bytes) {
   if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(2)} MB`;
   if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${n} B`;
+}
+
+function pocketBaseEndpoint() {
+  try {
+    const u = new URL(process.env.POCKETBASE_URL || DEFAULT_POCKETBASE_URL);
+    return {
+      host: u.hostname || "127.0.0.1",
+      port: Number(u.port || (u.protocol === "https:" ? 443 : 80)) || 8092,
+      url: u.toString().replace(/\/$/, "")
+    };
+  } catch {
+    return { host: "127.0.0.1", port: 8092, url: DEFAULT_POCKETBASE_URL };
+  }
 }
 
 function runPowerShell(script) {
@@ -270,9 +283,10 @@ async function restoreTransferPackage(fileName, options = {}) {
       throw err;
     }
 
-    const pbRunning = await portOpen("127.0.0.1", POCKETBASE_PORT, 900);
+    const pb = pocketBaseEndpoint();
+    const pbRunning = await portOpen(pb.host, pb.port, 900);
     if (pbRunning) {
-      const err = new Error("PocketBase is still running on 127.0.0.1:8090. Stop PocketBase first, then restore.");
+      const err = new Error(`PocketBase is still running on ${pb.host}:${pb.port}. Stop PocketBase first, then restore.`);
       err.status = 409;
       throw err;
     }
