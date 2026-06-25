@@ -1,5 +1,5 @@
 // server/app.js
-// SP WorkTrack DB Edition - API Server
+// SP WorkTrack V2 DB Edition - API Server
 
 const path = require("path");
 const express = require("express");
@@ -25,7 +25,7 @@ const systemConfigRoutes = require("./routes/systemConfigRoutes");
 const { startBackupScheduler } = require("./services/backupScheduler");
 
 const app = express();
-const PORT = Number(process.env.SPWT_API_PORT || 3030);
+const PORT = Number(process.env.SPWT_API_PORT || 3032);
 const ROOT_DIR = path.resolve(__dirname, "..");
 
 app.use(cors({ origin: true, credentials: true }));
@@ -45,7 +45,7 @@ app.use("/api/system", systemRoutes);
 app.use("/api/system-config", systemConfigRoutes);
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, app: "SP WorkTrack API", mode: process.env.SPWT_STORAGE_MODE || "pocketbase", timestamp: new Date().toISOString() });
+  res.json({ ok: true, app: "SP WorkTrack V2 API", mode: process.env.SPWT_STORAGE_MODE || "pocketbase", timestamp: new Date().toISOString() });
 });
 
 app.use(express.static(ROOT_DIR));
@@ -55,6 +55,6 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`SP WorkTrack API running on http://localhost:${PORT}`);
+  console.log(`SP WorkTrack V2 API running on http://localhost:${PORT}`);
   startBackupScheduler();
 });
