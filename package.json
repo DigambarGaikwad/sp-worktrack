@@ -42,7 +42,11 @@
       "!runtime_logs/**",
       "!runtime_scripts/**",
       "!.git/**",
-      "!.env.bak_*"
+      "!.env",
+      "!.env.local",
+      "!.env.*.local",
+      "!.env.bak_*",
+      "!local-tools/pocketbase/pb_data/**"
     ],
     "asarUnpack": [
       "local-tools/pocketbase/**"
