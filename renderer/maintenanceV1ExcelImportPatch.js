@@ -2,7 +2,7 @@
 // Adds rugged V1 Excel Backup import UI in Admin -> Maintenance.
 
 (function () {
-  const REQUEST_TIMEOUT_MS = 180000;
+  const REQUEST_TIMEOUT_MS = 900000;
   let lastAnalysis = null;
   let otpRequestToken = "";
 
@@ -19,7 +19,7 @@
       if (!res.ok || !payload?.ok) throw new Error(payload?.message || `API error ${res.status}`);
       return payload.data;
     } catch (err) {
-      if (err?.name === "AbortError") throw new Error("Request timed out. Large import may take time; check server console and DB status.");
+      if (err?.name === "AbortError") throw new Error("Request timed out. Import may be large; check server console and DB status before retrying.");
       throw err;
     } finally { clearTimeout(timer); }
   }
@@ -28,8 +28,20 @@
     const el = document.getElementById("v1ExcelStatus");
     if (!el) return;
     el.textContent = message || "";
-    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : "#64748b";
+    el.style.color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : type === "warn" ? "#c2410c" : "#64748b";
     el.style.fontWeight = type ? "900" : "700";
+  }
+
+  function setResultMessage(message, type = "info") {
+    const host = document.getElementById("v1ExcelResult");
+    if (!host) return;
+    const color = type === "error" ? "#b91c1c" : type === "success" ? "#15803d" : type === "warn" ? "#c2410c" : "#0b3f73";
+    host.innerHTML = `<div style="margin-top:10px;font-weight:900;color:${color};">${esc(message)}</div>`;
+  }
+
+  function setButtonText(id, text) {
+    const btn = document.getElementById(id);
+    if (btn && text) btn.textContent = text;
   }
 
   function focusField(id) {
@@ -39,8 +51,9 @@
     setTimeout(() => { el.focus(); el.classList.add("entry-error"); setTimeout(() => el.classList.remove("entry-error"), 1600); }, 250);
   }
 
-  function setBusy(value) {
+  function setBusy(value, busyLabel = "") {
     ["v1ChooseFileBtn", "v1AnalyzeBtn", "v1RequestOtpBtn", "v1ImportBtn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = Boolean(value); });
+    setButtonText("v1ImportBtn", value ? (busyLabel || "Working...") : "Import V1 Excel Backup");
   }
 
   function renderObjectTable(obj) {
@@ -140,7 +153,9 @@
     const body = payloadBase();
     if (!body) return;
     try {
-      setBusy(true); setStatus("Analyzing V1 Excel file...");
+      setBusy(true, "Analyzing...");
+      setStatus("Analyzing V1 Excel file...");
+      setResultMessage("Reading Excel workbook and validating sheets...");
       const data = await postJson("/api/maintenance/v1-excel/analyze", body);
       lastAnalysis = data;
       renderAnalysis(data);
@@ -153,7 +168,8 @@
     const body = payloadBase();
     if (!body) return;
     try {
-      setBusy(true); setStatus("Requesting import OTP...");
+      setBusy(true, "Requesting OTP...");
+      setStatus("Requesting import OTP...");
       const data = await postJson("/api/maintenance/otp/request", { action: "import_v1_excel" });
       otpRequestToken = clean(data.requestToken || data.otpRequestToken || data.token);
       setStatus("OTP sent. Enter OTP, type IMPORT_V1 and click Import.", "success");
@@ -167,20 +183,36 @@
     if (!body) return;
     const otp = clean(document.getElementById("v1OtpInput")?.value);
     const confirmText = clean(document.getElementById("v1ConfirmText")?.value);
+    const createBackup = document.getElementById("v1CreateBackup")?.checked !== false;
+
     if (!lastAnalysis) { setStatus("Analyze Excel first, then import.", "error"); focusField("v1AnalyzeBtn"); return; }
     if (!otpRequestToken) { setStatus("Request Import OTP first.", "error"); focusField("v1RequestOtpBtn"); return; }
     if (!otp) { setStatus("Enter OTP first.", "error"); focusField("v1OtpInput"); return; }
     if (confirmText !== "IMPORT_V1") { setStatus("Type IMPORT_V1 in confirmation box first.", "error"); focusField("v1ConfirmText"); return; }
+
     try {
-      setBusy(true); setStatus("Importing V1 Excel. Please wait; do not close the app...");
-      const data = await postJson("/api/maintenance/v1-excel/import", { ...body, confirmText, otpRequestToken, otp, action: "import_v1_excel", createBackup: document.getElementById("v1CreateBackup")?.checked !== false });
+      setBusy(true, createBackup ? "Backing up..." : "Importing...");
+      setStatus(createBackup ? "Creating DB backup before import. Please wait; do not close the app..." : "Starting V1 Excel import. Please wait; do not close the app...", "warn");
+      setResultMessage(createBackup ? "Backup in progress... After backup, import will start automatically." : "Import in progress... This can take several minutes for large Excel files.", "warn");
+
+      if (createBackup) {
+        setTimeout(() => {
+          setStatus("Backup/import request is still running. Please wait; do not click Import again.", "warn");
+          setButtonText("v1ImportBtn", "Working...");
+        }, 8000);
+      }
+
+      const data = await postJson("/api/maintenance/v1-excel/import", { ...body, confirmText, otpRequestToken, otp, action: "import_v1_excel", createBackup });
       renderImportResult(data);
       document.getElementById("v1ConfirmText").value = "";
       document.getElementById("v1OtpInput").value = "";
       otpRequestToken = "";
       setStatus("V1 Excel import completed.", "success");
-    } catch (err) { setStatus(err?.message || String(err), "error"); if (/otp/i.test(String(err?.message || ""))) focusField("v1RequestOtpBtn"); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setStatus(err?.message || String(err), "error");
+      setResultMessage(err?.message || String(err), "error");
+      if (/otp/i.test(String(err?.message || ""))) focusField("v1RequestOtpBtn");
+    } finally { setBusy(false); }
   }
 
   function wire() {
