@@ -25,6 +25,10 @@ const {
 const { deleteBackupFile } = require("../services/backupFileDeleteService");
 const { analyzeV1ExcelFile, importV1ExcelFile } = require("../services/v1ExcelImportService");
 const {
+  analyzeCurrentSheetBackupExcel,
+  restoreCurrentSheetBackupExcel
+} = require("../services/currentSheetBackupImportService");
+const {
   requestMaintenanceOtp,
   verifyMaintenanceOtp,
   requireMaintenanceOtp
@@ -225,6 +229,27 @@ router.post("/v1-excel/import", async (req, res) => {
   } catch (err) {
     console.error("POST /api/maintenance/v1-excel/import failed:", err);
     handleError(res, err, "V1 Excel import failed.");
+  }
+});
+
+router.post("/current-sheet-backup/analyze", async (req, res) => {
+  try {
+    const data = analyzeCurrentSheetBackupExcel(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/current-sheet-backup/analyze failed:", err);
+    handleError(res, err, "Current Google Sheet backup analyze failed.");
+  }
+});
+
+router.post("/current-sheet-backup/restore", async (req, res) => {
+  try {
+    assertOtp(req.body || {}, "restore_current_sheet_backup");
+    const data = await restoreCurrentSheetBackupExcel(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/maintenance/current-sheet-backup/restore failed:", err);
+    handleError(res, err, "Current Google Sheet backup restore failed.");
   }
 });
 
