@@ -82,6 +82,7 @@ router.post("/backups/list", async (req, res) => {
 
 router.post("/backups/delete", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "delete_backup_file");
     const data = deleteBackupFile(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
@@ -197,6 +198,7 @@ router.post("/empty-db/preview", async (req, res) => {
 
 router.post("/empty-db/confirm", async (req, res) => {
   try {
+    assertOtp(req.body || {}, "empty_db");
     const data = await emptyDatabase(req.body || {});
     res.json({ ok: true, data });
   } catch (err) {
