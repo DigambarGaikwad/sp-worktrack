@@ -67,6 +67,119 @@ function groupAdd(map, key, initial, update) {
   update(map.get(key));
 }
 
+function parseArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!clean(value)) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function qualityPointName(q = {}) {
+  return clean(q.point_name || q.quality_point || q.point || q.name || q.pointName || q.qualityPoint);
+}
+
+function qualityKey(dept, subwork, point) {
+  return [clean(dept).toLowerCase(), clean(subwork).toLowerCase(), clean(point).toLowerCase()].join("|");
+}
+
+function qualityStatusLabel(status, value) {
+  const s = clean(status).toUpperCase();
+  const v = clean(value).toUpperCase();
+  if (s) return s;
+  if (!v) return "PENDING";
+  if (v.includes("NOT OK") || v.includes("NG") || v.includes("FAIL")) return "NOT OK";
+  if (v === "OK" || v === "DONE" || v === "PASS") return v;
+  return "DONE";
+}
+
+function buildQualityStatus({ typeCode, qualityPoints, lines, qualityLogs }) {
+  const out = new Map();
+
+  function addPending({ point, department, subwork, inputType, source }) {
+    const p = clean(point);
+    if (!p) return;
+    const key = qualityKey(department, subwork, p);
+    if (out.has(key)) return;
+    out.set(key, {
+      point: p,
+      department: clean(department) || "-",
+      subwork: clean(subwork) || "-",
+      inputType: clean(inputType || "status") || "status",
+      status: "PENDING",
+      value: "",
+      empCode: "",
+      empName: "",
+      workDate: "",
+      source: source || "planned"
+    });
+  }
+
+  function addDone(q = {}) {
+    const point = qualityPointName(q);
+    if (!point) return;
+    const department = clean(q.department_name || q.department || q.department_code || "-");
+    const subwork = clean(q.subwork_name || q.subwork || q.subwork_code || "-");
+    const value = clean(q.value || q.result || q.reading || q.reading_value);
+    const key = qualityKey(department, subwork, point);
+    const existing = out.get(key) || {};
+
+    out.set(key, {
+      ...existing,
+      point,
+      department,
+      subwork,
+      inputType: clean(q.input_type || q.inputType || existing.inputType || "status"),
+      status: qualityStatusLabel(q.status, value),
+      value,
+      empCode: clean(q.emp_code || q.done_by_id || existing.empCode),
+      empName: clean(q.emp_name || q.done_by_name || existing.empName),
+      workDate: clean(q.work_date || q.date || existing.workDate),
+      source: "quality_log"
+    });
+  }
+
+  (qualityPoints || [])
+    .filter(q => q && q.active !== false)
+    .filter(q => !clean(q.machine_type_code || q.type_code || q.machineTypeCode) || clean(q.machine_type_code || q.type_code || q.machineTypeCode) === typeCode)
+    .forEach(q => addPending({
+      point: qualityPointName(q),
+      department: q.department_name || q.department || q.department_code,
+      subwork: q.subwork_name || q.subwork || q.subwork_code,
+      inputType: q.input_type || q.inputType,
+      source: "quality_points_master"
+    }));
+
+  (lines || []).forEach(line => {
+    const department = clean(line.department_name || line.department_code || "-");
+    const subwork = clean(line.subwork_name || line.subwork_code || "-");
+    parseArray(line.quality_points_json).forEach(q => {
+      const point = qualityPointName(q);
+      if (!point) return;
+      const value = clean(q.value || q.reading || q.status);
+      const status = qualityStatusLabel(q.status, value);
+      if (status === "PENDING") {
+        addPending({ point, department, subwork, inputType: q.inputType || q.input_type, source: "line_quality_json" });
+      } else {
+        addDone({ ...q, department_name: department, subwork_name: subwork, emp_code: line.emp_code, emp_name: line.emp_name, work_date: line.work_date, value, status });
+      }
+    });
+  });
+
+  (qualityLogs || [])
+    .sort((a, b) => clean(a.work_date || a.created).localeCompare(clean(b.work_date || b.created)))
+    .forEach(addDone);
+
+  return Array.from(out.values()).sort((a, b) =>
+    clean(a.department).localeCompare(clean(b.department)) ||
+    clean(a.subwork).localeCompare(clean(b.subwork)) ||
+    clean(a.point).localeCompare(clean(b.point))
+  );
+}
+
 async function getMachineDetail(params = {}) {
   const machineNo = clean(params.machine || params.machineNo);
   if (!machineNo) { const err = new Error("Machine is required."); err.status = 400; throw err; }
@@ -178,16 +291,8 @@ async function getMachineDetail(params = {}) {
     remainingMinutes: num(bp.remaining_minutes, 0)
   }));
 
-  const qualityStatus = qualityLogs.map(q => ({
-    point: clean(q.point_name || q.quality_point || q.point),
-    status: clean(q.status || q.value || "DONE"),
-    value: clean(q.value || q.result || q.reading),
-    empCode: clean(q.emp_code),
-    empName: clean(q.emp_name),
-    workDate: clean(q.work_date)
-  }));
+  const qualityStatus = buildQualityStatus({ typeCode, qualityPoints, lines, qualityLogs });
 
-  const dateSet = new Set(lines.map(l => clean(l.work_date)).filter(Boolean));
   const latestDate = workDates[workDates.length - 1] ? new Date(workDates[workDates.length - 1]) : new Date();
   const lastSixDays = [];
   let cursor = latestDate;
@@ -218,7 +323,7 @@ async function getMachineDetail(params = {}) {
     bookingPoints: bookingPointsOut,
     lastSixWorkDays,
     shortageMaterial: [],
-    meta: { service: "dashboardDetailLossService", lines: lines.length, subworks: masterSubworks.length, reworkOtherDetails: reworkOtherDetails.length }
+    meta: { service: "dashboardDetailLossService", qualityRule: "master+line-json+logs shows pending and done", lines: lines.length, subworks: masterSubworks.length, qualityPoints: qualityStatus.length, reworkOtherDetails: reworkOtherDetails.length }
   };
 }
 
