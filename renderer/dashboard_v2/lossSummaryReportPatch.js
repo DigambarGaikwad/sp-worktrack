@@ -19,6 +19,24 @@
   function nowText() { return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
   function assetUrl(fileName) { try { return new URL(`../../assets/${fileName}`, window.location.href).href; } catch (_) { return ""; } }
 
+  function addStyles() {
+    if ($("lossSummaryReportStyles")) return;
+    const style = document.createElement("style");
+    style.id = "lossSummaryReportStyles";
+    style.textContent = `
+      .loss-summary-panel .loss-summary-kpis { display:grid; grid-template-columns:repeat(5,minmax(145px,1fr)); gap:12px; }
+      .loss-summary-panel .loss-box.purple { background:#f2ecff; color:#7e57c2; }
+      .loss-summary-panel .loss-box.navy { background:#eaf2ff; color:#0b3f73; }
+      .loss-report-actions { align-items:center; justify-content:flex-end; margin-left:auto; }
+      .loss-report-actions .qr-action-btn { border:0; border-radius:10px; padding:7px 11px; min-height:32px; font-size:12px; line-height:1; font-weight:800; cursor:pointer; box-shadow:0 6px 14px rgba(15,23,42,.08); white-space:nowrap; }
+      .loss-report-actions .qr-action-primary { background:#0b3f73; color:#fff; }
+      .loss-report-actions .qr-action-send { background:#f97316; color:#fff; }
+      @media (max-width:1200px){ .loss-summary-panel .loss-summary-kpis { grid-template-columns:repeat(2,minmax(145px,1fr)); } }
+      @media (max-width:700px){ .loss-summary-panel .loss-summary-kpis { grid-template-columns:1fr; } }
+    `;
+    document.head.appendChild(style);
+  }
+
   async function requestJson(url, options = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -84,7 +102,7 @@
       </tr>`).join("") : `<tr><td colspan="9" class="empty">No loss records found for selected period.</td></tr>`;
   }
 
-  function groupRows(rows = [], nameLabel = "Name") {
+  function groupRows(rows = []) {
     return rows.length ? rows.map(r => `<tr><td>${esc(r.name || "-")}</td><td style="text-align:right;">${num(r.count)}</td><td style="text-align:right;font-weight:900;">${num(r.hours).toFixed(2)}</td></tr>`).join("") : `<tr><td colspan="3" class="empty">No records found.</td></tr>`;
   }
 
@@ -149,10 +167,11 @@
   }
 
   function addButtons() {
+    addStyles();
     const panel = document.querySelector(".loss-summary-panel .panel-head");
     if (!panel || $("printLossReportBtn")) return;
     const actions = document.createElement("div");
-    actions.className = "quality-report-actions loss-report-actions";
+    actions.className = "loss-report-actions";
     actions.style.display = "flex";
     actions.style.gap = "6px";
     actions.style.flexWrap = "wrap";
