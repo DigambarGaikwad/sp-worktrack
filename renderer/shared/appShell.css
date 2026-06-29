@@ -28,14 +28,21 @@
   display: none !important;
 }
 
+html,
+body {
+  overflow-y: auto;
+}
+
 .sp-app-shell {
   min-height: 100vh;
   background: var(--sp-bg);
+  overflow: visible !important;
 }
 
 .sp-page {
   width: 100%;
   margin: 0 auto;
+  overflow: visible !important;
 }
 
 .sp-content {
@@ -45,9 +52,16 @@
 /* ===================== SHARED TOPBAR ===================== */
 
 #spAppHeader {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10000 !important;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+#spAppHeader .shared-topbar {
+  position: relative;
+  z-index: 10001;
 }
 
 .shared-topbar {
@@ -263,7 +277,7 @@
 
 .sp-action-danger:hover,
 .red:hover,
-.danger:hover {
+danger:hover {
   background: var(--sp-action-danger-hover) !important;
 }
 
