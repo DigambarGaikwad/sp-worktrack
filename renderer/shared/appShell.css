@@ -277,7 +277,7 @@ body {
 
 .sp-action-danger:hover,
 .red:hover,
-danger:hover {
+.danger:hover {
   background: var(--sp-action-danger-hover) !important;
 }
 
