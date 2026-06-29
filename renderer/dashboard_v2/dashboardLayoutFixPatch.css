@@ -1,0 +1,156 @@
+/* Machine Dashboard layout hardening: sticky header, no filter overflow, readable long names. */
+
+html,
+body,
+.sp-app-shell,
+.sp-page {
+  overflow-y: auto !important;
+}
+
+#spAppHeader {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10000 !important;
+}
+
+.dash-shell {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: clip !important;
+  padding: 20px 20px 28px !important;
+}
+
+.dash-topbar {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  overflow: visible !important;
+}
+
+.dash-topbar .brand-block {
+  min-width: 0 !important;
+}
+
+.filter-bar {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: grid !important;
+  grid-template-columns: minmax(140px, 210px) minmax(145px, 240px) minmax(220px, 1fr) minmax(90px, 132px) !important;
+  gap: 9px !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  overflow: visible !important;
+}
+
+.filter-bar > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.filter-bar .dash-select,
+.filter-bar .dash-btn,
+.filter-bar .sp-action-btn {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  height: auto !important;
+  padding: 8px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  text-align: left !important;
+}
+
+.filter-bar .dash-btn,
+.filter-bar .sp-action-btn {
+  justify-content: center !important;
+  text-align: center !important;
+  font-size: 12px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+#machineFilter,
+#rwOtherMachine {
+  font-size: 13px !important;
+  text-overflow: ellipsis !important;
+}
+
+#rwOtherMachine {
+  grid-column: span 2 !important;
+}
+
+#showRwOtherMachineReportBtn {
+  grid-column: span 2 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.machine-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  align-items: stretch !important;
+}
+
+.machine-card {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.machine-card-title {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  line-height: 1.22 !important;
+  min-height: 2.45em !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+.machine-card-meta,
+.machine-card-rem {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.machine-card-row {
+  gap: 8px !important;
+}
+
+@media (max-width: 1250px) {
+  .filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  #rwOtherMachine,
+  #showRwOtherMachineReportBtn {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .dash-shell {
+    padding: 12px 10px 22px !important;
+  }
+
+  .filter-bar {
+    grid-template-columns: 1fr !important;
+  }
+
+  #rwOtherMachine,
+  #showRwOtherMachineReportBtn {
+    grid-column: auto !important;
+  }
+
+  .filter-bar .dash-select,
+  .filter-bar .dash-btn,
+  .filter-bar .sp-action-btn {
+    min-height: 42px !important;
+  }
+}
