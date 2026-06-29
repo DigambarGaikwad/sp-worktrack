@@ -3,7 +3,8 @@
 // Keeps machine summary V2 category/status visibility and exports detail/loss contracts.
 
 const baseDashboardService = require("./dashboardService");
-const { getMachineDetail, getLossSummary } = require("./dashboardDetailLossService");
+const { getMachineDetail } = require("./dashboardDetailLossService");
+const { getLossSummary } = require("./lossSummaryService");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 function clean(value) {
@@ -119,247 +120,92 @@ async function getMachineSummary(params = {}) {
     const typeCode = clean(m.machine_type_code || m.type || "");
     const typeMeta = typeMetaMap.get(typeCode);
     const status = statusOfMachine(m);
-    const hasHistory = lineMachineNos.has(machineNo);
-
-    if (typeCode && typeMeta && !typeMeta.active && !isHistoricalStatus(status) && !hasHistory) return;
-
-    const typeName = typeMeta?.name || typeCode;
 
     machineMap.set(machineNo, {
       machineNo,
-      machineCategory: typeName,
       machineTypeCode: typeCode,
+      machineCategory: typeMeta?.name || typeCode || clean(m.machine_category),
       status,
-      rawStatus: clean(m.status),
-      active: m.active !== false,
-      typeActive: typeMeta ? typeMeta.active : true,
-      hasHistory
+      active: status === "Active",
+      source: "machines"
     });
   });
 
-  const bookingStdBySubworkKey = new Map();
+  lineMachineNos.forEach((machineNo) => {
+    if (machineMap.has(machineNo)) return;
 
-  bookingPoints.forEach((bp) => {
-    if (bp.active === false) return;
+    const typeCode = clean(lineMachineTypeByMachine.get(machineNo));
+    const category = clean(lineMachineCategoryByMachine.get(machineNo) || typeMetaMap.get(typeCode)?.name || typeCode);
 
-    const key = [
-      clean(bp.machine_type_code),
-      clean(bp.department_code),
-      clean(bp.subwork_code)
-    ].join("|");
-
-    bookingStdBySubworkKey.set(
-      key,
-      toNumber(bookingStdBySubworkKey.get(key), 0) + toNumber(bp.standard_time, 0)
-    );
+    machineMap.set(machineNo, {
+      machineNo,
+      machineTypeCode: typeCode,
+      machineCategory: category,
+      status: "Historical",
+      active: false,
+      source: "production_lines"
+    });
   });
 
-  const plannedStdByType = new Map();
+  const machinesOut = Array.from(machineMap.values())
+    .filter((m) => {
+      if (statusFilter && statusFilter !== "All" && m.status !== statusFilter) return false;
+      if (machineFilter && machineFilter !== "All" && m.machineNo !== machineFilter) return false;
+      if (categoryFilter && categoryFilter !== "All" && m.machineCategory !== categoryFilter && m.machineTypeCode !== categoryFilter) return false;
+      if (m.source === "production_lines" && statusFilter === "Active") return false;
+      return true;
+    })
+    .map((m) => {
+      const machineLines = lines.filter((line) => clean(line.machine_no) === m.machineNo);
+      const machineSubworks = subworks.filter((sw) => clean(sw.machine_type_code) === clean(m.machineTypeCode));
+      const plannedMinutes = machineSubworks.reduce((sum, sw) => sum + toNumber(sw.standard_time, 0), 0);
+      const normalLines = machineLines.filter((line) => clean(line.work_nature || "Normal").toLowerCase() === "normal");
+      const completedStandard = normalLines.reduce((sum, line) => sum + toNumber(line.standard_minutes, 0), 0);
+      const actualMinutes = machineLines.reduce((sum, line) => sum + toNumber(line.actual_minutes, 0), 0);
+      const overrunMinutes = machineLines.reduce((sum, line) => sum + toNumber(line.overrun_minutes, 0), 0);
+      const reworkMinutes = machineLines.filter((line) => clean(line.work_nature).toLowerCase() === "rework").reduce((sum, line) => sum + toNumber(line.actual_minutes, 0), 0);
+      const otherMinutes = machineLines.filter((line) => clean(line.work_nature).toLowerCase() === "other").reduce((sum, line) => sum + toNumber(line.actual_minutes, 0), 0);
+      const standardMinutes = plannedMinutes > 0 ? plannedMinutes : completedStandard;
+      const remainingMinutes = Math.max(0, standardMinutes - completedStandard);
+      const completionPct = standardMinutes > 0 ? Math.min(100, (completedStandard / standardMinutes) * 100) : 0;
+      const machineBookingStatus = bookingStatus.filter((bp) => clean(bp.machine_no) === m.machineNo);
+      const qualityIssues = qualityLogs.filter((q) => clean(q.machine_no) === m.machineNo && clean(q.status || q.value).toUpperCase().includes("NOT OK"));
 
-  subworks.forEach((sw) => {
-    if (sw.active === false) return;
-
-    const typeCode = clean(sw.machine_type_code);
-    if (!typeCode) return;
-
-    const key = [
-      clean(sw.machine_type_code),
-      clean(sw.department_code),
-      clean(sw.subwork_code)
-    ].join("|");
-
-    const subworkStd = toNumber(sw.standard_time, 0);
-    const bookingStd = toNumber(bookingStdBySubworkKey.get(key), 0);
-    const plannedStd = subworkStd > 0 ? subworkStd : bookingStd;
-
-    plannedStdByType.set(
-      typeCode,
-      toNumber(plannedStdByType.get(typeCode), 0) + plannedStd
-    );
-  });
-
-  const summaryMap = new Map();
-
-  function ensure(machineNo, category = "", typeCode = "") {
-    const key = clean(machineNo);
-    if (!key) return null;
-
-    if (!summaryMap.has(key)) {
-      const master = machineMap.get(key) || {};
-      const finalTypeCode = clean(typeCode || master.machineTypeCode || lineMachineTypeByMachine.get(key) || "");
-      const typeMeta = typeMetaMap.get(finalTypeCode);
-      const finalStatus = clean(master.status || (lineMachineNos.has(key) ? "Historical" : "Active"));
-      const hasHistory = lineMachineNos.has(key) || Boolean(master.hasHistory);
-
-      if (typeMeta && !typeMeta.active && !isHistoricalStatus(finalStatus) && !hasHistory) return null;
-
-      const finalCategory = clean(
-        (typeMeta?.name) ||
-        category ||
-        master.machineCategory ||
-        lineMachineCategoryByMachine.get(key) ||
-        finalTypeCode
-      );
-
-      const plannedStandardMinutes = toNumber(plannedStdByType.get(finalTypeCode), 0);
-
-      summaryMap.set(key, {
-        machineNo: key,
-        machineCategory: finalCategory,
-        machineTypeCode: finalTypeCode,
-        machineCategoryActive: typeMeta ? typeMeta.active : true,
-        status: finalStatus,
-        rawStatus: clean(master.rawStatus || finalStatus),
-
-        plannedStandardMinutes,
-        completedStandardMinutes: 0,
-        actualMinutes: 0,
-        overrunMinutes: 0,
-        remainingMinutes: plannedStandardMinutes,
-
-        reworkMinutes: 0,
-        otherMinutes: 0,
-        normalMinutes: 0,
-
-        bookingPointCount: 0,
-        bookingDoneCount: 0,
-        bookingPartialCount: 0,
-
-        qualityLogCount: 0,
-        qualityDoneCount: 0,
-
-        lastWorkDate: "",
-        entryCount: 0
-      });
-    }
-
-    return summaryMap.get(key);
-  }
-
-  machineMap.forEach((m) => {
-    ensure(m.machineNo, m.machineCategory, m.machineTypeCode);
-  });
-
-  lines.forEach((line) => {
-    const machineNo = clean(line.machine_no);
-    const item = ensure(machineNo, line.machine_category, line.machine_type_code);
-    if (!item) return;
-
-    const standard = toNumber(line.standard_minutes, 0);
-    const actual = toNumber(line.actual_minutes, 0);
-    const overrun = toNumber(line.overrun_minutes, Math.max(0, actual - standard));
-    const nature = clean(line.work_nature || "Normal").toLowerCase();
-
-    item.actualMinutes += actual;
-    item.overrunMinutes += overrun;
-    item.entryCount += 1;
-
-    if (nature === "rework") {
-      item.reworkMinutes += actual;
-    } else if (nature === "other") {
-      item.otherMinutes += actual;
-    } else {
-      item.normalMinutes += actual;
-      item.completedStandardMinutes += standard;
-    }
-
-    const workDate = clean(line.work_date);
-    if (workDate && workDate > item.lastWorkDate) item.lastWorkDate = workDate;
-  });
-
-  bookingStatus.forEach((bp) => {
-    const item = ensure(bp.machine_no, bp.machine_category, bp.machine_type_code);
-    if (!item) return;
-
-    item.bookingPointCount += 1;
-
-    const status = clean(bp.status).toUpperCase();
-    if (status === "DONE") item.bookingDoneCount += 1;
-    if (status === "PARTIAL") item.bookingPartialCount += 1;
-  });
-
-  qualityLogs.forEach((q) => {
-    const item = ensure(q.machine_no, q.machine_category, q.machine_type_code);
-    if (!item) return;
-
-    item.qualityLogCount += 1;
-
-    const value = clean(q.value || q.status);
-    if (value) item.qualityDoneCount += 1;
-
-    const workDate = clean(q.work_date);
-    if (workDate && workDate > item.lastWorkDate) item.lastWorkDate = workDate;
-  });
-
-  let items = Array.from(summaryMap.values()).map((x) => {
-    x.remainingMinutes = Math.max(0, x.plannedStandardMinutes - x.completedStandardMinutes);
-
-    const completionPct = x.plannedStandardMinutes > 0
-      ? Math.min(100, (x.completedStandardMinutes / x.plannedStandardMinutes) * 100)
-      : 0;
-
-    const efficiencyPct = x.actualMinutes > 0
-      ? (x.completedStandardMinutes / x.actualMinutes) * 100
-      : 0;
-
-    return {
-      ...x,
-      standardMinutes: x.plannedStandardMinutes,
-      standardHours: Number((x.plannedStandardMinutes / 60).toFixed(2)),
-      completedStandardHours: Number((x.completedStandardMinutes / 60).toFixed(2)),
-      actualHours: Number((x.actualMinutes / 60).toFixed(2)),
-      remainingHours: Number((x.remainingMinutes / 60).toFixed(2)),
-      overrunHours: Number((x.overrunMinutes / 60).toFixed(2)),
-      completionPct: Number(completionPct.toFixed(1)),
-      efficiencyPct: Number(efficiencyPct.toFixed(1))
-    };
-  });
-
-  if (machineFilter) {
-    items = items.filter(x => x.machineNo.toLowerCase().includes(machineFilter.toLowerCase()));
-  }
-
-  if (categoryFilter) {
-    items = items.filter(x =>
-      x.machineCategory.toLowerCase().includes(categoryFilter.toLowerCase()) ||
-      x.machineTypeCode.toLowerCase().includes(categoryFilter.toLowerCase())
-    );
-  }
-
-  if (statusFilter && statusFilter.toLowerCase() !== "all") {
-    items = items.filter(x => x.status.toLowerCase() === statusFilter.toLowerCase());
-  }
-
-  items.sort((a, b) => {
-    if (a.status !== b.status) return a.status.localeCompare(b.status);
-    return a.machineNo.localeCompare(b.machineNo);
-  });
-
-  const activeMachineCategories = Array.from(typeMetaMap.values())
-    .filter((x) => x.active)
-    .map((x) => ({ code: x.code, name: x.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        ...m,
+        standardMinutes,
+        completedStandardMinutes: completedStandard,
+        actualMinutes,
+        remainingMinutes,
+        overrunMinutes,
+        reworkMinutes,
+        otherMinutes,
+        completionPct: Number(completionPct.toFixed(1)),
+        bookingDoneCount: machineBookingStatus.filter((bp) => clean(bp.status).toUpperCase() === "DONE").length,
+        bookingTotalCount: bookingPoints.filter((bp) => clean(bp.machine_type_code) === clean(m.machineTypeCode)).length,
+        qualityNotOkCount: qualityIssues.length
+      };
+    })
+    .sort((a, b) => {
+      const aHist = isHistoricalStatus(a.status) ? 1 : 0;
+      const bHist = isHistoricalStatus(b.status) ? 1 : 0;
+      return aHist - bHist || a.machineNo.localeCompare(b.machineNo);
+    });
 
   return {
-    machines: items,
+    machines: machinesOut,
     filters: {
-      machineCategories: activeMachineCategories
+      statuses: ["All", "Active", "Completed", "Inactive", "Historical"],
+      categories: Array.from(new Set(machinesOut.map((m) => clean(m.machineCategory)).filter(Boolean))).sort(),
+      machineNos: Array.from(new Set(machinesOut.map((m) => clean(m.machineNo)).filter(Boolean))).sort()
     },
     meta: {
-      source: "pocketbase",
-      service: "dashboardServiceV2",
-      statusRule: "inactive_deleted_disabled_wins;completed_status_or_active_false_maps_to_completed",
-      machineCategoryRule: "filters show active categories only; historical completed/inactive machines may retain inactive categories",
-      generatedAt: new Date().toISOString(),
+      source: "dashboardServiceV2",
+      baseService: !!baseDashboardService,
       counts: {
-        machines: items.length,
-        machineTypes: activeMachineCategories.length,
-        allMachineTypes: machineTypes.length,
-        subworks: subworks.length,
-        bookingPoints: bookingPoints.length,
-        productionLines: lines.length,
-        bookingStatus: bookingStatus.length,
-        qualityLogs: qualityLogs.length
+        machines: machines.length,
+        lineMachines: lineMachineNos.size,
+        returned: machinesOut.length
       }
     }
   };
