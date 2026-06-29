@@ -71,8 +71,8 @@ body,
   justify-content: center !important;
   text-align: center !important;
   font-size: 12px !important;
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
 }
 
 #machineFilter,
@@ -85,6 +85,7 @@ body,
   grid-column: span 2 !important;
 }
 
+#refreshBtn,
 #showRwOtherMachineReportBtn {
   grid-column: auto !important;
   justify-self: start !important;
@@ -93,7 +94,7 @@ body,
   max-width: max-content !important;
   min-width: 0 !important;
   min-height: 40px !important;
-  padding: 8px 8px !important;
+  padding: 8px 12px !important;
   white-space: nowrap !important;
   overflow-wrap: normal !important;
 }
@@ -139,6 +140,7 @@ body,
     grid-column: span 1 !important;
   }
 
+  #refreshBtn,
   #showRwOtherMachineReportBtn {
     grid-column: auto !important;
     max-width: max-content !important;
@@ -158,12 +160,13 @@ body,
     grid-column: auto !important;
   }
 
+  #refreshBtn,
   #showRwOtherMachineReportBtn {
     grid-column: auto !important;
     width: auto !important;
     max-width: max-content !important;
     min-height: 38px !important;
-    padding: 7px 7px !important;
+    padding: 7px 12px !important;
   }
 
   .filter-bar .dash-select,
