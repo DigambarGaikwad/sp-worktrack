@@ -1,4 +1,4 @@
-/* People Dashboard compact buttons with small readable side padding. */
+/* People Dashboard compact buttons with small readable side padding and Send Report orange tone. */
 
 .people-page .people-btn,
 .people-page button:not(.shared-nav-btn):not(.mobile-menu-btn):not(.mobile-menu-link):not(.tab):not(.tab-btn),
@@ -14,6 +14,17 @@
   white-space: nowrap !important;
   overflow-wrap: normal !important;
   line-height: 1.15 !important;
+  background: #f97316 !important;
+  color: #ffffff !important;
+  border-color: #f97316 !important;
+}
+
+.people-page .people-btn:hover,
+.people-page button:not(.shared-nav-btn):not(.mobile-menu-btn):not(.mobile-menu-link):not(.tab):not(.tab-btn):hover,
+#overtimeReportControls .people-btn:hover {
+  background: #ea580c !important;
+  color: #ffffff !important;
+  border-color: #ea580c !important;
 }
 
 .people-page .sp-action-btn,
