@@ -1,0 +1,45 @@
+/* People Dashboard compact buttons with small readable side padding. */
+
+.people-page .people-btn,
+.people-page button:not(.shared-nav-btn):not(.mobile-menu-btn):not(.mobile-menu-link):not(.tab):not(.tab-btn),
+#overtimeReportControls .people-btn {
+  width: auto !important;
+  max-width: max-content !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 12px !important;
+  justify-self: start !important;
+  align-self: center !important;
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  line-height: 1.15 !important;
+}
+
+.people-page .sp-action-btn,
+#overtimeReportControls .sp-action-btn {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+.people-filters .people-btn,
+#refreshPeopleBtn {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+#overtimeReportControls .people-select {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+@media (max-width: 700px) {
+  .people-page .people-btn,
+  .people-page button:not(.shared-nav-btn):not(.mobile-menu-btn):not(.mobile-menu-link):not(.tab):not(.tab-btn),
+  #overtimeReportControls .people-btn {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
