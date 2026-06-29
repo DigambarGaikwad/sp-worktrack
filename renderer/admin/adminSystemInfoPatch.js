@@ -133,6 +133,44 @@
       </tr>`).join("");
   }
 
+  function codeBlock(text) {
+    return `<pre style="margin:6px 0 10px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;white-space:pre-wrap;word-break:break-word;"><code>${esc(text)}</code></pre>`;
+  }
+
+  function lanTroubleshootingHelp(info, bestLanUrl) {
+    const port = info.server?.port || 3032;
+    const bestHealth = info.urls?.lan?.[0]?.healthUrl || `http://<SERVER_PC_IP>:${port}/api/health`;
+    const bestApp = bestLanUrl || `http://<SERVER_PC_IP>:${port}/index.html`;
+    return `
+      <div class="card admin-controls-card" style="margin-top:14px;background:#fff7ed;border-color:#fed7aa;">
+        <div class="section-title">LAN URL Not Opening? Check in This Order</div>
+        <div class="small-hint" style="line-height:1.65;">
+          <b>1. Keep SP WorkTrack open on the server PC.</b><br>
+          The Android/mobile device can open the app only while the server PC app/backend is running.<br><br>
+
+          <b>2. Confirm API health on the server PC first.</b>
+          ${codeBlock(`Invoke-RestMethod -Uri "http://127.0.0.1:${port}/api/health" -Method GET`)}
+          Expected result: <b>ok=True</b>. If this fails, close and reopen SP WorkTrack on the server PC.<br><br>
+
+          <b>3. Confirm the server PC IP.</b>
+          ${codeBlock("ipconfig")}
+          Use the IPv4 address under Wi-Fi or Ethernet. Do not use localhost for Android/mobile.<br><br>
+
+          <b>4. Test Health URL from Android browser.</b>
+          ${codeBlock(bestHealth)}
+          If this does not open, it is usually Windows Firewall, different Wi-Fi/subnet, guest Wi-Fi isolation, or wrong adapter IP.<br><br>
+
+          <b>5. If Health URL fails, allow port ${esc(port)} in Windows Firewall on server PC.</b>
+          Open PowerShell as Administrator and run:
+          ${codeBlock(`New-NetFirewallRule -DisplayName "SP WorkTrack V2 API ${port}" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${port}`)}
+          Then test Health URL again from Android.<br><br>
+
+          <b>6. If Health URL works, open the app URL.</b>
+          ${codeBlock(bestApp)}
+        </div>
+      </div>`;
+  }
+
   function renderInfo(info) {
     const host = $("systemInfoBody");
     if (!host) return;
@@ -185,6 +223,8 @@
           <tbody>${urlRows(info.urls?.lan, "LAN")}</tbody>
         </table>
       </div>
+
+      ${lanTroubleshootingHelp(info, lanUrl)}
 
       <div class="card admin-controls-card" style="margin-top:14px;background:#eff6ff;border-color:#bfdbfe;">
         <div class="section-title">Usage Notes</div>
