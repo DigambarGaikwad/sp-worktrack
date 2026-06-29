@@ -17,6 +17,41 @@
     const style = document.createElement("style");
     style.id = HEADER_STYLE_ID;
     style.textContent = `
+      :root { --sp-header-height: 80px; }
+
+      #spAppHeader {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        z-index: 50000 !important;
+        isolation: isolate !important;
+        transform: translateZ(0) !important;
+      }
+
+      #spAppHeader + * {
+        margin-top: var(--sp-header-height) !important;
+      }
+
+      #spAppHeader + .content {
+        height: auto !important;
+        min-height: calc(100vh - var(--sp-header-height)) !important;
+        overflow-y: visible !important;
+      }
+
+      .sp-app-shell,
+      .sp-page,
+      .app {
+        overflow: visible !important;
+      }
+
+      .app {
+        height: auto !important;
+        min-height: 100vh !important;
+        display: block !important;
+      }
+
       .shared-topbar .mobile-menu-wrap,
       .shared-topbar .mobile-menu-panel { display: none !important; }
 
@@ -33,7 +68,8 @@
       }
 
       @media (max-width: 768px) {
-        #spAppHeader { position: sticky !important; top: 0 !important; z-index: 2000 !important; }
+        :root { --sp-header-height: 54px; }
+        #spAppHeader { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 50000 !important; }
 
         .shared-topbar {
           height: 54px !important;
@@ -94,7 +130,7 @@
           display: block !important;
           flex: 0 0 38px !important;
           position: relative !important;
-          z-index: 2200 !important;
+          z-index: 52000 !important;
         }
 
         .shared-topbar .mobile-menu-btn {
@@ -131,7 +167,7 @@
           color: #0f172a !important;
           box-shadow: 0 18px 46px rgba(15, 23, 42, 0.28) !important;
           border: 1px solid rgba(15, 23, 42, 0.10) !important;
-          z-index: 2100 !important;
+          z-index: 51000 !important;
         }
 
         .shared-topbar .mobile-menu-wrap.open .mobile-menu-panel { display: block !important; }
