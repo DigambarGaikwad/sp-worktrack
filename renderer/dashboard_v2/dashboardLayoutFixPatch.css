@@ -97,6 +97,15 @@ body,
   padding: 8px 12px !important;
   white-space: nowrap !important;
   overflow-wrap: normal !important;
+  background: #f97316 !important;
+  color: #ffffff !important;
+  border-color: #f97316 !important;
+}
+
+#refreshBtn:hover,
+#showRwOtherMachineReportBtn:hover {
+  background: #ea580c !important;
+  border-color: #ea580c !important;
 }
 
 .machine-card-grid {
