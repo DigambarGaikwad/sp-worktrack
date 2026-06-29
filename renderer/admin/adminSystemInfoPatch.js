@@ -62,7 +62,7 @@
           <div class="row admin-controls-actions" style="gap:10px;flex-wrap:wrap;">
             <button class="btn green" id="refreshSystemInfoBtn" type="button">Refresh Network Info</button>
             <button class="btn grey" id="copyCurrentUrlBtn" type="button">Copy Current URL</button>
-            <button class="btn grey" id="copyLanUrlBtn" type="button">Copy LAN URL</button>
+            <button class="btn grey" id="copyLanUrlBtn" type="button">Copy Best LAN URL</button>
             <button class="btn grey" id="copyTailscaleUrlBtn" type="button">Copy Tailscale URL</button>
             <button class="btn grey" id="openCurrentUrlBtn" type="button">Open Current App</button>
             <span class="small-hint" id="systemInfoStatus"></span>
@@ -120,19 +120,32 @@
       </div>`;
   }
 
+  function urlRows(list, typeLabel) {
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) return `<tr><td colspan="5">No ${esc(typeLabel)} URL detected.</td></tr>`;
+    return rows.map((x, idx) => `
+      <tr>
+        <td>${idx === 0 ? "Best" : idx + 1}</td>
+        <td>${esc(x.name || typeLabel)}</td>
+        <td><code>${esc(x.ip)}</code></td>
+        <td><code>${esc(x.url)}</code><div class="small-hint">Health: ${esc(x.healthUrl || "")}</div></td>
+        <td><button class="btn grey" type="button" data-copy-url="${esc(x.homeUrl || x.url)}">Copy App URL</button></td>
+      </tr>`).join("");
+  }
+
   function renderInfo(info) {
     const host = $("systemInfoBody");
     if (!host) return;
     const currentUrl = info.current?.browserUrl || window.location.href;
     const currentHome = info.current?.homeFromRequest || `${window.location.origin}/index.html`;
-    const lanUrl = firstUrl(info.urls?.lan);
-    const tailscaleUrl = firstUrl(info.urls?.tailscale);
+    const lanUrl = info.urls?.lan?.[0]?.homeUrl || firstUrl(info.urls?.lan);
+    const tailscaleUrl = info.urls?.tailscale?.[0]?.homeUrl || firstUrl(info.urls?.tailscale);
 
     host.innerHTML = `
       <div class="emp-metrics" style="margin-bottom:14px;">
         ${urlCard("Current Browser URL", currentUrl, "The exact URL used to open this Admin screen.", "current", "current")}
         ${urlCard("App Home URL", currentHome, "Share this current-network home link if users are on the same path/network.", "home", "home")}
-        ${urlCard("LAN URL", lanUrl, "For devices on the same WiFi / local network.", "lan", "lan")}
+        ${urlCard("Best LAN URL", lanUrl, "Use this first for Android/other PCs on same WiFi/LAN.", "lan", "lan")}
         ${urlCard("Tailscale URL", tailscaleUrl, "For approved Tailscale/VPN devices.", "tailscale", "tailscale")}
       </div>
 
@@ -143,6 +156,7 @@
             <tbody>
               ${row("Server Name", info.server?.hostname)}
               ${row("Node Port", info.server?.port)}
+              ${row("Bind Host", info.server?.bindHost || "all interfaces")}
               ${row("Node Version", info.server?.nodeVersion)}
               ${row("Process ID", info.server?.pid)}
               ${row("Root Folder", info.server?.rootDir)}
@@ -163,6 +177,15 @@
         </div>
       </div>
 
+      <div class="card admin-controls-card" style="margin-top:14px;">
+        <div class="section-title">All LAN URLs</div>
+        <div class="small-hint">If Best LAN URL does not open on Android, try the other LAN URLs. Health URL should return API status.</div>
+        <table class="admin-table" style="margin-top:8px;">
+          <thead><tr><th>Priority</th><th>Interface</th><th>IP</th><th>URL</th><th>Action</th></tr></thead>
+          <tbody>${urlRows(info.urls?.lan, "LAN")}</tbody>
+        </table>
+      </div>
+
       <div class="card admin-controls-card" style="margin-top:14px;background:#eff6ff;border-color:#bfdbfe;">
         <div class="section-title">Usage Notes</div>
         <div class="small-hint" style="line-height:1.7;">
@@ -173,19 +196,20 @@
 
     host.querySelectorAll("[data-system-copy]").forEach(btn => btn.onclick = () => copyByKey(btn.dataset.systemCopy));
     host.querySelectorAll("[data-system-open]").forEach(btn => btn.onclick = () => openByKey(btn.dataset.systemOpen));
+    host.querySelectorAll("[data-copy-url]").forEach(btn => btn.onclick = () => copyText(btn.dataset.copyUrl, "App URL"));
   }
 
   function getUrlByKey(key) {
     if (!lastInfo) return "";
     if (key === "current") return lastInfo.current?.browserUrl || window.location.href;
     if (key === "home") return lastInfo.current?.homeFromRequest || `${window.location.origin}/index.html`;
-    if (key === "lan") return firstUrl(lastInfo.urls?.lan);
-    if (key === "tailscale") return firstUrl(lastInfo.urls?.tailscale);
+    if (key === "lan") return lastInfo.urls?.lan?.[0]?.homeUrl || firstUrl(lastInfo.urls?.lan);
+    if (key === "tailscale") return lastInfo.urls?.tailscale?.[0]?.homeUrl || firstUrl(lastInfo.urls?.tailscale);
     return "";
   }
 
   function copyByKey(key) {
-    const labels = { current: "Current URL", home: "App Home URL", lan: "LAN URL", tailscale: "Tailscale URL" };
+    const labels = { current: "Current URL", home: "App Home URL", lan: "Best LAN URL", tailscale: "Tailscale URL" };
     copyText(getUrlByKey(key), labels[key] || "URL");
   }
 
