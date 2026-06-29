@@ -1,4 +1,4 @@
-/* Machine Dashboard layout hardening: sticky header, no filter overflow, readable long names. */
+/* Machine Dashboard layout hardening: fixed header support, no filter overflow, readable long names. */
 
 html,
 body,
@@ -8,9 +8,9 @@ body,
 }
 
 #spAppHeader {
-  position: sticky !important;
+  position: fixed !important;
   top: 0 !important;
-  z-index: 10000 !important;
+  z-index: 50000 !important;
 }
 
 .dash-shell {
@@ -86,9 +86,16 @@ body,
 }
 
 #showRwOtherMachineReportBtn {
-  grid-column: span 2 !important;
-  white-space: normal !important;
-  overflow-wrap: anywhere !important;
+  grid-column: auto !important;
+  justify-self: start !important;
+  align-self: stretch !important;
+  width: auto !important;
+  max-width: max-content !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  padding: 8px 8px !important;
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
 }
 
 .machine-card-grid {
@@ -128,9 +135,13 @@ body,
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  #rwOtherMachine,
-  #showRwOtherMachineReportBtn {
+  #rwOtherMachine {
     grid-column: span 1 !important;
+  }
+
+  #showRwOtherMachineReportBtn {
+    grid-column: auto !important;
+    max-width: max-content !important;
   }
 }
 
@@ -143,9 +154,16 @@ body,
     grid-template-columns: 1fr !important;
   }
 
-  #rwOtherMachine,
+  #rwOtherMachine {
+    grid-column: auto !important;
+  }
+
   #showRwOtherMachineReportBtn {
     grid-column: auto !important;
+    width: auto !important;
+    max-width: max-content !important;
+    min-height: 38px !important;
+    padding: 7px 7px !important;
   }
 
   .filter-bar .dash-select,
