@@ -5,6 +5,7 @@
 const baseDashboardService = require("./dashboardService");
 const { getMachineDetail } = require("./dashboardDetailLossService");
 const { getLossSummary } = require("./lossSummaryService");
+const { getMachineCompletionReport } = require("./machineCompletionReportService");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 function clean(value) {
@@ -215,5 +216,6 @@ module.exports = {
   ...baseDashboardService,
   getMachineSummary,
   getMachineDetail,
-  getLossSummary
+  getLossSummary,
+  getMachineCompletionReport
 };
