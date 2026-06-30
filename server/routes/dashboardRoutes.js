@@ -6,7 +6,8 @@ const express = require("express");
 const {
   getMachineSummary,
   getMachineDetail,
-  getLossSummary
+  getLossSummary,
+  getMachineCompletionReport
 } = require("../services/dashboardServiceV2");
 
 const {
@@ -42,6 +43,16 @@ router.get("/loss-summary", async (req, res) => {
   } catch (err) {
     console.error("GET /api/dashboard/loss-summary failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load loss summary.", details: err.details || null });
+  }
+});
+
+router.get("/machine-completion-report", async (req, res) => {
+  try {
+    const data = await getMachineCompletionReport(req.query);
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/dashboard/machine-completion-report failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load machine completion report.", details: err.details || null });
   }
 });
 
