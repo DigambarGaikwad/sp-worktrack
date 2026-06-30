@@ -1,11 +1,13 @@
 // server/services/skillMatrixService.js
-// Stores employee skill matrix in admin_settings as JSON to avoid DB schema changes.
+// Stores employee skill matrix as one admin_settings record per skill.
+// This avoids large JSON values and requires no PocketBase schema change.
 
 const crypto = require("crypto");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
 
 const COLLECTION = "admin_settings";
-const SETTING_KEY = "skill_matrix_json";
+const LEGACY_KEY = "skill_matrix_json";
+const RECORD_PREFIX = "skill_matrix_record_";
 
 function clean(value) { return String(value ?? "").trim(); }
 function slug(value) { return clean(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
@@ -19,37 +21,68 @@ function bool(value, fallback = false) {
 }
 function nowIso() { return new Date().toISOString(); }
 function id() { return crypto.randomBytes(8).toString("hex"); }
+function hashKey(value) { return crypto.createHash("sha1").update(clean(value)).digest("hex").slice(0, 24); }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 
-function safeJson(value, fallback) {
+function parseSkillJson(value) {
   try {
     const parsed = JSON.parse(value || "");
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch (_) { return fallback; }
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch (_) { return null; }
 }
 
-async function findSetting() {
+function parseLegacyList(value) {
+  try {
+    const parsed = JSON.parse(value || "");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) { return []; }
+}
+
+function pocketBaseMessage(err, fallback) {
+  const details = err?.details?.data || err?.details || null;
+  if (!details) return err?.message || fallback;
+  const extra = typeof details === "string" ? details : JSON.stringify(details);
+  return `${err?.message || fallback}: ${extra}`;
+}
+
+async function listSettings() {
+  const all = [];
+  let page = 1;
+  while (true) {
+    const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
+      method: "GET",
+      query: { page, perPage: 500, sort: "setting_key" }
+    });
+    const items = Array.isArray(result.items) ? result.items : [];
+    all.push(...items);
+    if (!items.length || page >= Number(result.totalPages || 1)) break;
+    page += 1;
+  }
+  return all;
+}
+
+async function findSetting(key) {
   const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
     method: "GET",
-    query: { page: 1, perPage: 1, filter: `setting_key="${pbEscape(SETTING_KEY)}"` }
+    query: { page: 1, perPage: 1, filter: `setting_key="${pbEscape(key)}"` }
   });
   return Array.isArray(result.items) ? result.items[0] || null : null;
 }
 
-async function readAll() {
-  const rec = await findSetting();
-  return safeJson(rec?.setting_value, []).map(normalizeRecord).filter(x => x.id);
-}
-
-async function writeAll(records) {
-  const rec = await findSetting();
-  const body = { setting_key: SETTING_KEY, setting_value: JSON.stringify(records || []) };
-  if (rec?.id) {
-    await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${rec.id}`, { method: "PATCH", body });
-    return { id: rec.id, updated: true };
+async function saveSetting(key, value) {
+  const body = { setting_key: key, setting_value: value };
+  const old = await findSetting(key);
+  try {
+    if (old?.id) {
+      return await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${old.id}`, { method: "PATCH", body });
+    }
+    return await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
+  } catch (err) {
+    const e = new Error(pocketBaseMessage(err, "Failed to save skill matrix record."));
+    e.status = err.status || 500;
+    e.details = err.details || null;
+    throw e;
   }
-  const created = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
-  return { id: created?.id, created: true };
 }
 
 function uniqueKey(r = {}) {
@@ -59,6 +92,10 @@ function uniqueKey(r = {}) {
     clean(r.skill_department_code || slug(r.skill_department_name)).toLowerCase(),
     clean(r.subwork_code || slug(r.subwork_name)).toLowerCase()
   ].join("|");
+}
+
+function settingKeyFor(record) {
+  return `${RECORD_PREFIX}${hashKey(uniqueKey(record))}`;
 }
 
 function normalizeRecord(raw = {}, existing = {}) {
@@ -71,6 +108,7 @@ function normalizeRecord(raw = {}, existing = {}) {
 
   return {
     id: clean(raw.id || existing.id || id()),
+    setting_key: clean(raw.setting_key || existing.setting_key),
     emp_code: clean(raw.emp_code || raw.empCode || raw.employee_code || existing.emp_code),
     emp_name: clean(raw.emp_name || raw.empName || raw.employee_name || existing.emp_name),
     employee_department: clean(raw.employee_department || raw.employeeDepartment || raw.home_department || existing.employee_department),
@@ -89,6 +127,29 @@ function normalizeRecord(raw = {}, existing = {}) {
     created_at: createdAt,
     updated_at: nowIso()
   };
+}
+
+async function readAll() {
+  const settings = await listSettings();
+  const records = [];
+
+  settings.forEach((setting) => {
+    const key = clean(setting.setting_key);
+    if (key.startsWith(RECORD_PREFIX)) {
+      const parsed = parseSkillJson(setting.setting_value);
+      if (parsed) records.push(normalizeRecord({ ...parsed, setting_key: key }));
+    }
+    if (key === LEGACY_KEY) {
+      parseLegacyList(setting.setting_value).forEach((row) => records.push(normalizeRecord(row)));
+    }
+  });
+
+  const byKey = new Map();
+  records.forEach((record) => {
+    if (!record.setting_key) record.setting_key = settingKeyFor(record);
+    byKey.set(uniqueKey(record), record);
+  });
+  return Array.from(byKey.values()).filter(x => x.id);
 }
 
 function applyFilters(records, query = {}) {
@@ -124,42 +185,34 @@ async function listSkillMatrix(query = {}) {
 async function saveSkillMatrix(payload = {}) {
   const incoming = Array.isArray(payload.records) ? payload.records : Array.isArray(payload.items) ? payload.items : [payload.record || payload.data || payload];
   const existing = await readAll();
-  const byId = new Map(existing.map(r => [r.id, r]));
   const byKey = new Map(existing.map(r => [uniqueKey(r), r]));
   let created = 0, updated = 0, skipped = 0;
 
   for (const raw of incoming) {
     const prepared = normalizeRecord(raw);
     if (!prepared.emp_code || !prepared.machine_type_code || !prepared.skill_department_name || !prepared.subwork_name) { skipped += 1; continue; }
-    const old = byId.get(prepared.id) || byKey.get(uniqueKey(prepared));
+    const old = byKey.get(uniqueKey(prepared));
     const record = normalizeRecord(prepared, old || {});
-    if (old?.id) {
-      const index = existing.findIndex(r => r.id === old.id);
-      existing[index] = record;
-      byId.set(record.id, record);
-      byKey.set(uniqueKey(record), record);
-      updated += 1;
-    } else {
-      existing.push(record);
-      byId.set(record.id, record);
-      byKey.set(uniqueKey(record), record);
-      created += 1;
-    }
+    record.setting_key = old?.setting_key || settingKeyFor(record);
+    record.id = old?.id || record.id;
+    await saveSetting(record.setting_key, JSON.stringify(record));
+    byKey.set(uniqueKey(record), record);
+    if (old) updated += 1; else created += 1;
   }
 
-  await writeAll(existing);
-  return { ok: true, created, updated, skipped, summary: buildSummary(existing), records: applyFilters(existing, payload.query || {}) };
+  const saved = await readAll();
+  return { ok: true, created, updated, skipped, summary: buildSummary(saved), records: applyFilters(saved, payload.query || {}) };
 }
 
 async function deleteSkillMatrix(recordId) {
   const idValue = clean(recordId);
   if (!idValue) { const err = new Error("Skill record id is required."); err.status = 400; throw err; }
   const records = await readAll();
-  const idx = records.findIndex(r => r.id === idValue);
-  if (idx < 0) { const err = new Error("Skill record not found."); err.status = 404; throw err; }
-  records[idx] = { ...records[idx], active: false, updated_at: nowIso() };
-  await writeAll(records);
-  return { ok: true, deleted: 1, summary: buildSummary(records) };
+  const record = records.find(r => r.id === idValue);
+  if (!record) { const err = new Error("Skill record not found."); err.status = 404; throw err; }
+  const deleted = { ...record, active: false, updated_at: nowIso() };
+  await saveSetting(record.setting_key || settingKeyFor(deleted), JSON.stringify(deleted));
+  return { ok: true, deleted: 1, summary: buildSummary(await readAll()) };
 }
 
 module.exports = { listSkillMatrix, saveSkillMatrix, deleteSkillMatrix, normalizeRecord };
