@@ -3,6 +3,7 @@
 
 const v2 = require("./adminWriteServiceV2");
 const plannedAbsenceService = require("./plannedAbsenceService");
+const skillMatrixService = require("./skillMatrixService");
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -38,7 +39,6 @@ function normalizePayload(rawData = {}) {
   if (!Array.isArray(root.machines)) return rawData;
 
   const normalizedMachines = root.machines.map(normalizeMachineStatus);
-
   if (rawData.data) return { ...rawData, data: { ...rawData.data, machines: normalizedMachines } };
   if (rawData.adminOverrides) return { ...rawData, adminOverrides: { ...rawData.adminOverrides, machines: normalizedMachines } };
   return { ...rawData, machines: normalizedMachines };
@@ -51,7 +51,6 @@ async function saveAdminMasterData(rawData = {}, options = {}) {
 module.exports = {
   ...v2,
   ...plannedAbsenceService,
+  ...skillMatrixService,
   saveAdminMasterData
 };
-
-
