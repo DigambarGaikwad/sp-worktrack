@@ -50,7 +50,6 @@
 }
 
 .people-page .sp-action-success,
-.people-page .people-btn,
 #refreshPeopleBtn,
 #overtimeReportControls .sp-action-success {
   background: #15803d !important;
@@ -59,7 +58,6 @@
 }
 
 .people-page .sp-action-success:hover,
-.people-page .people-btn:hover,
 #refreshPeopleBtn:hover,
 #overtimeReportControls .sp-action-success:hover {
   background: #166534 !important;
