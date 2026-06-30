@@ -97,12 +97,24 @@ body,
   padding: 8px 12px !important;
   white-space: nowrap !important;
   overflow-wrap: normal !important;
-  background: #f97316 !important;
   color: #ffffff !important;
+}
+
+#refreshBtn {
+  background: #0b3f73 !important;
+  border-color: #0b3f73 !important;
+}
+
+#refreshBtn:hover {
+  background: #0a3561 !important;
+  border-color: #0a3561 !important;
+}
+
+#showRwOtherMachineReportBtn {
+  background: #f97316 !important;
   border-color: #f97316 !important;
 }
 
-#refreshBtn:hover,
 #showRwOtherMachineReportBtn:hover {
   background: #ea580c !important;
   border-color: #ea580c !important;
