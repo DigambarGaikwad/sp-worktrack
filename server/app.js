@@ -7,6 +7,8 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 
 // Load .env before route/service modules because some services read env values at module load time.
+const explicitEnvFile = process.env.SPWT_ENV_FILE || "";
+if (explicitEnvFile) dotenv.config({ path: explicitEnvFile, override: true });
 dotenv.config();
 
 require("./services/adminAccessPermissionExtensions");
