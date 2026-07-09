@@ -9,7 +9,10 @@ function clean(value) { return String(value ?? "").trim(); }
 function toNumber(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
 function pbEscape(value) { return clean(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"'); }
 function todayStamp() { return new Date().toISOString().replace(/[:.]/g, "-"); }
-function backupDir() { return path.resolve(process.cwd(), "backups"); }
+function runtimeRoot() {
+  return clean(process.env.SPWT_RUNTIME_ROOT) || path.join(process.env.APPDATA || process.cwd(), "sp-worktrack-v2", "runtime");
+}
+function backupDir() { return path.join(runtimeRoot(), "backups"); }
 
 const MASTER_COLLECTIONS = [
   "employees",
@@ -254,7 +257,7 @@ async function backupDb({ includeMaster = true, includeTransactions = true } = {
   const fileName = `spwt-db-backup-${todayStamp()}.json`;
   const filePath = path.join(dir, fileName);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-  return { fileName, filePath, collections: Object.fromEntries(Object.entries(data.collections).map(([k, v]) => [k, v.length])) };
+  return { fileName, filePath, folder: dir, collections: Object.fromEntries(Object.entries(data.collections).map(([k, v]) => [k, v.length])) };
 }
 
 function listBackupFiles() {
