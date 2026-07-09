@@ -8,8 +8,12 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function runtimeRoot() {
+  return clean(process.env.SPWT_RUNTIME_ROOT) || path.join(process.env.APPDATA || process.cwd(), "sp-worktrack-v2", "runtime");
+}
+
 function backupDir() {
-  return path.resolve(process.cwd(), "backups");
+  return path.join(runtimeRoot(), "backups");
 }
 
 function safeBackupFileName(fileName) {
