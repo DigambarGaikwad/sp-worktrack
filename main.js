@@ -4,12 +4,14 @@ const { app, BrowserWindow, dialog } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const dotenv = require("dotenv");
 
 const APP_PRODUCT_NAME = "SP WorkTrack V2";
 const APP_USER_DATA_DIR = "sp-worktrack-v2";
 const DEFAULT_API_PORT = 3032;
 const DEFAULT_POCKETBASE_URL = "http://127.0.0.1:8092";
+const BLANK_DB_MAX_BYTES = 700 * 1024;
 
 try {
   app.setName(APP_PRODUCT_NAME);
@@ -72,6 +74,18 @@ function copyDirIfMissing(src, dest, requiredChild = "") {
   return true;
 }
 
+function removeDirSafe(dir) {
+  if (!dir || !fs.existsSync(dir)) return;
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+function copyDirReplace(src, dest) {
+  if (!src || !fs.existsSync(src)) throw new Error(`Source folder missing: ${src}`);
+  removeDirSafe(dest);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.cpSync(src, dest, { recursive: true, force: true });
+}
+
 function packagedPath(relPath) {
   const candidates = [
     path.join(process.resourcesPath || "", "app.asar.unpacked", relPath),
@@ -86,6 +100,7 @@ function ensureWritableRuntime() {
   const root = runtimeRoot();
   fs.mkdirSync(root, { recursive: true });
   fs.mkdirSync(path.join(root, "local-tools", "pocketbase"), { recursive: true });
+  fs.mkdirSync(path.join(root, "transfer_packages"), { recursive: true });
 
   if (!app.isPackaged) return;
 
@@ -93,6 +108,8 @@ function ensureWritableRuntime() {
   const envSource = findExistingFile([
     path.join(path.dirname(process.execPath), ".env"),
     path.join(process.resourcesPath || "", ".env"),
+    path.join(process.resourcesPath || "", "app.asar.unpacked", ".env"),
+    asarUnpackedPath(path.join(appRoot(), ".env")),
     path.join(appRoot(), ".env")
   ]);
   if (copyFileIfMissing(envSource, envTarget)) logLine("Seeded writable .env", envTarget);
@@ -106,8 +123,100 @@ function ensureWritableRuntime() {
   if (copyDirIfMissing(pbMigrationSource, pbMigrationTarget)) logLine("Seeded writable pb_migrations", pbMigrationTarget);
 }
 
-function loadEnv() {
+function dbLooksBlank() {
+  const db = path.join(runtimeRoot(), "local-tools", "pocketbase", "pb_data", "data.db");
+  if (!fs.existsSync(db)) return true;
+  try {
+    return fs.statSync(db).size <= BLANK_DB_MAX_BYTES;
+  } catch (_) {
+    return true;
+  }
+}
+
+function runtimeNeedsTransferRestore() {
+  const envMissing = !fs.existsSync(path.join(runtimeRoot(), ".env"));
+  return envMissing || dbLooksBlank();
+}
+
+function newestTransferZip() {
+  const dir = path.join(runtimeRoot(), "transfer_packages");
+  if (!fs.existsSync(dir)) return "";
+  const files = fs.readdirSync(dir)
+    .filter((name) => /^SPWT_TRANSFER_.*\.zip$/i.test(name))
+    .map((name) => path.join(dir, name))
+    .filter((file) => fs.statSync(file).isFile())
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return files[0] || "";
+}
+
+function extractTransferPackage(zipPath) {
+  const workDir = path.join(os.tmpdir(), `spwt-transfer-${Date.now()}`);
+  fs.mkdirSync(workDir, { recursive: true });
+
+  // Use built-in PowerShell Expand-Archive on Windows to avoid adding a new dependency.
+  const ps = spawn("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-Command",
+    `Expand-Archive -LiteralPath ${JSON.stringify(zipPath)} -DestinationPath ${JSON.stringify(workDir)} -Force`
+  ], { windowsHide: true, stdio: "pipe" });
+
+  return new Promise((resolve, reject) => {
+    let stderr = "";
+    ps.stderr.on("data", (d) => { stderr += String(d); });
+    ps.on("error", reject);
+    ps.on("exit", (code) => {
+      if (code === 0) resolve(workDir);
+      else reject(new Error(`Transfer ZIP extract failed. ${stderr || `Exit code ${code}`}`));
+    });
+  });
+}
+
+async function restoreTransferPackageBeforeStartup() {
   ensureWritableRuntime();
+  const zip = newestTransferZip();
+  if (!zip) return false;
+
+  if (!runtimeNeedsTransferRestore()) {
+    logLine("Transfer package found but runtime already initialized; skipping auto-restore", zip);
+    return false;
+  }
+
+  logLine("Auto-restoring transfer package before startup", zip);
+  const extracted = await extractTransferPackage(zip);
+  const envFile = path.join(extracted, "env", ".env");
+  const pbData = path.join(extracted, "pb_data");
+  const pbMigrations = path.join(extracted, "pb_migrations");
+  const dbFile = path.join(pbData, "data.db");
+
+  if (!fs.existsSync(envFile)) throw new Error("Invalid transfer package: env\\.env missing.");
+  if (!fs.existsSync(dbFile)) throw new Error("Invalid transfer package: pb_data\\data.db missing.");
+
+  const backupRoot = path.join(runtimeRoot(), "transfer_packages", "pre_auto_restore_backups", `PRE_AUTO_RESTORE_${new Date().toISOString().replace(/[:.]/g, "-")}`);
+  fs.mkdirSync(backupRoot, { recursive: true });
+
+  const currentEnv = path.join(runtimeRoot(), ".env");
+  const currentPbData = path.join(runtimeRoot(), "local-tools", "pocketbase", "pb_data");
+  const currentPbMigrations = path.join(runtimeRoot(), "local-tools", "pocketbase", "pb_migrations");
+
+  if (fs.existsSync(currentEnv)) fs.copyFileSync(currentEnv, path.join(backupRoot, ".env"));
+  if (fs.existsSync(currentPbData)) fs.cpSync(currentPbData, path.join(backupRoot, "pb_data"), { recursive: true, force: true });
+  if (fs.existsSync(currentPbMigrations)) fs.cpSync(currentPbMigrations, path.join(backupRoot, "pb_migrations"), { recursive: true, force: true });
+
+  fs.mkdirSync(path.dirname(currentEnv), { recursive: true });
+  fs.copyFileSync(envFile, currentEnv);
+  copyDirReplace(pbData, currentPbData);
+  if (fs.existsSync(pbMigrations)) copyDirReplace(pbMigrations, currentPbMigrations);
+
+  const marker = path.join(runtimeRoot(), "transfer_packages", `RESTORED_${path.basename(zip)}.txt`);
+  fs.writeFileSync(marker, `Restored ${zip}\nAt ${new Date().toISOString()}\nBackup ${backupRoot}\n`, "utf8");
+  removeDirSafe(extracted);
+  logLine("Auto-restore completed", marker);
+  return true;
+}
+
+async function loadEnv() {
+  await restoreTransferPackageBeforeStartup();
 
   process.env.SPWT_RUNTIME_ROOT = runtimeRoot();
   process.env.SPWT_APP_ROOT = appRoot();
@@ -119,6 +228,8 @@ function loadEnv() {
     path.join(runtimeRoot(), ".env"),
     path.join(exeDir, ".env"),
     path.join(process.resourcesPath || "", ".env"),
+    path.join(process.resourcesPath || "", "app.asar.unpacked", ".env"),
+    asarUnpackedPath(path.join(appRoot(), ".env")),
     path.join(appRoot(), ".env")
   ]);
 
@@ -293,7 +404,7 @@ function createWindow() {
 }
 
 async function startApp() {
-  loadEnv();
+  await loadEnv();
   createWindow();
 
   try {
