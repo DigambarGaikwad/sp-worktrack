@@ -260,7 +260,7 @@ async function getDatabaseTransferStatus() {
       hostname: os.hostname(),
       platform: process.platform,
       node: process.version,
-      port: Number(process.env.SPWT_API_PORT || 3030)
+      port: Number(process.env.SPWT_API_PORT || 3032)
     },
     components,
     recordCounts,
