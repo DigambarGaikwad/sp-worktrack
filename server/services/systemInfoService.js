@@ -82,7 +82,9 @@ function buildRequestUrl(req, port) {
 
 async function getSystemInfo(req) {
   const port = Number(process.env.SPWT_API_PORT || 3032);
-  const rootDir = process.cwd();
+  const appRoot = clean(process.env.SPWT_APP_ROOT || process.cwd());
+  const runtimeRoot = clean(process.env.SPWT_RUNTIME_ROOT || appRoot);
+  const envFile = clean(process.env.SPWT_ENV_FILE || "");
   const interfaces = getIpv4Addresses();
   const lan = interfaces
     .filter(i => i.type === "lan")
@@ -102,7 +104,10 @@ async function getSystemInfo(req) {
       pid: process.pid,
       port,
       bindHost: "0.0.0.0 / all interfaces",
-      rootDir
+      appRoot,
+      runtimeRoot,
+      envFile,
+      cwd: process.cwd()
     },
     current: {
       apiOrigin: buildRequestUrl(req, port),
