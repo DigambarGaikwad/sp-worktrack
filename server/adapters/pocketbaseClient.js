@@ -2,7 +2,7 @@
 // PocketBase REST client with server-side superuser authentication.
 // Frontend never talks directly to PocketBase.
 
-const PB_URL = process.env.POCKETBASE_URL || "http://127.0.0.1:8090";
+const PB_URL = process.env.POCKETBASE_URL || "http://127.0.0.1:8092";
 const PB_TIMEOUT_MS = Number(process.env.POCKETBASE_TIMEOUT_MS || 12000);
 
 let authToken = "";
