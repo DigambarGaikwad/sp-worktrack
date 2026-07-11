@@ -34,8 +34,9 @@
           <label>Target Qty<input id="targetQty" type="number" min="1" value="1" /></label>
           <button id="addTargetBtn" type="button">Add Target</button>
         </div>
-        <div class="note">Shows month target in standard manhours, day-wise expected progress, behind/ahead status and overtime need. If ahead, system advises to stop extra overtime.</div>
+        <div class="note">Shows monthly target in standard manhours, completed quantity, department-wise manpower need, behind/ahead status and overtime need. If ahead, system advises to stop extra overtime.</div>
         <div id="targetTable" class="table-host"></div>
+        <div id="targetSummaryHost" class="target-summary-host"></div>
       </section>
 
       <section class="planner-grid">
@@ -62,16 +63,26 @@
 
           <div class="subsection-row sequencing-row">
             <div>
-              <div class="subsection-title">Optional Work Sequencing</div>
-              <div class="mini-note">Use strict sequence when next-priority machine cannot start before previous priority is completed.</div>
+              <div class="subsection-title">Optional Work Dependency / Sequencing</div>
+              <div class="mini-note">Example: Hydrotest can start only after Priority Panel Assembly is completed. These rules are saved with the plan and used during plan generation.</div>
             </div>
-            <label class="compact-label">Sequencing
+            <label class="compact-label">Planning Mode
               <select id="sequenceMode">
-                <option value="priority">Priority sorted only</option>
-                <option value="strict">Strict priority gate</option>
+                <option value="dependency">Respect saved dependencies</option>
+                <option value="free">Ignore dependencies</option>
               </select>
             </label>
           </div>
+
+          <div class="dependency-form">
+            <label>Machine Type<select id="depTypeSelect"></select></label>
+            <label>Work<select id="depWorkSelect"></select></label>
+            <label>Subwork<select id="depSubworkSelect"></select></label>
+            <label>Depends On Work<select id="depOnWorkSelect"></select></label>
+            <label>Depends On Subwork<select id="depOnSubworkSelect"></select></label>
+            <button id="addDependencyBtn" type="button">Add Dependency</button>
+          </div>
+          <div id="dependencyTable" class="table-host"></div>
 
           <div class="metric-grid" id="capacityMetrics"></div>
           <div class="note">Available hours are calculated shift-wise from selected employees. Planned absent employees are removed date-wise. Completed work up to the day before From Date is reduced from the plan.</div>
@@ -86,7 +97,7 @@
             <label>Target Date<input id="targetDate" type="date" /></label>
             <button id="addDemandBtn" type="button">Add Machine</button>
           </div>
-          <div class="note">Priority is numeric. Plan sorts machines by Priority No. first, then target date, then created sequence. Machine numbers are auto-picked from active Admin machines; if not available, “No number given yet” is used.</div>
+          <div class="note">Priority is numeric. Plan sorts machines by Priority No. first, then target date, then dependency sequence. Machine numbers are auto-picked from active Admin machines; if not available, “No number given yet” is used.</div>
           <div id="demandTable" class="table-host"></div>
         </div>
       </section>
@@ -106,7 +117,7 @@
       <section class="sp-panel plan-control">
         <div>
           <div class="section-title">5. Generate Production Plan</div>
-          <div class="note">Date-wise plan uses selected shift manpower, OT preference, machine priority, completed entries, skill confidence, planning efficiency cap, target dates and available minutes per day.</div>
+          <div class="note">Date-wise plan uses selected shift manpower, OT preference, machine priority, saved work dependencies, completed entries, skill history learning, planning efficiency cap, target dates and available minutes per day.</div>
         </div>
         <button id="generatePlanBtn" type="button">Generate Production Plan</button>
       </section>
