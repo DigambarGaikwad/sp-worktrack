@@ -1,6 +1,6 @@
 // server/services/skillMatrixService.js
 // Stores employee skill matrix as one admin_settings record per skill.
-// This avoids large JSON values and requires no PocketBase schema change.
+// Efficiency is derived from production_entry_lines history, not hardcoded/manual input.
 
 const crypto = require("crypto");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
@@ -19,6 +19,7 @@ function bool(value, fallback = false) {
   if (["false", "0", "no", "n", "off"].includes(s)) return false;
   return fallback;
 }
+function round1(value) { return Number(num(value, 0).toFixed(1)); }
 function nowIso() { return new Date().toISOString(); }
 function id() { return crypto.randomBytes(8).toString("hex"); }
 function hashKey(value) { return crypto.createHash("sha1").update(clean(value)).digest("hex").slice(0, 24); }
@@ -45,13 +46,13 @@ function pocketBaseMessage(err, fallback) {
   return `${err?.message || fallback}: ${extra}`;
 }
 
-async function listSettings() {
+async function listAll(collection, query = {}) {
   const all = [];
   let page = 1;
   while (true) {
-    const result = await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, {
+    const result = await pocketBaseRequest(`/api/collections/${collection}/records`, {
       method: "GET",
-      query: { page, perPage: 500, sort: "setting_key" }
+      query: { page, perPage: 500, ...query }
     });
     const items = Array.isArray(result.items) ? result.items : [];
     all.push(...items);
@@ -59,6 +60,10 @@ async function listSettings() {
     page += 1;
   }
   return all;
+}
+
+async function listSettings() {
+  return listAll(COLLECTION, { sort: "setting_key" });
 }
 
 async function findSetting(key) {
@@ -73,10 +78,8 @@ async function saveSetting(key, value) {
   const body = { setting_key: key, setting_value: value };
   const old = await findSetting(key);
   try {
-    if (old?.id) {
-      return await pocketBaseRequest(`/api/collections/${COLLECTION}/records/${old.id}`, { method: "PATCH", body });
-    }
-    return await pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
+    if (old?.id) return pocketBaseRequest(`/api/collections/${COLLECTION}/records/${old.id}`, { method: "PATCH", body });
+    return pocketBaseRequest(`/api/collections/${COLLECTION}/records`, { method: "POST", body });
   } catch (err) {
     const e = new Error(pocketBaseMessage(err, "Failed to save skill matrix record."));
     e.status = err.status || 500;
@@ -85,13 +88,17 @@ async function saveSetting(key, value) {
   }
 }
 
-function uniqueKey(r = {}) {
+function skillKeyParts(r = {}) {
   return [
     clean(r.emp_code).toLowerCase(),
-    clean(r.machine_type_code).toLowerCase(),
-    clean(r.skill_department_code || slug(r.skill_department_name)).toLowerCase(),
+    clean(r.machine_type_code || r.machine_category).toLowerCase(),
+    clean(r.skill_department_code || r.department_code || slug(r.skill_department_name || r.department_name)).toLowerCase(),
     clean(r.subwork_code || slug(r.subwork_name)).toLowerCase()
-  ].join("|");
+  ];
+}
+
+function uniqueKey(r = {}) {
+  return skillKeyParts(r).join("|");
 }
 
 function settingKeyFor(record) {
@@ -102,7 +109,7 @@ function normalizeRecord(raw = {}, existing = {}) {
   const skillDepartmentName = clean(raw.skill_department_name || raw.department_name || raw.main_work || raw.mainWork || existing.skill_department_name);
   const subworkName = clean(raw.subwork_name || raw.subwork || existing.subwork_name);
   const level = Math.max(0, Math.min(4, Math.round(num(raw.skill_level ?? raw.skillLevel ?? existing.skill_level, 0))));
-  const efficiency = Math.max(0, Math.min(150, num(raw.efficiency_pct ?? raw.efficiencyPct ?? existing.efficiency_pct, 0)));
+  const efficiency = Math.max(0, num(raw.efficiency_pct ?? raw.efficiencyPct ?? existing.efficiency_pct, 0));
   const active = bool(raw.active ?? existing.active, true);
   const createdAt = existing.created_at || raw.created_at || nowIso();
 
@@ -119,7 +126,7 @@ function normalizeRecord(raw = {}, existing = {}) {
     subwork_code: clean(raw.subwork_code || slug(subworkName) || existing.subwork_code),
     subwork_name: subworkName,
     skill_level: level,
-    efficiency_pct: efficiency,
+    efficiency_pct: round1(efficiency),
     can_work_independently: bool(raw.can_work_independently ?? raw.canWorkIndependently ?? existing.can_work_independently, level >= 3),
     can_train_others: bool(raw.can_train_others ?? raw.canTrainOthers ?? existing.can_train_others, level >= 4),
     remarks: clean(raw.remarks || existing.remarks),
@@ -152,6 +159,59 @@ async function readAll() {
   return Array.from(byKey.values()).filter(x => x.id);
 }
 
+function lineToPerformanceKey(line = {}) {
+  return [
+    clean(line.emp_code).toLowerCase(),
+    clean(line.machine_type_code || line.machine_category).toLowerCase(),
+    clean(line.department_code || slug(line.department_name)).toLowerCase(),
+    clean(line.subwork_code || slug(line.subwork_name)).toLowerCase()
+  ].join("|");
+}
+
+async function buildPerformanceMap() {
+  const lines = await listAll("production_entry_lines", { sort: "-work_date" }).catch(() => []);
+  const map = new Map();
+
+  for (const line of lines) {
+    const standard = num(line.standard_minutes, 0);
+    const actual = num(line.actual_minutes, 0);
+    const key = lineToPerformanceKey(line);
+    if (!key || standard <= 0 || actual <= 0) continue;
+    const current = map.get(key) || { history_count: 0, history_standard_minutes: 0, history_actual_minutes: 0, last_work_date: "" };
+    current.history_count += 1;
+    current.history_standard_minutes += standard;
+    current.history_actual_minutes += actual;
+    const workDate = clean(line.work_date);
+    if (workDate && workDate > current.last_work_date) current.last_work_date = workDate;
+    map.set(key, current);
+  }
+
+  for (const item of map.values()) {
+    item.history_efficiency_pct = item.history_actual_minutes > 0 ? round1((item.history_standard_minutes / item.history_actual_minutes) * 100) : 0;
+    item.history_standard_minutes = round1(item.history_standard_minutes);
+    item.history_actual_minutes = round1(item.history_actual_minutes);
+  }
+
+  return map;
+}
+
+function applyPerformance(records = [], performanceMap = new Map()) {
+  return records.map((record) => {
+    const perf = performanceMap.get(uniqueKey(record)) || null;
+    const historyCount = num(perf?.history_count, 0);
+    const historyEff = historyCount ? num(perf.history_efficiency_pct, 0) : 0;
+    return {
+      ...record,
+      efficiency_pct: round1(historyEff),
+      history_count: historyCount,
+      history_standard_minutes: round1(perf?.history_standard_minutes || 0),
+      history_actual_minutes: round1(perf?.history_actual_minutes || 0),
+      history_efficiency_pct: round1(historyEff),
+      last_work_date: clean(perf?.last_work_date)
+    };
+  });
+}
+
 function applyFilters(records, query = {}) {
   const emp = clean(query.emp_code || query.empCode || query.employee || "").toLowerCase();
   const type = clean(query.machine_type_code || query.machineTypeCode || query.type || "").toLowerCase();
@@ -170,14 +230,18 @@ function buildSummary(records) {
   const employees = new Set(active.map(r => r.emp_code).filter(Boolean));
   const departments = new Set(active.map(r => r.skill_department_name).filter(Boolean));
   const subworks = new Set(active.map(uniqueKey).filter(Boolean));
-  const avgEfficiency = active.length ? Number((active.reduce((s, r) => s + num(r.efficiency_pct), 0) / active.length).toFixed(1)) : 0;
+  const historyRows = active.filter(r => num(r.history_count, 0) > 0 && num(r.history_actual_minutes, 0) > 0);
+  const totalStd = historyRows.reduce((s, r) => s + num(r.history_standard_minutes, 0), 0);
+  const totalActual = historyRows.reduce((s, r) => s + num(r.history_actual_minutes, 0), 0);
+  const avgEfficiency = totalActual > 0 ? round1((totalStd / totalActual) * 100) : 0;
   const independent = active.filter(r => r.can_work_independently).length;
   const trainers = active.filter(r => r.can_train_others).length;
-  return { activeSkills: active.length, employees: employees.size, departments: departments.size, subworks: subworks.size, avgEfficiency, independent, trainers };
+  return { activeSkills: active.length, employees: employees.size, departments: departments.size, subworks: subworks.size, avgEfficiency, historySkills: historyRows.length, independent, trainers };
 }
 
 async function listSkillMatrix(query = {}) {
-  const records = await readAll();
+  const performanceMap = await buildPerformanceMap();
+  const records = applyPerformance(await readAll(), performanceMap);
   const filtered = applyFilters(records, query);
   return { records: filtered, summary: buildSummary(records), total: filtered.length };
 }
@@ -185,6 +249,7 @@ async function listSkillMatrix(query = {}) {
 async function saveSkillMatrix(payload = {}) {
   const incoming = Array.isArray(payload.records) ? payload.records : Array.isArray(payload.items) ? payload.items : [payload.record || payload.data || payload];
   const existing = await readAll();
+  const performanceMap = await buildPerformanceMap();
   const byKey = new Map(existing.map(r => [uniqueKey(r), r]));
   let created = 0, updated = 0, skipped = 0;
 
@@ -192,7 +257,8 @@ async function saveSkillMatrix(payload = {}) {
     const prepared = normalizeRecord(raw);
     if (!prepared.emp_code || !prepared.machine_type_code || !prepared.skill_department_name || !prepared.subwork_name) { skipped += 1; continue; }
     const old = byKey.get(uniqueKey(prepared));
-    const record = normalizeRecord(prepared, old || {});
+    const withHistory = applyPerformance([prepared], performanceMap)[0];
+    const record = normalizeRecord({ ...prepared, efficiency_pct: withHistory.history_efficiency_pct }, old || {});
     record.setting_key = old?.setting_key || settingKeyFor(record);
     record.id = old?.id || record.id;
     await saveSetting(record.setting_key, JSON.stringify(record));
@@ -200,7 +266,7 @@ async function saveSkillMatrix(payload = {}) {
     if (old) updated += 1; else created += 1;
   }
 
-  const saved = await readAll();
+  const saved = applyPerformance(await readAll(), performanceMap);
   return { ok: true, created, updated, skipped, summary: buildSummary(saved), records: applyFilters(saved, payload.query || {}) };
 }
 
@@ -212,7 +278,7 @@ async function deleteSkillMatrix(recordId) {
   if (!record) { const err = new Error("Skill record not found."); err.status = 404; throw err; }
   const deleted = { ...record, active: false, updated_at: nowIso() };
   await saveSetting(record.setting_key || settingKeyFor(deleted), JSON.stringify(deleted));
-  return { ok: true, deleted: 1, summary: buildSummary(await readAll()) };
+  return { ok: true, deleted: 1, summary: buildSummary(applyPerformance(await readAll(), await buildPerformanceMap())) };
 }
 
 module.exports = { listSkillMatrix, saveSkillMatrix, deleteSkillMatrix, normalizeRecord };
