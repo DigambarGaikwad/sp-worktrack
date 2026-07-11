@@ -97,8 +97,13 @@ function skillKeyParts(r = {}) {
   ];
 }
 
+function validSkillKeyParts(parts = []) {
+  return parts.length === 4 && parts.every(Boolean);
+}
+
 function uniqueKey(r = {}) {
-  return skillKeyParts(r).join("|");
+  const parts = skillKeyParts(r);
+  return validSkillKeyParts(parts) ? parts.join("|") : "";
 }
 
 function settingKeyFor(record) {
@@ -153,19 +158,33 @@ async function readAll() {
 
   const byKey = new Map();
   records.forEach((record) => {
+    const key = uniqueKey(record);
+    if (!key) return;
     if (!record.setting_key) record.setting_key = settingKeyFor(record);
-    byKey.set(uniqueKey(record), record);
+    byKey.set(key, record);
   });
   return Array.from(byKey.values()).filter(x => x.id);
 }
 
+function lineRecord(line = {}) {
+  const deptName = clean(line.department_name || line.department || line.department_code);
+  const subworkName = clean(line.subwork_name || line.sub_work || line.subwork_code);
+  const typeCode = clean(line.machine_type_code || line.machine_category || line.machine_type_name);
+  return {
+    emp_code: clean(line.emp_code || line.employee_code || line.emp_id),
+    emp_name: clean(line.emp_name || line.employee_name),
+    employee_department: "",
+    machine_type_code: typeCode,
+    machine_type_name: clean(line.machine_category || line.machine_type_name || typeCode),
+    skill_department_code: clean(line.department_code || slug(deptName)),
+    skill_department_name: deptName,
+    subwork_code: clean(line.subwork_code || slug(subworkName)),
+    subwork_name: subworkName
+  };
+}
+
 function lineToPerformanceKey(line = {}) {
-  return [
-    clean(line.emp_code).toLowerCase(),
-    clean(line.machine_type_code || line.machine_category).toLowerCase(),
-    clean(line.department_code || slug(line.department_name)).toLowerCase(),
-    clean(line.subwork_code || slug(line.subwork_name)).toLowerCase()
-  ].join("|");
+  return uniqueKey(lineRecord(line));
 }
 
 async function buildPerformanceMap() {
@@ -175,14 +194,28 @@ async function buildPerformanceMap() {
   for (const line of lines) {
     const standard = num(line.standard_minutes, 0);
     const actual = num(line.actual_minutes, 0);
-    const key = lineToPerformanceKey(line);
+    const base = lineRecord(line);
+    const key = uniqueKey(base);
     if (!key || standard <= 0 || actual <= 0) continue;
-    const current = map.get(key) || { history_count: 0, history_standard_minutes: 0, history_actual_minutes: 0, last_work_date: "" };
+
+    const current = map.get(key) || {
+      ...base,
+      history_count: 0,
+      history_standard_minutes: 0,
+      history_actual_minutes: 0,
+      first_work_date: "",
+      last_work_date: ""
+    };
     current.history_count += 1;
     current.history_standard_minutes += standard;
     current.history_actual_minutes += actual;
     const workDate = clean(line.work_date);
+    if (workDate && (!current.first_work_date || workDate < current.first_work_date)) current.first_work_date = workDate;
     if (workDate && workDate > current.last_work_date) current.last_work_date = workDate;
+    if (!current.emp_name && base.emp_name) current.emp_name = base.emp_name;
+    if (!current.machine_type_name && base.machine_type_name) current.machine_type_name = base.machine_type_name;
+    if (!current.skill_department_name && base.skill_department_name) current.skill_department_name = base.skill_department_name;
+    if (!current.subwork_name && base.subwork_name) current.subwork_name = base.subwork_name;
     map.set(key, current);
   }
 
@@ -202,13 +235,46 @@ function applyPerformance(records = [], performanceMap = new Map()) {
     const historyEff = historyCount ? num(perf.history_efficiency_pct, 0) : 0;
     return {
       ...record,
+      emp_name: clean(record.emp_name || perf?.emp_name),
+      machine_type_name: clean(record.machine_type_name || perf?.machine_type_name),
+      skill_department_name: clean(record.skill_department_name || perf?.skill_department_name),
+      subwork_name: clean(record.subwork_name || perf?.subwork_name),
       efficiency_pct: round1(historyEff),
       history_count: historyCount,
       history_standard_minutes: round1(perf?.history_standard_minutes || 0),
       history_actual_minutes: round1(perf?.history_actual_minutes || 0),
       history_efficiency_pct: round1(historyEff),
+      first_work_date: clean(perf?.first_work_date),
       last_work_date: clean(perf?.last_work_date)
     };
+  });
+}
+
+function inferLevel(historyCount, efficiencyPct) {
+  const count = num(historyCount, 0);
+  const eff = num(efficiencyPct, 0);
+  if (count >= 8 && eff >= 90) return 4;
+  if (count >= 2) return 3;
+  return 2;
+}
+
+function autoRecordFromPerformance(perf = {}) {
+  const level = inferLevel(perf.history_count, perf.history_efficiency_pct);
+  return normalizeRecord({
+    emp_code: perf.emp_code,
+    emp_name: perf.emp_name,
+    employee_department: perf.employee_department,
+    machine_type_code: perf.machine_type_code,
+    machine_type_name: perf.machine_type_name,
+    skill_department_code: perf.skill_department_code,
+    skill_department_name: perf.skill_department_name,
+    subwork_code: perf.subwork_code,
+    subwork_name: perf.subwork_name,
+    skill_level: level,
+    efficiency_pct: perf.history_efficiency_pct,
+    can_work_independently: level >= 3,
+    can_train_others: false,
+    remarks: `Auto added from past production history (${perf.history_count || 0} entries). Trainer approval remains manual.`
   });
 }
 
@@ -255,7 +321,7 @@ async function saveSkillMatrix(payload = {}) {
 
   for (const raw of incoming) {
     const prepared = normalizeRecord(raw);
-    if (!prepared.emp_code || !prepared.machine_type_code || !prepared.skill_department_name || !prepared.subwork_name) { skipped += 1; continue; }
+    if (!uniqueKey(prepared)) { skipped += 1; continue; }
     const old = byKey.get(uniqueKey(prepared));
     const withHistory = applyPerformance([prepared], performanceMap)[0];
     const record = normalizeRecord({ ...prepared, efficiency_pct: withHistory.history_efficiency_pct }, old || {});
@@ -270,6 +336,39 @@ async function saveSkillMatrix(payload = {}) {
   return { ok: true, created, updated, skipped, summary: buildSummary(saved), records: applyFilters(saved, payload.query || {}) };
 }
 
+async function autoCreateSkillsFromHistory(options = {}) {
+  const minEntries = Math.max(1, Math.round(num(options.minEntries, 1)));
+  const existing = await readAll();
+  const performanceMap = await buildPerformanceMap();
+  const byKey = new Map(existing.map(r => [uniqueKey(r), r]));
+  let created = 0, alreadyExists = 0, skipped = 0;
+
+  for (const perf of performanceMap.values()) {
+    if (num(perf.history_count, 0) < minEntries) { skipped += 1; continue; }
+    const record = autoRecordFromPerformance(perf);
+    const key = uniqueKey(record);
+    if (!key) { skipped += 1; continue; }
+    const old = byKey.get(key);
+    if (old) { alreadyExists += 1; continue; }
+    record.setting_key = settingKeyFor(record);
+    await saveSetting(record.setting_key, JSON.stringify(record));
+    byKey.set(key, record);
+    created += 1;
+  }
+
+  const saved = applyPerformance(await readAll(), performanceMap);
+  return {
+    ok: true,
+    created,
+    alreadyExists,
+    skipped,
+    minEntries,
+    source: "production_entry_lines",
+    summary: buildSummary(saved),
+    records: applyFilters(saved, options.query || {})
+  };
+}
+
 async function deleteSkillMatrix(recordId) {
   const idValue = clean(recordId);
   if (!idValue) { const err = new Error("Skill record id is required."); err.status = 400; throw err; }
@@ -281,4 +380,4 @@ async function deleteSkillMatrix(recordId) {
   return { ok: true, deleted: 1, summary: buildSummary(applyPerformance(await readAll(), await buildPerformanceMap())) };
 }
 
-module.exports = { listSkillMatrix, saveSkillMatrix, deleteSkillMatrix, normalizeRecord };
+module.exports = { listSkillMatrix, saveSkillMatrix, autoCreateSkillsFromHistory, deleteSkillMatrix, normalizeRecord };
