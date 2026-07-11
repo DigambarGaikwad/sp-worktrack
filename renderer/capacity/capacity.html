@@ -15,10 +15,11 @@
       <section class="page-hero sp-panel">
         <div>
           <h1>Capacity Planning</h1>
-          <p>Date range wise capacity, machine demand, manpower shortage and employee-wise production plan.</p>
+          <p>Date range wise capacity, machine demand, manpower shortage and date-wise employee production plan.</p>
         </div>
         <div class="hero-actions">
           <button id="refreshBtn" type="button">Refresh Data</button>
+          <button id="savePlanBtn" type="button">Save Plan</button>
           <button id="printPlanBtn" type="button">Print Plan</button>
           <button id="copyPlanBtn" type="button">Copy / Send</button>
         </div>
@@ -34,7 +35,7 @@
             <label>Working Days<input id="workDays" type="text" readonly /></label>
           </div>
           <div class="metric-grid" id="capacityMetrics"></div>
-          <div class="note">Available hours are taken employee-wise from Admin → Employee tab. Planned absent employees are removed date-wise.</div>
+          <div class="note">Available hours are taken employee-wise from Admin → Employee tab. Planned absent employees are removed date-wise. Completed work up to the day before From Date is reduced from the plan.</div>
         </div>
 
         <div class="sp-panel demand-card">
@@ -53,7 +54,7 @@
 
       <section class="planner-grid second-row">
         <div class="sp-panel">
-          <div class="section-title">3. Department-wise Requirement</div>
+          <div class="section-title">3. Department-wise Remaining Requirement</div>
           <div id="requirementTable" class="table-host"></div>
         </div>
         <div class="sp-panel">
@@ -66,13 +67,13 @@
       <section class="sp-panel plan-control">
         <div>
           <div class="section-title">5. Generate Production Plan</div>
-          <div class="note">Employee-wise plan uses skill confidence, planning efficiency cap, priority sequence, target dates and available minutes per day.</div>
+          <div class="note">Date-wise plan uses machine priority, completed production entries, skill confidence, planning efficiency cap, target dates and available minutes per day.</div>
         </div>
         <button id="generatePlanBtn" type="button">Generate Production Plan</button>
       </section>
 
       <section class="sp-panel plan-preview">
-        <div class="section-title">6. Employee-wise Production Plan</div>
+        <div class="section-title">6. Date-wise Employee Production Plan</div>
         <div id="employeePlanHost" class="employee-plan-host"></div>
       </section>
     </main>
@@ -82,8 +83,8 @@
   <script src="../shared/appHeader.js"></script>
   <script>
     window.SPWT.renderAppHeader({
-      title: "Capacity Planning",
-      subtitle: "Employee-wise production planning"
+      title: "SP WorkTrack",
+      subtitle: "Production & Performance Management System"
     });
   </script>
   <script src="capacity.js"></script>
