@@ -1,12 +1,27 @@
 // renderer/capacity/capacity.js
-// Clean client-side capacity planning workspace. Reads current DB APIs only.
+// Capacity Planning workspace. Isolated client logic; reads existing DB APIs.
 
 (function () {
   const API = window.SPWT_CONFIG?.API_BASE_URL || window.location.origin || "http://localhost:3032";
   const DEFAULT_MIN = 465;
-  const STORAGE_KEY = "spwt_capacity_plan_v1";
+  const STORAGE_KEY = "spwt_capacity_plan_v2";
   const $ = (id) => document.getElementById(id);
-  const state = { master: {}, absences: [], skills: [], progress: [], demand: [], plan: null, seq: 1, restored: false };
+
+  const state = {
+    master: {},
+    absences: [],
+    skills: [],
+    progress: [],
+    monthProgress: [],
+    demand: [],
+    targets: [],
+    shiftPlans: [],
+    overtimeEmpIds: [],
+    plan: null,
+    seq: 1,
+    shiftSeq: 1,
+    restored: false
+  };
 
   const clean = (v) => String(v ?? "").trim();
   const key = (v) => clean(v).toLowerCase();
@@ -15,7 +30,11 @@
   const fmtMin = (m) => `${Math.round(num(m, 0))} min`;
   const fmtHr = (m) => `${(num(m, 0) / 60).toFixed(1)} h`;
   const dateText = (d) => d ? d.split("-").reverse().join("/") : "-";
-  const makeId = () => (crypto?.randomUUID ? crypto.randomUUID() : `cap_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+  const makeId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `cap_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+  function dateKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
 
   function today(offset = 0) {
     const d = new Date();
@@ -23,14 +42,14 @@
     return dateKey(d);
   }
 
+  function currentMonth() {
+    return today().slice(0, 7);
+  }
+
   function parseDate(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(clean(value))) return null;
     const [y, m, d] = value.split("-").map(Number);
     return new Date(y, m - 1, d);
-  }
-
-  function dateKey(date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   function addDaysIso(value, days) {
@@ -40,19 +59,37 @@
     return dateKey(d);
   }
 
+  function monthStart(month) {
+    return /^\d{4}-\d{2}$/.test(clean(month)) ? `${month}-01` : `${currentMonth()}-01`;
+  }
+
+  function monthEnd(month) {
+    const text = /^\d{4}-\d{2}$/.test(clean(month)) ? month : currentMonth();
+    const [y, m] = text.split("-").map(Number);
+    return dateKey(new Date(y, m, 0));
+  }
+
+  function minIso(a, b) {
+    return clean(a) && clean(b) ? (a < b ? a : b) : clean(a || b);
+  }
+
   function progressCutoffDate() {
     return addDaysIso($("fromDate")?.value || today(), -1);
   }
 
-  function workingDates() {
-    const from = parseDate($("fromDate").value);
-    const to = parseDate($("toDate").value);
+  function workingDatesBetween(fromValue, toValue) {
+    const from = parseDate(fromValue);
+    const to = parseDate(toValue);
     if (!from || !to || from > to) return [];
     const dates = [];
     for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
       if (d.getDay() !== 0) dates.push(dateKey(d));
     }
     return dates;
+  }
+
+  function workingDates() {
+    return workingDatesBetween($("fromDate").value, $("toDate").value);
   }
 
   async function api(path) {
@@ -66,18 +103,26 @@
     setBusy(true);
     try {
       const cutoff = progressCutoffDate();
-      const [master, absences, skillData, progressData] = await Promise.all([
+      const month = $("targetMonth")?.value || currentMonth();
+      const monthFrom = monthStart(month);
+      const monthCutoff = minIso(today(), monthEnd(month));
+      const [master, absences, skillData, progressData, monthProgressData] = await Promise.all([
         api("/api/admin/master-data"),
         api("/api/admin/planned-absences").catch(() => []),
         api("/api/admin/skill-matrix").catch(() => ({ records: [] })),
-        api(`/api/capacity/progress?cutoff_date=${encodeURIComponent(cutoff)}`).catch(() => ({ records: [], cutoffDate: cutoff }))
+        api(`/api/capacity/progress?cutoff_date=${encodeURIComponent(cutoff)}`).catch(() => ({ records: [], cutoffDate: cutoff })),
+        api(`/api/capacity/progress?from_date=${encodeURIComponent(monthFrom)}&cutoff_date=${encodeURIComponent(monthCutoff)}`).catch(() => ({ records: [] }))
       ]);
+
       state.master = master || {};
       state.absences = Array.isArray(absences) ? absences : [];
       state.skills = Array.isArray(skillData?.records) ? skillData.records : [];
       state.progress = Array.isArray(progressData?.records) ? progressData.records : [];
+      state.monthProgress = Array.isArray(monthProgressData?.records) ? monthProgressData.records : [];
+
       populateControls();
       restoreSavedPlanOnce();
+      ensureDefaultShiftPlans();
       if (state.demand.length) generatePlan({ render: false });
       else state.plan = null;
       renderAll();
@@ -89,7 +134,7 @@
   }
 
   function setBusy(isBusy) {
-    ["refreshBtn", "savePlanBtn", "addDemandBtn", "generatePlanBtn"].forEach((id) => { if ($(id)) $(id).disabled = isBusy; });
+    ["refreshBtn", "savePlanBtn", "addShiftBtn", "addTargetBtn", "addDemandBtn", "generatePlanBtn"].forEach((id) => { if ($(id)) $(id).disabled = isBusy; });
   }
 
   function showError(message) {
@@ -97,19 +142,36 @@
     $("warningBox").textContent = `Capacity planning data load issue: ${message}`;
   }
 
-  function populateControls() {
-    const currentShift = $("shiftSelect")?.value;
-    const shifts = (state.master.shifts || []).filter((x) => x.active !== false);
-    $("shiftSelect").innerHTML = shifts.map((s) => `<option value="${esc(s.id || s.name)}">${esc(s.name)} (${esc(s.start || "")}-${esc(s.end || "")})</option>`).join("") || `<option value="General">General</option>`;
-    if (currentShift && [...$("shiftSelect").options].some((o) => o.value === currentShift)) $("shiftSelect").value = currentShift;
-
-    const types = state.master.machineTypes || [];
-    $("machineTypeSelect").innerHTML = types.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  function shifts() {
+    return (state.master.shifts || []).filter((x) => x.active !== false);
   }
 
-  function selectedShiftMinutes() {
-    const id = $("shiftSelect").value;
-    const s = (state.master.shifts || []).find((x) => clean(x.id || x.name) === id);
+  function machineTypes() {
+    return state.master.machineTypes || [];
+  }
+
+  function activeEmployees() {
+    return (state.master.employees || []).filter((e) => e.active !== false && clean(e.empId));
+  }
+
+  function populateControls() {
+    const types = machineTypes();
+    const options = types.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+    $("machineTypeSelect").innerHTML = options;
+    $("targetMachineTypeSelect").innerHTML = options;
+  }
+
+  function timeMin(value) {
+    const m = clean(value).match(/^(\d{1,2}):(\d{2})/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  function shiftById(id) {
+    return shifts().find((x) => clean(x.id || x.name) === clean(id)) || shifts()[0] || null;
+  }
+
+  function shiftMinutes(shiftId) {
+    const s = shiftById(shiftId);
     if (!s) return DEFAULT_MIN;
     const start = timeMin(s.start), end = timeMin(s.end);
     if (start == null || end == null) return DEFAULT_MIN;
@@ -118,17 +180,114 @@
     return Math.max(gross - num(s.breakMinutes, 0), 0) || DEFAULT_MIN;
   }
 
-  function timeMin(value) {
-    const m = clean(value).match(/^(\d{1,2}):(\d{2})/);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  function employeeMinutes(emp, shiftId) {
+    const employeeLimit = num(emp.availableMinutesDay, 0);
+    const shiftLimit = shiftMinutes(shiftId);
+    return employeeLimit > 0 ? Math.min(employeeLimit, shiftLimit) : shiftLimit;
   }
 
-  function employeeMinutes(emp) {
-    return num(emp.availableMinutesDay, 0) || selectedShiftMinutes() || DEFAULT_MIN;
+  function ensureDefaultShiftPlans() {
+    if (state.shiftPlans.length) return;
+    const firstShift = shifts()[0];
+    state.shiftPlans = [{ id: `shift_${state.shiftSeq++}`, shiftId: clean(firstShift?.id || firstShift?.name || "General"), employeeIds: activeEmployees().map((e) => e.empId) }];
   }
 
-  function activeEmployees() {
-    return (state.master.employees || []).filter((e) => e.active !== false && clean(e.empId));
+  function allRegularSelected(exceptShiftId = "") {
+    const set = new Set();
+    state.shiftPlans.forEach((sp) => {
+      if (sp.id === exceptShiftId) return;
+      (sp.employeeIds || []).forEach((id) => set.add(key(id)));
+    });
+    return set;
+  }
+
+  function renderShiftAssignments() {
+    const host = $("shiftAssignmentsHost");
+    const empList = activeEmployees();
+    const shiftList = shifts();
+    ensureDefaultShiftPlans();
+
+    host.innerHTML = state.shiftPlans.map((sp, index) => {
+      const usedElsewhere = allRegularSelected(sp.id);
+      const shiftOptions = shiftList.map((s) => {
+        const id = clean(s.id || s.name);
+        return `<option value="${esc(id)}" ${id === sp.shiftId ? "selected" : ""}>${esc(s.name)} (${esc(s.start || "")}-${esc(s.end || "")})</option>`;
+      }).join("") || `<option value="General">General</option>`;
+
+      const checks = empList.map((e) => {
+        const checked = (sp.employeeIds || []).some((id) => key(id) === key(e.empId));
+        const disabled = !checked && usedElsewhere.has(key(e.empId));
+        return `<label class="check-pill ${disabled ? "disabled" : ""}"><input type="checkbox" data-shift-emp="${esc(sp.id)}" data-emp="${esc(e.empId)}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />${esc(e.empId)} - ${esc(e.name)}</label>`;
+      }).join("");
+
+      return `<div class="shift-card">
+        <div class="shift-card-head">
+          <label>Shift ${index + 1}<select class="shift-select" data-shift-id="${esc(sp.id)}">${shiftOptions}</select></label>
+          <button class="remove-btn shift-remove" data-remove-shift="${esc(sp.id)}" type="button">Remove</button>
+        </div>
+        <div class="checkbox-flex">${checks}</div>
+      </div>`;
+    }).join("");
+
+    document.querySelectorAll(".shift-select").forEach((el) => {
+      el.onchange = () => {
+        const sp = state.shiftPlans.find((x) => x.id === el.dataset.shiftId);
+        if (sp) sp.shiftId = el.value;
+        state.plan = null;
+        renderAll();
+      };
+    });
+
+    document.querySelectorAll("[data-shift-emp]").forEach((el) => {
+      el.onchange = () => toggleShiftEmployee(el.dataset.shiftEmp, el.dataset.emp, el.checked);
+    });
+
+    document.querySelectorAll("[data-remove-shift]").forEach((el) => {
+      el.onclick = () => removeShift(el.dataset.removeShift);
+    });
+  }
+
+  function toggleShiftEmployee(shiftId, empId, checked) {
+    state.shiftPlans.forEach((sp) => {
+      sp.employeeIds = (sp.employeeIds || []).filter((id) => key(id) !== key(empId));
+    });
+    if (checked) {
+      const sp = state.shiftPlans.find((x) => x.id === shiftId);
+      if (sp) sp.employeeIds = [...(sp.employeeIds || []), empId];
+    }
+    state.plan = null;
+    renderAll();
+  }
+
+  function addShift() {
+    const firstShift = shifts()[0];
+    state.shiftPlans.push({ id: `shift_${state.shiftSeq++}`, shiftId: clean(firstShift?.id || firstShift?.name || "General"), employeeIds: [] });
+    state.plan = null;
+    renderAll();
+  }
+
+  function removeShift(id) {
+    state.shiftPlans = state.shiftPlans.filter((x) => x.id !== id);
+    ensureDefaultShiftPlans();
+    state.plan = null;
+    renderAll();
+  }
+
+  function renderOvertime() {
+    const host = $("overtimeHost");
+    host.innerHTML = activeEmployees().map((e) => {
+      const checked = state.overtimeEmpIds.some((id) => key(id) === key(e.empId));
+      return `<label class="check-pill ot"><input type="checkbox" data-ot-emp="${esc(e.empId)}" ${checked ? "checked" : ""} />${esc(e.empId)} - ${esc(e.name)}</label>`;
+    }).join("") || `<div class="empty-state">No active employees available.</div>`;
+    document.querySelectorAll("[data-ot-emp]").forEach((el) => {
+      el.onchange = () => {
+        const empId = el.dataset.otEmp;
+        state.overtimeEmpIds = state.overtimeEmpIds.filter((id) => key(id) !== key(empId));
+        if (el.checked) state.overtimeEmpIds.push(empId);
+        state.plan = null;
+        renderAll();
+      };
+    });
   }
 
   function absentSet(date) {
@@ -162,13 +321,11 @@
 
     const used = usedMachineNos(typeId);
     const pool = activeMachinesByType(typeId).filter((m) => !used.has(m));
-
     for (let i = 0; i < qty; i += 1) {
       const machineNo = pool.shift() || "No number given yet";
       if (machineNo !== "No number given yet") used.add(machineNo);
       state.demand.push({ id: makeId(), seq: state.seq++, priority, typeId, typeName, machineNo, targetDate });
     }
-
     $("priorityNo").value = String(priority + 1);
     state.plan = null;
     renderAll();
@@ -180,6 +337,57 @@
 
   function workCatalog(typeId) {
     return state.master.workCatalogByType?.[typeId] || { mainWorks: [], subWorks: {} };
+  }
+
+  function typeStdMinutes(typeId) {
+    const cat = workCatalog(typeId);
+    return (cat.mainWorks || []).reduce((sum, dept) => sum + (cat.subWorks?.[dept] || []).reduce((s, sw) => s + num(sw.standardTime, 0), 0), 0);
+  }
+
+  function addTarget() {
+    const typeId = $("targetMachineTypeSelect").value;
+    const typeName = $("targetMachineTypeSelect").selectedOptions[0]?.textContent || typeId;
+    const qty = Math.max(1, Math.round(num($("targetQty").value, 1)));
+    if (!typeId) return;
+    const existing = state.targets.find((t) => key(t.typeId) === key(typeId));
+    if (existing) existing.qty = qty;
+    else state.targets.push({ id: makeId(), typeId, typeName, qty });
+    renderAll();
+  }
+
+  function removeTarget(id) {
+    state.targets = state.targets.filter((t) => t.id !== id);
+    renderAll();
+  }
+
+  function monthlyProgressForType(typeId, typeName) {
+    return state.monthProgress.reduce((sum, p) => {
+      const match = key(p.machine_type_code) === key(typeId) || key(p.machine_type_name) === key(typeName) || key(p.machine_type_name) === key(typeId);
+      return match ? sum + num(p.consumed_standard_minutes, 0) : sum;
+    }, 0);
+  }
+
+  function renderTargets() {
+    const host = $("targetTable");
+    if (!state.targets.length) {
+      host.innerHTML = `<div class="empty-state">Add monthly targets like Booster - Water Cooled, Online, Air Cooled etc.</div>`;
+      return;
+    }
+    const month = $("targetMonth").value || currentMonth();
+    const totalDays = workingDatesBetween(monthStart(month), monthEnd(month)).length || 1;
+    const elapsedDays = workingDatesBetween(monthStart(month), minIso(today(), monthEnd(month))).length || 1;
+    const rows = state.targets.map((t) => {
+      const targetStd = typeStdMinutes(t.typeId) * num(t.qty, 0);
+      const expectedStd = targetStd * (elapsedDays / totalDays);
+      const doneStd = monthlyProgressForType(t.typeId, t.typeName);
+      const gap = doneStd - expectedStd;
+      const behind = gap < -0.5;
+      const stopOt = gap > Math.max(60, targetStd * 0.05);
+      const status = behind ? `Behind ${fmtHr(Math.abs(gap))}` : stopOt ? `Ahead ${fmtHr(gap)} - stop extra OT` : `On Track ${fmtHr(gap)}`;
+      return `<tr><td>${esc(t.typeName)}</td><td>${esc(t.qty)}</td><td>${fmtHr(targetStd)}</td><td>${fmtHr(expectedStd)}</td><td>${fmtHr(doneStd)}</td><td><span class="badge ${behind ? "noskill" : stopOt ? "complete" : "medium"}">${esc(status)}</span></td><td>${behind ? fmtHr(Math.abs(gap)) : "0.0 h"}</td><td><button class="remove-btn" data-remove-target="${esc(t.id)}" type="button">Remove</button></td></tr>`;
+    }).join("");
+    host.innerHTML = `<table class="cap-table"><thead><tr><th>Machine Type</th><th>Month Qty</th><th>Target Std Hrs</th><th>Expected Till Today</th><th>Done Std Hrs</th><th>Status</th><th>OT Need</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
+    document.querySelectorAll("[data-remove-target]").forEach((el) => el.onclick = () => removeTarget(el.dataset.removeTarget));
   }
 
   function progressKey(machineNo, type, dept, subwork) {
@@ -195,8 +403,7 @@
       const consumed = num(p.consumed_standard_minutes, 0);
       if (!machineNo || !dept || !subwork || consumed <= 0) return;
       [p.machine_type_code, p.machine_type_name].map(clean).filter(Boolean).forEach((type) => {
-        const k = progressKey(machineNo, type, dept, subwork);
-        map.set(k, Math.max(num(map.get(k), 0), consumed));
+        map.set(progressKey(machineNo, type, dept, subwork), consumed);
       });
     });
     return map;
@@ -306,21 +513,90 @@
   }
 
   function nextOpenTask(tasks) {
-    return tasks.filter((t) => t.remainingStd > 0.01).sort(taskSort)[0] || null;
+    const open = tasks.filter((t) => t.remainingStd > 0.01).sort(taskSort);
+    if (!open.length) return null;
+    if ($("sequenceMode")?.value !== "strict") return open[0];
+    const minPriority = Math.min(...open.map((t) => num(t.priority, 9999)));
+    return open.find((t) => num(t.priority, 9999) === minPriority) || open[0];
   }
 
   function bestEmployeeForTask(empStates, skillMap, task) {
-    const candidates = empStates
-      .filter((e) => e.available > 0.5)
-      .map((e) => {
-        const skill = skillFor(skillMap, e.emp, task);
-        const conf = confidenceScore(skill);
-        const deptMatch = key(e.emp.department) && key(e.emp.department) === key(task.dept) ? 1 : 0;
-        const score = (conf * 1000) + (deptMatch * 80) + planningEff(skill) + Math.min(e.available, 999) / 1000;
-        return { ...e, skill, score };
-      })
-      .sort((a, b) => b.score - a.score || clean(a.emp.name).localeCompare(clean(b.emp.name)));
-    return candidates[0] || null;
+    let best = null;
+    empStates.filter((e) => e.available > 0.5).forEach((e) => {
+      const skill = skillFor(skillMap, e.emp, task);
+      const conf = confidenceScore(skill);
+      const deptMatch = key(e.emp.department) && key(e.emp.department) === key(task.dept) ? 1 : 0;
+      const score = (conf * 1000) + (deptMatch * 80) + planningEff(skill) + Math.min(e.available, 999) / 1000;
+      if (!best || score > best.score || (score === best.score && clean(e.emp.name).localeCompare(clean(best.state.emp.name)) < 0)) {
+        best = { state: e, skill, score };
+      }
+    });
+    return best;
+  }
+
+  function assignTasks(date, empStates, tasks, skillMap, byDemand, completedDemand, assignments, isOvertime = false) {
+    while (empStates.some((e) => e.available > 0.5)) {
+      const task = nextOpenTask(tasks);
+      if (!task) break;
+      const picked = bestEmployeeForTask(empStates, skillMap, task);
+      if (!picked) break;
+      const eff = planningEff(picked.skill);
+      const possibleStd = picked.state.available * (eff / 100);
+      const assignStd = Math.min(task.remainingStd, possibleStd);
+      const planMin = assignStd * (100 / eff);
+      if (assignStd <= 0.01 || planMin <= 0.01) break;
+
+      task.remainingStd -= assignStd;
+      picked.state.available -= planMin;
+
+      const demandItems = byDemand.get(task.demandId) || [];
+      const machineComplete = !completedDemand.has(task.demandId) && demandItems.length && demandItems.every((t) => t.remainingStd <= 0.01);
+      if (machineComplete) completedDemand.add(task.demandId);
+
+      assignments.push({
+        date,
+        empId: picked.state.emp.empId,
+        empName: picked.state.emp.name,
+        empDept: picked.state.emp.department,
+        shiftName: picked.state.shiftName,
+        overtime: isOvertime,
+        machineNo: task.machineNo,
+        typeName: task.typeName,
+        work: task.dept,
+        subwork: task.subwork,
+        priority: task.priority,
+        stdMinutes: assignStd,
+        planMinutes: planMin,
+        balanceMinutes: picked.state.available,
+        confidence: confidenceText(picked.skill),
+        planningEff: eff,
+        targetDate: task.targetDate,
+        machineComplete
+      });
+    }
+  }
+
+  function regularEmpStates(date) {
+    const absent = absentSet(date);
+    const employeesById = new Map(activeEmployees().map((e) => [key(e.empId), e]));
+    const states = [];
+    state.shiftPlans.forEach((sp) => {
+      const shift = shiftById(sp.shiftId);
+      (sp.employeeIds || []).forEach((empId) => {
+        const emp = employeesById.get(key(empId));
+        if (!emp || absent.has(key(emp.empId))) return;
+        states.push({ emp, available: employeeMinutes(emp, sp.shiftId), shiftId: sp.shiftId, shiftName: shift?.name || sp.shiftId, overtime: false });
+      });
+    });
+    return states;
+  }
+
+  function overtimeEmpStates(date) {
+    const absent = absentSet(date);
+    const employeesById = new Map(activeEmployees().map((e) => [key(e.empId), e]));
+    const otMax = Math.max(0, num($("otMaxMinutes")?.value, 0));
+    if (otMax <= 0) return [];
+    return state.overtimeEmpIds.map((empId) => employeesById.get(key(empId))).filter((emp) => emp && !absent.has(key(emp.empId))).map((emp) => ({ emp, available: otMax, shiftId: "OT", shiftName: "Overtime", overtime: true }));
   }
 
   function generatePlan(options = {}) {
@@ -332,64 +608,23 @@
     const absentDates = new Map();
     const byDemand = tasksByDemand(tasks);
     const completedDemand = new Set();
+    const dateRoster = new Map();
 
     demandSorted().forEach((d) => {
       const items = byDemand.get(d.id) || [];
       if (items.length && items.every((t) => t.remainingStd <= 0.01)) {
         completedDemand.add(d.id);
-        completionNotes.push({
-          date: dates[0] || $("fromDate").value,
-          priority: d.priority,
-          machineNo: d.machineNo,
-          typeName: d.typeName,
-          message: "Machine already completed from production entries before this plan."
-        });
+        completionNotes.push({ date: dates[0] || $("fromDate").value, priority: d.priority, machineNo: d.machineNo, typeName: d.typeName, message: "Machine already completed from production entries before this plan." });
       }
     });
 
     dates.forEach((date) => {
-      const absent = absentSet(date);
-      const empStates = activeEmployees()
-        .filter((e) => !absent.has(key(e.empId)))
-        .map((emp) => ({ emp, available: employeeMinutes(emp) }))
-        .sort((a, b) => clean(a.emp.department).localeCompare(clean(b.emp.department)) || clean(a.emp.name).localeCompare(clean(b.emp.name)));
+      const regularStates = regularEmpStates(date);
+      dateRoster.set(date, regularStates.map((s) => ({ empId: s.emp.empId, empName: s.emp.name, empDept: s.emp.department, shiftName: s.shiftName })));
+      assignTasks(date, regularStates, tasks, skillMap, byDemand, completedDemand, assignments, false);
 
-      while (empStates.some((e) => e.available > 0.5)) {
-        const task = nextOpenTask(tasks);
-        if (!task) break;
-        const picked = bestEmployeeForTask(empStates, skillMap, task);
-        if (!picked) break;
-        const eff = planningEff(picked.skill);
-        const possibleStd = picked.available * (eff / 100);
-        const assignStd = Math.min(task.remainingStd, possibleStd);
-        const planMin = assignStd * (100 / eff);
-        if (assignStd <= 0.01 || planMin <= 0.01) break;
-
-        task.remainingStd -= assignStd;
-        picked.available -= planMin;
-
-        const demandItems = byDemand.get(task.demandId) || [];
-        const machineComplete = !completedDemand.has(task.demandId) && demandItems.length && demandItems.every((t) => t.remainingStd <= 0.01);
-        if (machineComplete) completedDemand.add(task.demandId);
-
-        assignments.push({
-          date,
-          empId: picked.emp.empId,
-          empName: picked.emp.name,
-          empDept: picked.emp.department,
-          machineNo: task.machineNo,
-          typeName: task.typeName,
-          work: task.dept,
-          subwork: task.subwork,
-          priority: task.priority,
-          stdMinutes: assignStd,
-          planMinutes: planMin,
-          balanceMinutes: picked.available,
-          confidence: confidenceText(picked.skill),
-          planningEff: eff,
-          targetDate: task.targetDate,
-          machineComplete
-        });
+      if (tasks.some((t) => t.remainingStd > 0.01)) {
+        assignTasks(date, overtimeEmpStates(date), tasks, skillMap, byDemand, completedDemand, assignments, true);
       }
 
       state.absences.forEach((a) => {
@@ -402,20 +637,23 @@
     });
 
     const remainingStd = tasks.reduce((s, t) => s + Math.max(0, t.remainingStd), 0);
-    state.plan = { dates, tasks, assignments, completionNotes, remainingStd, doneMachines: completedDemand.size, totalMachines: state.demand.length, absentDates };
+    const overtimeMinutes = assignments.filter((a) => a.overtime).reduce((s, a) => s + a.planMinutes, 0);
+    state.plan = { dates, tasks, assignments, completionNotes, remainingStd, overtimeMinutes, doneMachines: completedDemand.size, totalMachines: state.demand.length, absentDates, dateRoster };
     if (options.render !== false) renderAll();
   }
 
   function summarizeCapacity() {
     const dates = workingDates();
-    let totalMin = 0;
+    let regularMin = 0;
+    let otMin = 0;
     let absentCount = 0;
     dates.forEach((date) => {
       const absent = absentSet(date);
       absentCount += absent.size;
-      activeEmployees().forEach((e) => { if (!absent.has(key(e.empId))) totalMin += employeeMinutes(e); });
+      regularEmpStates(date).forEach((e) => { regularMin += e.available; });
+      overtimeEmpStates(date).forEach((e) => { otMin += e.available; });
     });
-    return { dates, totalEmployees: activeEmployees().length, absentCount, totalMin };
+    return { dates, selectedEmployees: new Set(state.shiftPlans.flatMap((sp) => sp.employeeIds || []).map(key)).size, absentCount, regularMin, otMin };
   }
 
   function requirementSummary(tasks = buildTasks()) {
@@ -438,9 +676,12 @@
     const c = summarizeCapacity();
     $("workDays").value = String(c.dates.length);
     $("capacityMetrics").innerHTML = [
-      metric("Active Employees", c.totalEmployees),
+      metric("Selected Employees", c.selectedEmployees),
       metric("Planned Absent Days", c.absentCount),
-      metric("Available Hours", fmtHr(c.totalMin), c.totalMin ? "green" : "red")
+      metric("Regular Hours", fmtHr(c.regularMin), c.regularMin ? "green" : "red"),
+      metric("OT Pref People", state.overtimeEmpIds.length),
+      metric("OT Potential", fmtHr(c.otMin), c.otMin ? "orange" : ""),
+      metric("Total With OT", fmtHr(c.regularMin + c.otMin), (c.regularMin + c.otMin) ? "green" : "red")
     ].join("");
   }
 
@@ -495,24 +736,26 @@
     const completedBefore = tasks.reduce((s, t) => s + num(t.completedBeforeStd, 0), 0);
     const req = tasks.reduce((s, t) => s + Math.max(0, t.remainingStd), 0);
     const remaining = state.plan ? state.plan.remainingStd : req;
-    const gap = c.totalMin - req;
+    const gap = c.regularMin - req;
+    const withOtGap = (c.regularMin + c.otMin) - req;
     $("resultMetrics").innerHTML = [
       metric("Machine Demand", state.demand.length),
       metric("Original Std Hrs", fmtHr(originalReq)),
       metric("Done From Entries", fmtHr(completedBefore), completedBefore ? "green" : ""),
       metric("Remaining Std Hrs", fmtHr(req)),
-      metric("Available Hours", fmtHr(c.totalMin), c.totalMin >= req ? "green" : "orange"),
-      metric("Capacity Gap", fmtHr(gap), gap >= 0 ? "green" : "red"),
+      metric("Regular Gap", fmtHr(gap), gap >= 0 ? "green" : "red"),
+      metric("Gap With OT", fmtHr(withOtGap), withOtGap >= 0 ? "green" : "red"),
+      metric("Planned OT", state.plan ? fmtHr(state.plan.overtimeMinutes) : "-", state.plan?.overtimeMinutes ? "orange" : ""),
       metric("Plan Completed", state.plan ? `${state.plan.doneMachines}/${state.plan.totalMachines}` : "-"),
       metric("Unplanned Std Hrs", state.plan ? fmtHr(remaining) : "-")
     ].join("");
 
     const box = $("warningBox");
-    box.className = `warning-box ${gap >= 0 ? "ok" : ""}`;
+    box.className = `warning-box ${withOtGap >= 0 ? "ok" : ""}`;
     if (!state.demand.length) box.textContent = "Add machine demand to see shortage, overtime and multiskilling requirement.";
-    else if (completedBefore > 0 && gap >= 0) box.textContent = `Production entries up to ${dateText(progressCutoffDate())} reduced the plan by ${fmtHr(completedBefore)}. Basic remaining capacity is sufficient.`;
-    else if (gap >= 0) box.textContent = "Basic capacity is sufficient by remaining standard hours. Final plan still depends on skill availability and planned absences.";
-    else box.textContent = `Shortage by remaining standard capacity: ${fmtHr(Math.abs(gap))}. Generate the plan to see date-wise employee gap, OT need and multiskilling requirement.`;
+    else if (gap >= 0) box.textContent = "Regular selected shift capacity is sufficient. Overtime can be stopped unless target date risk exists.";
+    else if (withOtGap >= 0) box.textContent = `Regular capacity is short by ${fmtHr(Math.abs(gap))}, but selected OT preference can cover it. Use OT only for priority/target risk.`;
+    else box.textContent = `Even with selected OT, shortage remains ${fmtHr(Math.abs(withOtGap))}. Need more manpower, multiskilling, target date change, or reduce machine demand.`;
   }
 
   function renderPlan() {
@@ -522,43 +765,46 @@
       return;
     }
     if (!state.plan.assignments.length && !state.plan.completionNotes.length) {
-      host.innerHTML = `<div class="empty-state">No assignment generated. Check demand, date range, employee capacity and skill matrix.</div>`;
+      host.innerHTML = `<div class="empty-state">No assignment generated. Check demand, date range, employee capacity, selected shifts and skill matrix.</div>`;
       return;
     }
 
     const byDate = new Map();
-    state.plan.dates.forEach((date) => byDate.set(date, { rows: [], notes: [] }));
+    state.plan.dates.forEach((date) => byDate.set(date, { rows: [], notes: [], roster: state.plan.dateRoster?.get(date) || [] }));
     state.plan.assignments.forEach((a) => {
-      if (!byDate.has(a.date)) byDate.set(a.date, { rows: [], notes: [] });
+      if (!byDate.has(a.date)) byDate.set(a.date, { rows: [], notes: [], roster: [] });
       byDate.get(a.date).rows.push(a);
     });
     state.plan.completionNotes.forEach((n) => {
-      if (!byDate.has(n.date)) byDate.set(n.date, { rows: [], notes: [] });
+      if (!byDate.has(n.date)) byDate.set(n.date, { rows: [], notes: [], roster: [] });
       byDate.get(n.date).notes.push(n);
     });
 
     host.innerHTML = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, bucket]) => {
-      const rows = bucket.rows.sort((a, b) => clean(a.empName).localeCompare(clean(b.empName)) || a.priority - b.priority || clean(a.machineNo).localeCompare(clean(b.machineNo)));
+      const rows = bucket.rows.sort((a, b) => clean(a.empName).localeCompare(clean(b.empName)) || (a.overtime ? 1 : 0) - (b.overtime ? 1 : 0) || a.priority - b.priority || clean(a.machineNo).localeCompare(clean(b.machineNo)));
       const byEmp = new Map();
+      (bucket.roster || []).forEach((r) => byEmp.set(r.empId, { meta: r, rows: [] }));
       rows.forEach((r) => {
-        if (!byEmp.has(r.empId)) byEmp.set(r.empId, []);
-        byEmp.get(r.empId).push(r);
+        if (!byEmp.has(r.empId)) byEmp.set(r.empId, { meta: { empId: r.empId, empName: r.empName, empDept: r.empDept, shiftName: r.shiftName }, rows: [] });
+        byEmp.get(r.empId).rows.push(r);
       });
       const notes = bucket.notes.map((n) => `<div class="complete-note">P${esc(n.priority)} | ${esc(n.machineNo)} | ${esc(n.typeName)} — ${esc(n.message)}</div>`).join("");
-      const empHtml = [...byEmp.entries()].map(([empId, empRows]) => {
-        const first = empRows[0];
-        const totalPlan = empRows.reduce((s, x) => s + x.planMinutes, 0);
-        return `<div class="employee-card"><div class="employee-head"><div><div class="employee-name">${esc(empId)} - ${esc(first.empName)}</div><div class="employee-meta">${esc(first.empDept || "No department")}</div></div><div class="employee-meta">Day Load: ${fmtHr(totalPlan)}</div></div><div class="table-host"><table class="cap-table"><thead><tr><th>Priority</th><th>Machine No.</th><th>Type</th><th>Work</th><th>Subwork</th><th>Std Min</th><th>Plan Min</th><th>Balance</th><th>Status</th></tr></thead><tbody>${empRows.map(rowPlanHtml).join("")}</tbody></table></div></div>`;
+      const empHtml = [...byEmp.values()].map((empBucket) => {
+        const rows = empBucket.rows;
+        const first = rows[0] || empBucket.meta;
+        const totalPlan = rows.reduce((s, x) => s + x.planMinutes, 0);
+        const body = rows.length ? rows.map(rowPlanHtml).join("") : `<tr><td colspan="10" class="muted-cell">No work assigned</td></tr>`;
+        return `<div class="employee-card"><div class="employee-head"><div><div class="employee-name">${esc(first.empId)} - ${esc(first.empName)}</div><div class="employee-meta">${esc(first.empDept || "No department")} | ${esc(first.shiftName || "Shift")}</div></div><div class="employee-meta">Day Load: ${fmtHr(totalPlan)}</div></div><div class="table-host"><table class="cap-table"><thead><tr><th>Shift</th><th>Priority</th><th>Machine No.</th><th>Type</th><th>Work</th><th>Subwork</th><th>Std Min</th><th>Plan Min</th><th>Balance</th><th>Status</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
       }).join("");
-      return `<div class="date-plan-card"><div class="date-title">${dateText(date)} — ${fmtHr(rows.reduce((s, x) => s + x.planMinutes, 0))}</div>${notes}${empHtml || `<div class="empty-state">No work assigned on this date.</div>`}</div>`;
+      return `<div class="date-plan-card"><div class="date-title">${dateText(date)} — ${fmtHr(rows.reduce((s, x) => s + x.planMinutes, 0))}</div>${notes}${empHtml || `<div class="empty-state">No working employees selected for this date.</div>`}</div>`;
     }).join("");
   }
 
   function rowPlanHtml(a) {
     const cls = key(a.confidence).replace(/\s+/g, "") || "noskill";
-    const status = a.machineComplete ? "Machine completed after this work" : a.confidence;
-    const statusClass = a.machineComplete ? "complete" : cls === "noskill" ? "noskill" : cls;
-    return `<tr><td>${esc(a.priority)}</td><td>${esc(a.machineNo)}</td><td>${esc(a.typeName)}</td><td>${esc(a.work)}</td><td>${esc(a.subwork)}</td><td>${fmtMin(a.stdMinutes)}</td><td>${fmtMin(a.planMinutes)}</td><td>${fmtMin(a.balanceMinutes)}</td><td><span class="badge ${statusClass}">${esc(status)}</span></td></tr>`;
+    const status = a.machineComplete ? "Machine completed after this work" : a.overtime ? `OT - ${a.confidence}` : a.confidence;
+    const statusClass = a.machineComplete ? "complete" : a.overtime ? "ot" : cls === "noskill" ? "noskill" : cls;
+    return `<tr><td>${esc(a.shiftName || "")}</td><td>${esc(a.priority)}</td><td>${esc(a.machineNo)}</td><td>${esc(a.typeName)}</td><td>${esc(a.work)}</td><td>${esc(a.subwork)}</td><td>${fmtMin(a.stdMinutes)}</td><td>${fmtMin(a.planMinutes)}</td><td>${fmtMin(a.balanceMinutes)}</td><td><span class="badge ${statusClass}">${esc(status)}</span></td></tr>`;
   }
 
   function planText() {
@@ -578,8 +824,8 @@
       });
       byEmp.forEach((rows, empId) => {
         lines.push(`  ${empId} - ${rows[0].empName}`);
-        rows.sort((a, b) => a.priority - b.priority || clean(a.machineNo).localeCompare(clean(b.machineNo))).forEach((r) => {
-          lines.push(`    P${r.priority} | ${r.machineNo} | ${r.typeName} | ${r.work} | ${r.subwork} | Std ${fmtMin(r.stdMinutes)} | Plan ${fmtMin(r.planMinutes)} | ${r.confidence}${r.machineComplete ? " | MACHINE COMPLETED" : ""}`);
+        rows.sort((a, b) => (a.overtime ? 1 : 0) - (b.overtime ? 1 : 0) || a.priority - b.priority || clean(a.machineNo).localeCompare(clean(b.machineNo))).forEach((r) => {
+          lines.push(`    ${r.shiftName} | P${r.priority} | ${r.machineNo} | ${r.typeName} | ${r.work} | ${r.subwork} | Std ${fmtMin(r.stdMinutes)} | Plan ${fmtMin(r.planMinutes)} | ${r.confidence}${r.machineComplete ? " | MACHINE COMPLETED" : ""}`);
         });
       });
       lines.push("");
@@ -589,30 +835,42 @@
 
   function savePlan() {
     const data = {
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       fromDate: $("fromDate").value,
       toDate: $("toDate").value,
-      shift: $("shiftSelect").value,
+      targetMonth: $("targetMonth").value,
+      otMaxMinutes: $("otMaxMinutes").value,
+      sequenceMode: $("sequenceMode").value,
       seq: state.seq,
-      demand: state.demand
+      shiftSeq: state.shiftSeq,
+      demand: state.demand,
+      targets: state.targets,
+      shiftPlans: state.shiftPlans,
+      overtimeEmpIds: state.overtimeEmpIds
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    alert("Capacity plan saved. Demand and date range will reload after refresh; assignments will recalculate from latest production entries.");
+    alert("Capacity plan saved. It will reload after refresh; assignments recalculate from latest production entries.");
   }
 
   function restoreSavedPlanOnce() {
     if (state.restored) return;
     state.restored = true;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("spwt_capacity_plan_v1");
       if (!raw) return;
       const data = JSON.parse(raw);
       if (data?.fromDate) $("fromDate").value = data.fromDate;
       if (data?.toDate) $("toDate").value = data.toDate;
-      if (data?.shift && [...$("shiftSelect").options].some((o) => o.value === data.shift)) $("shiftSelect").value = data.shift;
+      if (data?.targetMonth) $("targetMonth").value = data.targetMonth;
+      if (data?.otMaxMinutes) $("otMaxMinutes").value = data.otMaxMinutes;
+      if (data?.sequenceMode) $("sequenceMode").value = data.sequenceMode;
       state.demand = Array.isArray(data?.demand) ? data.demand : [];
+      state.targets = Array.isArray(data?.targets) ? data.targets : [];
+      state.shiftPlans = Array.isArray(data?.shiftPlans) ? data.shiftPlans : [];
+      state.overtimeEmpIds = Array.isArray(data?.overtimeEmpIds) ? data.overtimeEmpIds : [];
       state.seq = Math.max(num(data?.seq, 1), ...state.demand.map((d) => num(d.seq, 0) + 1), 1);
+      state.shiftSeq = Math.max(num(data?.shiftSeq, 1), state.shiftPlans.length + 1, 1);
     } catch (err) {
       console.warn("Saved capacity plan restore failed", err);
     }
@@ -625,6 +883,9 @@
   }
 
   function renderAll() {
+    renderShiftAssignments();
+    renderOvertime();
+    renderTargets();
     renderCapacity();
     renderDemand();
     renderRequirement();
@@ -641,14 +902,18 @@
   function wire() {
     $("fromDate").value = today(0);
     $("toDate").value = today(6);
+    $("targetMonth").value = currentMonth();
     $("refreshBtn").onclick = loadData;
     $("savePlanBtn").onclick = savePlan;
+    $("addShiftBtn").onclick = addShift;
+    $("addTargetBtn").onclick = addTarget;
     $("addDemandBtn").onclick = addDemand;
     $("generatePlanBtn").onclick = generatePlan;
     $("printPlanBtn").onclick = () => window.print();
     $("copyPlanBtn").onclick = copyPlan;
     $("fromDate").onchange = loadData;
-    ["toDate", "shiftSelect"].forEach((id) => $(id).onchange = recalc);
+    $("targetMonth").onchange = loadData;
+    ["toDate", "otMaxMinutes", "sequenceMode"].forEach((id) => $(id).onchange = recalc);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
