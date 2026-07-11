@@ -45,9 +45,17 @@ function progressKeyOf(line = {}) {
   ].map(key).join("|");
 }
 
-async function listProductionProgress(params = {}) {
+function buildDateFilter(params = {}) {
+  const fromDate = clean(params.from_date || params.fromDate);
   const cutoffDate = clean(params.cutoff_date || params.cutoffDate || params.to_date || params.toDate);
-  const filter = cutoffDate ? `work_date<=\"${pbEscape(cutoffDate)}\"` : "";
+  const parts = [];
+  if (fromDate) parts.push(`work_date>=\"${pbEscape(fromDate)}\"`);
+  if (cutoffDate) parts.push(`work_date<=\"${pbEscape(cutoffDate)}\"`);
+  return { fromDate, cutoffDate, filter: parts.join(" && ") };
+}
+
+async function listProductionProgress(params = {}) {
+  const { fromDate, cutoffDate, filter } = buildDateFilter(params);
 
   let lines = [];
   try {
@@ -96,7 +104,7 @@ async function listProductionProgress(params = {}) {
     consumed_actual_minutes: round1(x.consumed_actual_minutes)
   })).sort((a, b) => clean(a.machine_no).localeCompare(clean(b.machine_no)) || clean(a.department_name).localeCompare(clean(b.department_name)) || clean(a.subwork_name).localeCompare(clean(b.subwork_name)));
 
-  return { cutoffDate, records, total: records.length };
+  return { fromDate, cutoffDate, records, total: records.length };
 }
 
 module.exports = { listProductionProgress };
