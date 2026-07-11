@@ -10,6 +10,7 @@ const {
   deletePlannedAbsence,
   listSkillMatrix,
   saveSkillMatrix,
+  autoCreateSkillsFromHistory,
   deleteSkillMatrix
 } = require("../services/adminWriteServiceV3");
 const { saveEmployeeAvailableMinutes } = require("../services/employeeCapacityService");
@@ -241,6 +242,16 @@ router.post("/skill-matrix", async (req, res) => {
   } catch (err) {
     console.error("POST /api/admin/skill-matrix failed:", err);
     res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save skill matrix", details: err.details || null });
+  }
+});
+
+router.post("/skill-matrix/sync-history", async (req, res) => {
+  try {
+    const data = await autoCreateSkillsFromHistory(req.body || {});
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("POST /api/admin/skill-matrix/sync-history failed:", err);
+    res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to auto add skills from production history", details: err.details || null });
   }
 });
 
