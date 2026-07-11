@@ -240,8 +240,23 @@ input[readonly] { background: #f1f5f9; }
   margin-bottom: 28px;
 }
 
-.employee-card {
+.date-plan-card {
   margin-top: 14px;
+  border: 1px solid var(--cap-border);
+  border-radius: 14px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.date-plan-card > .date-title {
+  margin: 0;
+  padding: 12px 14px;
+  background: #eaf2ff;
+  border-bottom: 1px solid var(--cap-border);
+}
+
+.employee-card {
+  margin: 12px 14px 14px;
   border: 1px solid var(--cap-border);
   border-radius: 14px;
   overflow: hidden;
@@ -280,6 +295,17 @@ input[readonly] { background: #f1f5f9; }
   font-weight: 950;
 }
 
+.complete-note {
+  margin: 10px 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -296,6 +322,7 @@ input[readonly] { background: #f1f5f9; }
 .badge.medium { background: #eff6ff; color: #1d4ed8; }
 .badge.high { background: #f0fdf4; color: #166534; }
 .badge.noskill { background: #fef2f2; color: #b91c1c; }
+.badge.complete { background: #dcfce7; color: #166534; }
 
 .remove-btn {
   background: #dc2626;
@@ -331,6 +358,7 @@ input[readonly] { background: #f1f5f9; }
   }
   .sp-content { padding: 0 !important; }
   .sp-panel { box-shadow: none !important; border: 0 !important; }
+  .date-plan-card { break-inside: avoid; }
   .cap-table th,
   .cap-table td { font-size: 10px; padding: 5px; }
 }
