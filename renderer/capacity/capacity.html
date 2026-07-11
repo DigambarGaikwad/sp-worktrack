@@ -25,17 +25,55 @@
         </div>
       </section>
 
+      <section class="sp-panel target-panel">
+        <div class="section-title">Monthly Target / Behind-Ahead Status</div>
+        <div class="target-form">
+          <label>Target Month<input id="targetMonth" type="month" /></label>
+          <label>Machine Type<select id="targetMachineTypeSelect"></select></label>
+          <label>Target Qty<input id="targetQty" type="number" min="1" value="1" /></label>
+          <button id="addTargetBtn" type="button">Add Target</button>
+        </div>
+        <div class="note">Shows month target in standard manhours, day-wise expected progress, behind/ahead status and overtime need. If ahead, system advises to stop extra overtime.</div>
+        <div id="targetTable" class="table-host"></div>
+      </section>
+
       <section class="planner-grid">
         <div class="sp-panel setup-card">
-          <div class="section-title">1. Planning Window</div>
+          <div class="section-title">1. Planning Window / Shift Capacity</div>
           <div class="form-grid two">
             <label>From Date<input id="fromDate" type="date" /></label>
             <label>To Date<input id="toDate" type="date" /></label>
-            <label>Shift<select id="shiftSelect"></select></label>
             <label>Working Days<input id="workDays" type="text" readonly /></label>
+            <label>OT Max / Person / Day<input id="otMaxMinutes" type="number" min="0" value="120" /></label>
           </div>
+
+          <div class="subsection-row">
+            <div class="subsection-title">Shift Assignment</div>
+            <button id="addShiftBtn" type="button">Add Shift</button>
+          </div>
+          <div id="shiftAssignmentsHost" class="shift-assignment-host"></div>
+
+          <div class="subsection-row">
+            <div class="subsection-title">Overtime Preference</div>
+            <span class="mini-note">OT selection is independent. One person cannot be in two normal shifts, but can be selected for OT.</span>
+          </div>
+          <div id="overtimeHost" class="checkbox-flex"></div>
+
+          <div class="subsection-row sequencing-row">
+            <div>
+              <div class="subsection-title">Optional Work Sequencing</div>
+              <div class="mini-note">Use strict sequence when next-priority machine cannot start before previous priority is completed.</div>
+            </div>
+            <label class="compact-label">Sequencing
+              <select id="sequenceMode">
+                <option value="priority">Priority sorted only</option>
+                <option value="strict">Strict priority gate</option>
+              </select>
+            </label>
+          </div>
+
           <div class="metric-grid" id="capacityMetrics"></div>
-          <div class="note">Available hours are taken employee-wise from Admin → Employee tab. Planned absent employees are removed date-wise. Completed work up to the day before From Date is reduced from the plan.</div>
+          <div class="note">Available hours are calculated shift-wise from selected employees. Planned absent employees are removed date-wise. Completed work up to the day before From Date is reduced from the plan.</div>
         </div>
 
         <div class="sp-panel demand-card">
@@ -67,7 +105,7 @@
       <section class="sp-panel plan-control">
         <div>
           <div class="section-title">5. Generate Production Plan</div>
-          <div class="note">Date-wise plan uses machine priority, completed production entries, skill confidence, planning efficiency cap, target dates and available minutes per day.</div>
+          <div class="note">Date-wise plan uses selected shift manpower, OT preference, machine priority, completed entries, skill confidence, planning efficiency cap, target dates and available minutes per day.</div>
         </div>
         <button id="generatePlanBtn" type="button">Generate Production Plan</button>
       </section>
