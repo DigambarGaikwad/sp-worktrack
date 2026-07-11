@@ -1,6 +1,7 @@
 // server/services/skillMatrixService.js
 // Stores employee skill matrix as one admin_settings record per skill.
-// Efficiency is derived from production_entry_lines history, not hardcoded/manual input.
+// Raw efficiency is derived from production_entry_lines history.
+// Planning efficiency is capped for safe capacity planning.
 
 const crypto = require("crypto");
 const { pocketBaseRequest } = require("../adapters/pocketbaseClient");
@@ -183,10 +184,6 @@ function lineRecord(line = {}) {
   };
 }
 
-function lineToPerformanceKey(line = {}) {
-  return uniqueKey(lineRecord(line));
-}
-
 async function buildPerformanceMap() {
   const lines = await listAll("production_entry_lines", { sort: "-work_date" }).catch(() => []);
   const map = new Map();
@@ -228,11 +225,27 @@ async function buildPerformanceMap() {
   return map;
 }
 
+function confidenceLevel(historyCount) {
+  const count = num(historyCount, 0);
+  if (count >= 8) return "High";
+  if (count >= 3) return "Medium";
+  if (count >= 1) return "Low";
+  return "No History";
+}
+
+function planningEfficiency(rawEfficiency, historyCount) {
+  const count = num(historyCount, 0);
+  const raw = Math.max(0, num(rawEfficiency, 0));
+  if (count < 3) return 100;
+  return round1(Math.min(raw, 120));
+}
+
 function applyPerformance(records = [], performanceMap = new Map()) {
   return records.map((record) => {
     const perf = performanceMap.get(uniqueKey(record)) || null;
     const historyCount = num(perf?.history_count, 0);
     const historyEff = historyCount ? num(perf.history_efficiency_pct, 0) : 0;
+    const planEff = planningEfficiency(historyEff, historyCount);
     return {
       ...record,
       emp_name: clean(record.emp_name || perf?.emp_name),
@@ -244,6 +257,8 @@ function applyPerformance(records = [], performanceMap = new Map()) {
       history_standard_minutes: round1(perf?.history_standard_minutes || 0),
       history_actual_minutes: round1(perf?.history_actual_minutes || 0),
       history_efficiency_pct: round1(historyEff),
+      planning_efficiency_pct: planEff,
+      confidence_level: confidenceLevel(historyCount),
       first_work_date: clean(perf?.first_work_date),
       last_work_date: clean(perf?.last_work_date)
     };
@@ -300,9 +315,16 @@ function buildSummary(records) {
   const totalStd = historyRows.reduce((s, r) => s + num(r.history_standard_minutes, 0), 0);
   const totalActual = historyRows.reduce((s, r) => s + num(r.history_actual_minutes, 0), 0);
   const avgEfficiency = totalActual > 0 ? round1((totalStd / totalActual) * 100) : 0;
+  const avgPlanningEfficiency = active.length ? round1(active.reduce((s, r) => s + num(r.planning_efficiency_pct, 100), 0) / active.length) : 0;
   const independent = active.filter(r => r.can_work_independently).length;
   const trainers = active.filter(r => r.can_train_others).length;
-  return { activeSkills: active.length, employees: employees.size, departments: departments.size, subworks: subworks.size, avgEfficiency, historySkills: historyRows.length, independent, trainers };
+  const confidence = {
+    high: active.filter(r => r.confidence_level === "High").length,
+    medium: active.filter(r => r.confidence_level === "Medium").length,
+    low: active.filter(r => r.confidence_level === "Low").length,
+    none: active.filter(r => r.confidence_level === "No History").length
+  };
+  return { activeSkills: active.length, employees: employees.size, departments: departments.size, subworks: subworks.size, avgEfficiency, avgPlanningEfficiency, historySkills: historyRows.length, independent, trainers, confidence };
 }
 
 async function listSkillMatrix(query = {}) {
