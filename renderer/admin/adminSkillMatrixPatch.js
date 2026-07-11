@@ -3,7 +3,7 @@
 
 (function () {
   const API_BASE_URL = window.SPWT_CONFIG?.API_BASE_URL || "http://localhost:3032";
-  const REQUEST_TIMEOUT_MS = 20000;
+  const REQUEST_TIMEOUT_MS = 60000;
   let master = null;
   let skills = [];
 
@@ -113,7 +113,7 @@
             <label class="quality-recheck-line"><input id="skillTrainerInput" type="checkbox" /> Can train others</label>
           </div>
           <div class="field" style="margin-top:10px;"><label>Sub Work Checklist</label><div id="skillSubworkChecklist" class="skill-checklist"></div></div>
-          <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn green" id="saveSkillMatrixBtn" type="button">Add Selected Skills</button><button class="btn grey" id="refreshSkillMatrixBtn" type="button">Refresh</button><span class="small-hint" id="skillMatrixStatus"></span></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn green" id="saveSkillMatrixBtn" type="button">Add Selected Skills</button><button class="btn blue" id="autoSkillHistoryBtn" type="button">Auto Add From Past Entries</button><button class="btn grey" id="refreshSkillMatrixBtn" type="button">Refresh</button><span class="small-hint" id="skillMatrixStatus"></span></div>
         </div>
         <div class="skill-matrix-card">
           <div class="row-between" style="gap:10px;flex-wrap:wrap;"><div><div class="section-title" style="font-size:18px;">Employee-wise Skill Coverage</div><div class="small-hint">One employee row contains all selected machine types, departments and sub works.</div></div><div class="row" style="gap:8px;flex-wrap:wrap;"><select id="skillFilterEmp" class="admin-select"><option value="">All Employees</option></select><select id="skillFilterType" class="admin-select"><option value="">All Machine Types</option></select><select id="skillFilterDept" class="admin-select"><option value="">All Departments</option></select></div></div>
@@ -309,6 +309,21 @@
     } catch (err) { setStatus(err?.message || String(err), "error"); alert(err?.message || String(err)); }
   }
 
+  async function autoSyncHistory() {
+    if (!confirm("Auto add missing skill records from past production entries? Existing/manual skill records will not be changed.")) return;
+    try {
+      setStatus("Scanning production history...");
+      const data = await requestJson("/api/admin/skill-matrix/sync-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minEntries: 1 })
+      });
+      renderSummary(data.summary || {});
+      await loadAll();
+      setStatus(`Auto sync done. Created: ${data.created || 0}, Existing: ${data.alreadyExists || 0}, Skipped: ${data.skipped || 0}`, "success");
+    } catch (err) { setStatus(err?.message || String(err), "error"); alert(err?.message || String(err)); }
+  }
+
   async function deleteSkill(id) {
     if (!confirm("Delete this skill record?")) return;
     try {
@@ -322,7 +337,7 @@
   function wire() {
     const map = [
       ["skillEmpSelect", "change", updateEmployeeHint], ["skillTypeSelect", "change", updateDepartments], ["skillDeptSelect", "change", updateSubworks],
-      ["saveSkillMatrixBtn", "click", saveSkills], ["refreshSkillMatrixBtn", "click", loadAll],
+      ["saveSkillMatrixBtn", "click", saveSkills], ["autoSkillHistoryBtn", "click", autoSyncHistory], ["refreshSkillMatrixBtn", "click", loadAll],
       ["skillFilterEmp", "change", renderList], ["skillFilterType", "change", renderList], ["skillFilterDept", "change", renderList]
     ];
     map.forEach(([id, ev, fn]) => { const el = $(id); if (el && !el.__skillWired) { el.__skillWired = true; el.addEventListener(ev, fn); } });
