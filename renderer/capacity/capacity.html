@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../shared/appShell.css" />
   <link rel="stylesheet" href="capacity.css" />
   <link rel="stylesheet" href="capacityV2.css" />
+  <link rel="stylesheet" href="capacityV4.css" />
 </head>
 <body>
   <div class="sp-app-shell">
@@ -34,7 +35,7 @@
           <label>Target Qty<input id="targetQty" type="number" min="1" value="1" /></label>
           <button id="addTargetBtn" type="button">Add Target</button>
         </div>
-        <div class="note">Shows monthly target in standard manhours, completed quantity, department-wise manpower need, behind/ahead status and overtime need. If ahead, system advises to stop extra overtime.</div>
+        <div class="note">Shows monthly target in standard manhours, standard hours per machine, completed quantity, department-wise manpower need, behind/ahead status and overtime need. If ahead, system advises to stop extra overtime.</div>
         <div id="targetTable" class="table-host"></div>
         <div id="targetSummaryHost" class="target-summary-host"></div>
       </section>
@@ -137,6 +138,6 @@
       subtitle: "Production & Performance Management System"
     });
   </script>
-  <script src="capacityV3.js"></script>
+  <script src="capacityV4.js"></script>
 </body>
 </html>
