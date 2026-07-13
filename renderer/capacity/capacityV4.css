@@ -1,5 +1,45 @@
 /* renderer/capacity/capacityV4.css */
 
+.capacity-page {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.planner-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.planner-stack > .sp-panel,
+.target-panel,
+.plan-control,
+.plan-preview {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.demand-card,
+.setup-card {
+  overflow: hidden;
+}
+
+.demand-card .demand-form {
+  grid-template-columns: minmax(260px, 1.4fr) 120px 130px 180px 150px;
+}
+
+.demand-card .table-host,
+.setup-card .table-host,
+.target-panel .table-host {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .target-manpower-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -77,6 +117,12 @@
   min-width: 260px;
 }
 
+@media (max-width: 1180px) {
+  .demand-card .demand-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1040px) {
   .target-manpower-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -84,7 +130,8 @@
 }
 
 @media (max-width: 720px) {
-  .target-manpower-cards {
+  .target-manpower-cards,
+  .demand-card .demand-form {
     grid-template-columns: 1fr;
   }
 
@@ -94,5 +141,11 @@
 
   .modal-actions button {
     width: 100%;
+  }
+}
+
+@media print {
+  .target-panel {
+    display: none !important;
   }
 }
