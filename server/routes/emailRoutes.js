@@ -143,7 +143,7 @@ router.post("/rework-other-report/pdf", async (req, res) => {
     const period = clean(req.body?.period || "Selected_Period");
     const pdfBuffer = await generatePdfFromHtml(html);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `filename="${safeFilePart(reportType)}_Report_${safeFilePart(period)}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilePart(reportType)}_Report_${safeFilePart(period)}.pdf"`);
     res.send(Buffer.from(pdfBuffer));
   } catch (err) { console.error("POST /api/email/rework-other-report/pdf failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to generate rework/other report PDF.", details: err.details || null }); }
 });
