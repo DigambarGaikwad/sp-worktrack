@@ -1,0 +1,98 @@
+/* renderer/capacity/capacityV4.css */
+
+.target-manpower-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.dept-person {
+  min-height: 26px;
+  margin: 2px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #0b3f73;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.dept-person:hover {
+  background: #dbeafe;
+}
+
+.cap-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 9999;
+  padding: 16px;
+}
+
+.cap-modal.show {
+  display: flex;
+}
+
+.cap-modal-box {
+  width: min(430px, 100%);
+  border-radius: 18px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.22);
+}
+
+.cap-modal-box h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.cap-modal-box p {
+  margin: 0 0 14px;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.modal-actions button:nth-child(2) {
+  background: #c2410c;
+}
+
+.modal-actions button:nth-child(3) {
+  background: #64748b;
+}
+
+.target-summary-host .cap-table td:nth-child(8) {
+  min-width: 260px;
+}
+
+@media (max-width: 1040px) {
+  .target-manpower-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .target-manpower-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
+    width: 100%;
+  }
+}
