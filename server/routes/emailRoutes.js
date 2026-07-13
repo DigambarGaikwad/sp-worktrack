@@ -15,12 +15,16 @@ const {
   saveReworkOtherReportRecipients,
   sendReworkOtherReport
 } = require("../services/reworkOtherReportEmailService");
-
 const {
   getOvertimeReportRecipients,
   saveOvertimeReportRecipients,
   sendOvertimeReport
 } = require("../services/overtimeReportEmailService");
+const {
+  getCapacityPlanRecipients,
+  saveCapacityPlanRecipients,
+  sendCapacityPlan
+} = require("../services/capacityPlanEmailService");
 const { generatePdfFromHtml } = require("../services/pdfReportService");
 
 const router = express.Router();
@@ -91,7 +95,6 @@ router.post("/rework-other-report/send", async (req, res) => {
   catch (err) { console.error("POST /api/email/rework-other-report/send failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send rework/other report.", details: err.details || null }); }
 });
 
-
 router.get("/overtime-report/recipients", async (req, res) => {
   try { res.json({ ok: true, data: await getOvertimeReportRecipients() }); }
   catch (err) { console.error("GET /api/email/overtime-report/recipients failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load overtime report recipients" }); }
@@ -107,6 +110,32 @@ router.post("/overtime-report/send", async (req, res) => {
   catch (err) { console.error("POST /api/email/overtime-report/send failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send overtime report" }); }
 });
 
+router.get("/capacity-plan/recipients", async (req, res) => {
+  try { res.json({ ok: true, data: await getCapacityPlanRecipients() }); }
+  catch (err) { console.error("GET /api/email/capacity-plan/recipients failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to load production plan recipients.", details: err.details || null }); }
+});
+
+router.post("/capacity-plan/recipients", async (req, res) => {
+  try { res.json({ ok: true, data: await saveCapacityPlanRecipients(req.body || {}) }); }
+  catch (err) { console.error("POST /api/email/capacity-plan/recipients failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to save production plan recipients.", details: err.details || null }); }
+});
+
+router.post("/capacity-plan/send", async (req, res) => {
+  try { res.json({ ok: true, data: await sendCapacityPlan(req.body || {}) }); }
+  catch (err) { console.error("POST /api/email/capacity-plan/send failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to send production plan.", details: err.details || null }); }
+});
+
+router.post("/capacity-plan/pdf", async (req, res) => {
+  try {
+    const html = clean(req.body?.pdfHtml || req.body?.html || "");
+    const period = clean(req.body?.period || "Selected_Period");
+    const pdfBuffer = await generatePdfFromHtml(html);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="Production_Plan_${safeFilePart(period)}.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
+  } catch (err) { console.error("POST /api/email/capacity-plan/pdf failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to generate production plan PDF.", details: err.details || null }); }
+});
+
 router.post("/rework-other-report/pdf", async (req, res) => {
   try {
     const html = clean(req.body?.pdfHtml || req.body?.html || "");
@@ -114,10 +143,9 @@ router.post("/rework-other-report/pdf", async (req, res) => {
     const period = clean(req.body?.period || "Selected_Period");
     const pdfBuffer = await generatePdfFromHtml(html);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeFilePart(reportType)}_Report_${safeFilePart(period)}.pdf"`);
+    res.setHeader("Content-Disposition", `filename="${safeFilePart(reportType)}_Report_${safeFilePart(period)}.pdf"`);
     res.send(Buffer.from(pdfBuffer));
   } catch (err) { console.error("POST /api/email/rework-other-report/pdf failed:", err); res.status(err.status || 500).json({ ok: false, message: err.message || "Failed to generate rework/other report PDF.", details: err.details || null }); }
 });
 
 module.exports = router;
-
