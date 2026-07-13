@@ -40,9 +40,22 @@
         <div id="targetSummaryHost" class="target-summary-host"></div>
       </section>
 
-      <section class="planner-grid">
+      <section class="planner-stack">
+        <div class="sp-panel demand-card">
+          <div class="section-title">1. Machine Demand Builder</div>
+          <div class="demand-form">
+            <label>Machine Type<select id="machineTypeSelect"></select></label>
+            <label>Qty<input id="machineQty" type="number" min="1" value="1" /></label>
+            <label>Priority No.<input id="priorityNo" type="number" min="1" value="1" /></label>
+            <label>Target Date<input id="targetDate" type="date" /></label>
+            <button id="addDemandBtn" type="button">Add Machine</button>
+          </div>
+          <div class="note">Priority is numeric. Plan sorts machines by Priority No. first, then target date, then dependency sequence. Machine numbers are auto-picked from active Admin machines; if not available, “No number given yet” is used.</div>
+          <div id="demandTable" class="table-host"></div>
+        </div>
+
         <div class="sp-panel setup-card">
-          <div class="section-title">1. Planning Window / Shift Capacity</div>
+          <div class="section-title">2. Planning Window / Shift Capacity</div>
           <div class="form-grid two">
             <label>From Date<input id="fromDate" type="date" /></label>
             <label>To Date<input id="toDate" type="date" /></label>
@@ -87,19 +100,6 @@
 
           <div class="metric-grid" id="capacityMetrics"></div>
           <div class="note">Available hours are calculated shift-wise from selected employees. Planned absent employees are removed date-wise. Completed work up to the day before From Date is reduced from the plan.</div>
-        </div>
-
-        <div class="sp-panel demand-card">
-          <div class="section-title">2. Machine Demand Builder</div>
-          <div class="demand-form">
-            <label>Machine Type<select id="machineTypeSelect"></select></label>
-            <label>Qty<input id="machineQty" type="number" min="1" value="1" /></label>
-            <label>Priority No.<input id="priorityNo" type="number" min="1" value="1" /></label>
-            <label>Target Date<input id="targetDate" type="date" /></label>
-            <button id="addDemandBtn" type="button">Add Machine</button>
-          </div>
-          <div class="note">Priority is numeric. Plan sorts machines by Priority No. first, then target date, then dependency sequence. Machine numbers are auto-picked from active Admin machines; if not available, “No number given yet” is used.</div>
-          <div id="demandTable" class="table-host"></div>
         </div>
       </section>
 
