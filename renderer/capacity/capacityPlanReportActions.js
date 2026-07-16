@@ -1,5 +1,5 @@
 // renderer/capacity/capacityPlanReportActions.js
-// Production plan print/send uses the same PDF/email route structure as existing reports.
+// Production plan print/send uses only section 6: Date-wise Employee Production Plan.
 
 (function () {
   const API = window.SPWT_CONFIG?.API_BASE_URL || window.location.origin || "http://localhost:3032";
@@ -17,6 +17,9 @@
   }
 
   function cloneSection(selector) {
+    if (typeof window.SPWT_CAPACITY_APPLY_PLAN_DATES === "function") {
+      try { window.SPWT_CAPACITY_APPLY_PLAN_DATES(); } catch (_) {}
+    }
     const node = document.querySelector(selector);
     if (!node) return "";
     const clone = node.cloneNode(true);
@@ -35,14 +38,12 @@
   function buildReportHtml() {
     const period = periodText();
     const planHtml = cloneSection(".plan-preview");
-    if (!clean(planHtml)) throw new Error("Generate Production Plan first, then print/send.");
-
-    const demandHtml = cloneSection(".demand-card");
-    const resultHtml = cloneSection(".second-row");
-    const targetHtml = cloneSection(".target-panel");
+    if (!clean(planHtml) || /Production plan not generated yet|No assignment generated/i.test(planHtml)) {
+      throw new Error("Generate Production Plan first, then print/send.");
+    }
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8" />
-      <title>SP WorkTrack Production Plan</title>
+      <title>SP WorkTrack Date-wise Production Plan</title>
       <style>
         @page { size: A4 landscape; margin: 10mm; }
         body { margin:0; font-family: Arial, sans-serif; color:#111827; background:#ffffff; font-size:11px; }
@@ -53,33 +54,27 @@
         h1 { margin:0; font-size:20px; color:#0b3f73; }
         .sub { margin-top:3px; font-size:11px; color:#64748b; font-weight:700; }
         .meta { text-align:right; font-size:11px; line-height:1.5; color:#334155; }
-        .section { margin: 10px 0 12px; break-inside: avoid; }
         .section-title, h2 { margin:0 0 8px; font-size:14px; color:#0b3f73; font-weight:900; }
-        .sp-panel, .date-plan-card, .employee-card { border:1px solid #d8e2ef; border-radius:10px; padding:10px; margin:8px 0; box-shadow:none !important; background:#fff; }
+        .sp-panel, .date-plan-card, .employee-card { border:1px solid #d8e2ef; border-radius:10px; padding:10px; margin:8px 0; box-shadow:none !important; background:#fff; break-inside: avoid; }
+        .plan-preview { border:0; padding:0; margin:0; }
         .date-title { font-size:14px; color:#0b3f73; font-weight:900; margin:0 0 8px; background:#eaf2ff; padding:7px 9px; border-radius:7px; }
         .employee-head { display:flex; justify-content:space-between; gap:10px; background:#f8fbff; padding:7px 9px; border-radius:7px; border:1px solid #d8e2ef; margin-bottom:7px; }
         .employee-name { font-weight:900; color:#0f172a; }
         .employee-meta { color:#64748b; font-weight:700; }
+        .plan-date-pill { display:inline-block; margin-left:8px; padding:3px 8px; border-radius:999px; background:#eaf2ff; color:#0b3f73; font-size:10px; font-weight:900; vertical-align:middle; }
+        .employee-day-date { color:#0b3f73; font-weight:900; white-space:nowrap; }
         table, .cap-table { width:100%; border-collapse:collapse; min-width:0 !important; }
         th { background:#0b3f73 !important; color:#fff !important; text-align:left; padding:6px; font-size:10px; border:1px solid #0b3f73; }
         td { padding:5px 6px; border:1px solid #d8e2ef; vertical-align:top; font-size:10px; background:#fff !important; }
-        .metric-grid, .target-manpower-cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:7px; }
-        .metric-card { border:1px solid #d8e2ef; border-radius:8px; padding:7px; background:#f8fbff; min-height:auto; }
-        .metric-label { font-size:9px; color:#64748b; font-weight:900; text-transform:uppercase; }
-        .metric-value { font-size:14px; color:#0b3f73; font-weight:900; margin-top:3px; }
-        .note, .small-hint, .mini-note { color:#64748b; font-size:10px; }
         .badge { display:inline-block; border-radius:999px; padding:2px 6px; background:#eaf2ff; color:#0b3f73; font-weight:900; }
         .complete-note { border:1px solid #bbf7d0; color:#166534; background:#f0fdf4; border-radius:8px; padding:7px; font-weight:800; }
         .hero-actions, .plan-control, .setup-card, .dependency-form, .subsection-row, .checkbox-flex, .empty-state { display:none !important; }
       </style></head><body><div class="report-wrap">
         <div class="report-head">
-          <div class="brand"><div class="logo-box">SP</div><div><h1>SP WorkTrack Production Plan</h1><div class="sub">Production & Performance Management System</div></div></div>
+          <div class="brand"><div class="logo-box">SP</div><div><h1>SP WorkTrack Production Plan</h1><div class="sub">Date-wise Employee Production Plan</div></div></div>
           <div class="meta"><b>Period:</b> ${esc(period)}<br/><b>Generated:</b> ${esc(new Date().toLocaleString("en-IN"))}</div>
         </div>
-        <div class="section"><div class="section-title">Monthly Target / Behind-Ahead Status</div>${targetHtml}</div>
-        <div class="section"><div class="section-title">Machine Demand</div>${demandHtml}</div>
-        <div class="section"><div class="section-title">Capacity Result</div>${resultHtml}</div>
-        <div class="section"><div class="section-title">Date-wise Employee Production Plan</div>${planHtml}</div>
+        ${planHtml}
       </div></body></html>`;
   }
 
