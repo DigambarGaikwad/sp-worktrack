@@ -45,20 +45,29 @@ function workingDates(range) {
 }
 
 function normalizeShiftName(value) { return key(value).replace(/[^a-z0-9]+/g, ""); }
-function shiftNames(row = {}) {
-  return [row.shift_name, row.shift_code, row.name, row.id].map(clean).filter(Boolean);
+function shiftIdentityValues(row = {}) {
+  return [row.shift_name, row.shift_code, row.name, row.id, row.shift_id, row.code].map(clean).filter(Boolean);
+}
+function shiftDisplayValues(row = {}) {
+  return [row.shift_name, row.name, row.display_name, row.label].map(clean).filter(Boolean);
+}
+function truthyFlag(value) {
+  if (value === true) return true;
+  const t = key(value);
+  return ["true", "1", "yes", "y", "flexible"].includes(t);
 }
 function isFlexibleShift(row = {}) {
-  if (row.flexible === true || row.is_flexible === true) return true;
-  const text = shiftNames(row).join(" ").toLowerCase();
-  return text.includes("overtime") || text.includes("flexible") || text === "ot";
+  if (truthyFlag(row.flexible) || truthyFlag(row.is_flexible) || truthyFlag(row.flexible_shift)) return true;
+  const display = shiftDisplayValues(row).join(" ").toLowerCase();
+  if (!display) return false;
+  return display.includes("overtime") || display.includes("flexible") || display === "ot";
 }
 function buildFixedShiftLookup(shiftsRaw = []) {
   const fixedKeys = new Set();
   const fixedLabelByKey = new Map();
   (shiftsRaw || []).filter((s) => isActive(s.active)).filter((s) => !isFlexibleShift(s)).forEach((s) => {
-    const label = clean(s.shift_name || s.name || s.shift_code || s.id || "Fixed Shift");
-    shiftNames(s).forEach((name) => {
+    const label = clean(s.shift_name || s.name || s.display_name || s.label || s.shift_code || s.id || "Fixed Shift");
+    shiftIdentityValues(s).forEach((name) => {
       const k = normalizeShiftName(name);
       if (!k) return;
       fixedKeys.add(k);
@@ -67,18 +76,26 @@ function buildFixedShiftLookup(shiftsRaw = []) {
   });
   return { fixedKeys, fixedLabelByKey };
 }
-function entryShiftKey(entry = {}) { return normalizeShiftName(entry.shift_name || entry.shift_code || entry.shift_id || entry.shift || ""); }
+function entryShiftKeys(entry = {}) {
+  return [entry.shift_name, entry.shift_code, entry.shift_id, entry.shift, entry.shiftId]
+    .map(normalizeShiftName)
+    .filter(Boolean);
+}
+function matchedFixedShiftKey(entry = {}, fixedLookup) {
+  return entryShiftKeys(entry).find((k) => fixedLookup.fixedKeys.has(k)) || "";
+}
 function entryShiftLabel(entry = {}, fixedLabelByKey = new Map()) {
-  const k = entryShiftKey(entry);
+  const k = entryShiftKeys(entry).find((x) => fixedLabelByKey.has(x)) || "";
   return clean(fixedLabelByKey.get(k) || entry.shift_name || entry.shift_code || entry.shift_id || "Fixed Shift");
 }
 function isFixedShiftEntry(entry = {}, fixedLookup, shiftFilter) {
-  const k = entryShiftKey(entry);
-  if (!k || !fixedLookup.fixedKeys.has(k)) return false;
+  const matchedKey = matchedFixedShiftKey(entry, fixedLookup);
+  if (!matchedKey) return false;
   const requested = clean(shiftFilter || "All");
   if (requested === "All") return true;
   const requestedKey = normalizeShiftName(requested);
-  return requestedKey && requestedKey === k;
+  const matchedLabelKey = normalizeShiftName(fixedLookup.fixedLabelByKey.get(matchedKey));
+  return requestedKey && (requestedKey === matchedKey || requestedKey === matchedLabelKey);
 }
 function hasBookedWork(entry = {}) {
   return num(entry.total_actual_minutes, 0) > 0 || num(entry.total_standard_minutes, 0) > 0 || clean(entry.entry_no);
@@ -117,7 +134,7 @@ function isPlannedAbsent(emp, date, plannedAbsences) {
   return plannedAbsences.some((p) => ((p.code && code && p.code === code) || (p.name && name && p.name === name)) && date >= p.from && date <= p.to);
 }
 
-function fixedShiftPresence({ base, employees, entriesRaw, shiftsRaw, plannedAbsencesRaw, shiftFilter, deptFilter, employeeFilter }) {
+function fixedShiftPresence({ base, employees, entriesRaw, shiftsRaw, plannedAbsencesRaw, shiftFilter }) {
   const dates = workingDates(base.range || {});
   const fixedLookup = buildFixedShiftLookup(shiftsRaw);
   const presentByDate = new Map();
@@ -212,7 +229,7 @@ async function getPeopleDashboard(params = {}) {
   ]);
 
   const employees = scopedEmployees(base, employeesRaw, deptFilter, employeeFilter);
-  const presence = fixedShiftPresence({ base, employees, entriesRaw, shiftsRaw, plannedAbsencesRaw, shiftFilter, deptFilter, employeeFilter });
+  const presence = fixedShiftPresence({ base, employees, entriesRaw, shiftsRaw, plannedAbsencesRaw, shiftFilter });
 
   base.presentList = presence.present;
   base.yesterdayAbsent = presence.absent;
@@ -234,7 +251,7 @@ async function getPeopleDashboard(params = {}) {
   base.meta = {
     ...(base.meta || {}),
     service: "peopleDashboardServiceV7",
-    attendanceRule: "present_when_work_booked_in_any_fixed_shift; flexible_overtime_shift_ignored_for_presence",
+    attendanceRule: "present_when_work_booked_in_any_fixed_shift; flexible_overtime_shift_ignored_for_presence; shift_code_id_may_map_to_fixed_shift_label",
     fixedPresenceShifts: presence.fixedShiftLabels
   };
   return base;
