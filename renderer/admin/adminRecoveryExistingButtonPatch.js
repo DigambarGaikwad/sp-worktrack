@@ -1,10 +1,34 @@
 // renderer/admin/adminRecoveryExistingButtonPatch.js
 // Fixes Forgot PIN button when admin.html already contains #forgotPinBtn.
-// Also returns cursor to Enter Admin PIN after successful OTP reset.
+// Centralizes fast focus behavior for Forgot PIN, OTP entry, and return-to-login.
 (function () {
-  let pendingPinFocusUntil = 0;
+  let pendingPinFocus = false;
 
   function $(id) { return document.getElementById(id); }
+
+  function isVisible(el) {
+    return !!el && !el.classList.contains("hidden") && el.offsetParent !== null;
+  }
+
+  function focusNow(id, selectText = false) {
+    const el = $(id);
+    if (!isVisible(el) && id !== "adminPinInput") return false;
+    try {
+      el.focus({ preventScroll: true });
+      if (selectText && typeof el.select === "function") el.select();
+      return document.activeElement === el;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function focusSoon(id, selectText = false) {
+    if (focusNow(id, selectText)) return;
+    requestAnimationFrame(() => {
+      if (focusNow(id, selectText)) return;
+      requestAnimationFrame(() => focusNow(id, selectText));
+    });
+  }
 
   function openRecoveryModal() {
     const overlay = $("pinRecoveryOverlay");
@@ -25,7 +49,7 @@
       message.textContent = "";
     }
 
-    setTimeout(() => $("sendRecoveryOtpBtn")?.focus(), 120);
+    focusSoon("sendRecoveryOtpBtn");
   }
 
   function recoveryOverlayClosed() {
@@ -35,24 +59,24 @@
   }
 
   function focusAdminPinAfterReset() {
-    if (!pendingPinFocusUntil || Date.now() > pendingPinFocusUntil) return;
-    if (!recoveryOverlayClosed()) return;
+    if (!pendingPinFocus || !recoveryOverlayClosed()) return;
 
     const pinInput = $("adminPinInput");
     if (!pinInput) return;
 
-    pendingPinFocusUntil = 0;
+    pendingPinFocus = false;
     pinInput.value = "";
-    pinInput.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => {
-      pinInput.focus();
-      pinInput.select?.();
-    }, 80);
+    pinInput.scrollIntoView({ behavior: "instant", block: "center" });
+    focusSoon("adminPinInput", true);
   }
 
   function markPinFocusPending() {
-    pendingPinFocusUntil = Date.now() + 15000;
-    [250, 700, 1200, 2000, 3500, 6000, 9000].forEach((ms) => setTimeout(focusAdminPinAfterReset, ms));
+    pendingPinFocus = true;
+  }
+
+  function focusOtpWhenStepVisible() {
+    const step2 = $("pinRecoveryStep2");
+    if (isVisible(step2)) focusSoon("recoveryOtpInput", true);
   }
 
   function wireForgotPinButton() {
@@ -64,6 +88,24 @@
       event.stopPropagation();
       openRecoveryModal();
     }, true);
+  }
+
+  function wireOtpFocus() {
+    ["sendRecoveryOtpBtn", "resendRecoveryOtpBtn"].forEach((id) => {
+      const btn = $(id);
+      if (!btn || btn.__spwtOtpFocusWired) return;
+      btn.__spwtOtpFocusWired = true;
+      btn.addEventListener("click", () => {
+        const step2 = $("pinRecoveryStep2");
+        if (isVisible(step2)) focusSoon("recoveryOtpInput", true);
+      }, true);
+    });
+
+    const step2 = $("pinRecoveryStep2");
+    if (step2 && !step2.__spwtOtpFocusObserved) {
+      step2.__spwtOtpFocusObserved = true;
+      new MutationObserver(focusOtpWhenStepVisible).observe(step2, { attributes: true, attributeFilter: ["class"] });
+    }
   }
 
   function wireResetFocus() {
@@ -80,13 +122,15 @@
     }
   }
 
-  function wireWithRetry() {
+  function wireAll() {
     wireForgotPinButton();
+    wireOtpFocus();
     wireResetFocus();
-    [500, 1500, 3000].forEach((ms) => setTimeout(() => {
-      wireForgotPinButton();
-      wireResetFocus();
-    }, ms));
+  }
+
+  function wireWithRetry() {
+    wireAll();
+    [300, 900, 1800].forEach((ms) => setTimeout(wireAll, ms));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireWithRetry, { once: true });
