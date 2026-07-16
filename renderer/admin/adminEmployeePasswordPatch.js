@@ -8,23 +8,15 @@
   const statusByEmp = new Map();
   let loadingStatus = false;
   let renderWrapped = false;
+  let renderBusy = false;
 
   function $(id) { return document.getElementById(id); }
   function clean(v) { return String(v ?? "").trim(); }
   function normEmp(v) { return clean(v).toUpperCase(); }
-  function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])); }
-  function tokenHeaders() {
-    try {
-      const token = window.SPWT_ADMIN_ACCESS?.getToken?.() || "";
-      return token ? { "X-SPWT-Admin-Token": token } : {};
-    } catch { return {}; }
-  }
+  function tokenHeaders() { try { const token = window.SPWT_ADMIN_ACCESS?.getToken?.() || ""; return token ? { "X-SPWT-Admin-Token": token } : {}; } catch { return {}; } }
 
   async function requestJson(path, options = {}) {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: { ...(options.headers || {}), ...tokenHeaders() }
-    });
+    const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers: { ...(options.headers || {}), ...tokenHeaders() } });
     const body = await res.json().catch(() => null);
     if (!res.ok || !body?.ok) throw new Error(body?.message || `Request failed ${res.status}`);
     return body;
@@ -40,15 +32,13 @@
       renderPasswordCells();
     } catch (err) {
       console.warn("Employee password status load skipped:", err.message || err);
-    } finally {
-      loadingStatus = false;
-    }
+    } finally { loadingStatus = false; }
   }
 
-  function statusText(empCode) {
+  function statusFor(empCode) {
     const st = statusByEmp.get(normEmp(empCode));
-    if (!st) return "Password not set";
-    return st.hasPassword ? "Password set" : "Password not set";
+    const hasPassword = !!st?.hasPassword;
+    return { text: hasPassword ? "Password set" : "Password not set", hasPassword };
   }
 
   function addStyles() {
@@ -56,22 +46,17 @@
     const style = document.createElement("style");
     style.id = "employeePasswordPatchStyle";
     style.textContent = `
-      .employee-password-cell { min-width: 260px; }
+      .employee-password-cell { min-width:260px; }
       .employee-password-wrap { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-      .employee-password-wrap .admin-input { min-width: 145px; flex:1 1 145px; }
-      .employee-password-status { width:100%; margin-top:4px; font-weight:700; }
+      .employee-password-wrap .admin-input { min-width:145px; flex:1 1 145px; }
+      .employee-password-status { width:100%; margin-top:4px; font-weight:800; }
       .employee-password-status.set { color:#166534; }
       .employee-password-status.missing { color:#b45309; }
     `;
     document.head.appendChild(style);
   }
 
-  function employeeRows() {
-    const host = $("employeesList");
-    const table = host?.querySelector("table.admin-table");
-    if (!table) return [];
-    return Array.from(table.querySelectorAll("tbody tr"));
-  }
+  function employeeRows() { return Array.from($("employeesList")?.querySelectorAll("table.admin-table tbody tr") || []); }
 
   function ensureHeader(table) {
     const headRow = table?.querySelector("thead tr");
@@ -83,43 +68,51 @@
     headRow.insertBefore(th, headRow.lastElementChild);
   }
 
-  function cellHtml(idx, empCode) {
-    const st = statusText(empCode);
-    const set = /^password set$/i.test(st);
-    return `
-      <div class="employee-password-wrap">
-        <input class="admin-input employee-password-input" type="password" placeholder="New password / PIN" data-emp-pass-input="${idx}" autocomplete="new-password" />
-        <button type="button" class="btn green" data-emp-pass-reset="${idx}">Reset</button>
-        <div class="small-hint employee-password-status ${set ? "set" : "missing"}" data-emp-pass-status="${idx}">${escapeHtml(st)}</div>
-      </div>`;
+  function ensureCell(row, idx, empCode) {
+    let cell = row.querySelector(".employee-password-cell");
+    if (!cell) {
+      cell = document.createElement("td");
+      cell.className = "employee-password-cell";
+      row.insertBefore(cell, row.lastElementChild);
+    }
+    if (cell.dataset.empCode !== empCode || !cell.querySelector(".employee-password-wrap")) {
+      cell.dataset.empCode = empCode;
+      cell.innerHTML = `
+        <div class="employee-password-wrap">
+          <input class="admin-input employee-password-input" type="password" placeholder="New password / PIN" data-emp-pass-input="${idx}" autocomplete="new-password" />
+          <button type="button" class="btn green" data-emp-pass-reset="${idx}">Reset</button>
+          <div class="small-hint employee-password-status" data-emp-pass-status="${idx}"></div>
+        </div>`;
+    }
+    const st = statusFor(empCode);
+    const statusEl = cell.querySelector(".employee-password-status");
+    if (statusEl) {
+      statusEl.textContent = st.text;
+      statusEl.classList.toggle("set", st.hasPassword);
+      statusEl.classList.toggle("missing", !st.hasPassword);
+    }
+    const btn = cell.querySelector("[data-emp-pass-reset]");
+    if (btn && !btn.__spwtEmpPassWired) {
+      btn.__spwtEmpPassWired = true;
+      btn.onclick = () => resetPassword(Number(btn.getAttribute("data-emp-pass-reset")));
+    }
   }
 
   function renderPasswordCells() {
-    addStyles();
-    const host = $("employeesList");
-    const table = host?.querySelector("table.admin-table");
-    if (!table) return;
-    ensureHeader(table);
-
-    employeeRows().forEach((row) => {
-      const empInput = row.querySelector('[data-field="empId"]');
-      if (!empInput) return;
-      const idx = Number(empInput.getAttribute("data-e-idx"));
-      const empCode = normEmp(empInput.value);
-      let cell = row.querySelector(".employee-password-cell");
-      if (!cell) {
-        cell = document.createElement("td");
-        cell.className = "employee-password-cell";
-        row.insertBefore(cell, row.lastElementChild);
-      }
-      cell.innerHTML = cellHtml(idx, empCode);
-    });
-
-    host.querySelectorAll("[data-emp-pass-reset]").forEach((btn) => {
-      if (btn.__spwtEmpPassWired) return;
-      btn.__spwtEmpPassWired = true;
-      btn.onclick = () => resetPassword(Number(btn.getAttribute("data-emp-pass-reset")));
-    });
+    if (renderBusy) return;
+    renderBusy = true;
+    try {
+      addStyles();
+      const table = $("employeesList")?.querySelector("table.admin-table");
+      if (!table) return;
+      ensureHeader(table);
+      employeeRows().forEach((row) => {
+        const empInput = row.querySelector('[data-field="empId"]');
+        if (!empInput) return;
+        const idx = Number(empInput.getAttribute("data-e-idx"));
+        ensureCell(row, idx, normEmp(empInput.value));
+      });
+    } finally { renderBusy = false; }
   }
 
   async function resetPassword(idx) {
@@ -132,13 +125,10 @@
     if (!empCode) { alert("Enter Employee ID first."); row.querySelector('[data-field="empId"]')?.focus(); return; }
     if (!password || password.length < 4) { alert("Enter employee password/PIN, minimum 4 characters."); input?.focus(); return; }
 
+    const btn = row.querySelector("[data-emp-pass-reset]");
     try {
-      btnBusy(row, true);
-      const body = await requestJson("/api/employee-auth/admin/reset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empCode, empName, password })
-      });
+      if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
+      const body = await requestJson("/api/employee-auth/admin/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ empCode, empName, password }) });
       statusByEmp.set(empCode, { empCode, hasPassword: true, updatedAt: body.data?.updatedAt || "" });
       if (input) input.value = "";
       renderPasswordCells();
@@ -146,15 +136,8 @@
     } catch (err) {
       alert("Employee password reset failed:\n\n" + (err.message || err));
     } finally {
-      btnBusy(row, false);
+      if (btn) { btn.disabled = false; btn.textContent = "Reset"; }
     }
-  }
-
-  function btnBusy(row, busy) {
-    const btn = row.querySelector("[data-emp-pass-reset]");
-    if (!btn) return;
-    btn.disabled = !!busy;
-    btn.textContent = busy ? "Saving..." : "Reset";
   }
 
   function wrapRender() {
@@ -177,7 +160,7 @@
     const host = $("employeesList");
     if (host && !host.__spwtEmployeePasswordObserved) {
       host.__spwtEmployeePasswordObserved = true;
-      new MutationObserver(() => renderPasswordCells()).observe(host, { childList: true, subtree: true });
+      new MutationObserver(() => setTimeout(renderPasswordCells, 0)).observe(host, { childList: true });
     }
     setTimeout(() => { renderPasswordCells(); loadPasswordStatus(); }, 800);
   }
