@@ -1,7 +1,9 @@
 // renderer/admin/adminRecoveryExistingButtonPatch.js
 // Fixes Forgot PIN button when admin.html already contains #forgotPinBtn.
-// adminRecoveryUi.js originally created/wired the button only when it did not already exist.
+// Also returns cursor to Enter Admin PIN after successful OTP reset.
 (function () {
+  let pendingPinFocusUntil = 0;
+
   function $(id) { return document.getElementById(id); }
 
   function openRecoveryModal() {
@@ -26,6 +28,33 @@
     setTimeout(() => $("sendRecoveryOtpBtn")?.focus(), 120);
   }
 
+  function recoveryOverlayClosed() {
+    const overlay = $("pinRecoveryOverlay");
+    if (!overlay) return false;
+    return overlay.classList.contains("hidden") || !overlay.classList.contains("show");
+  }
+
+  function focusAdminPinAfterReset() {
+    if (!pendingPinFocusUntil || Date.now() > pendingPinFocusUntil) return;
+    if (!recoveryOverlayClosed()) return;
+
+    const pinInput = $("adminPinInput");
+    if (!pinInput) return;
+
+    pendingPinFocusUntil = 0;
+    pinInput.value = "";
+    pinInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      pinInput.focus();
+      pinInput.select?.();
+    }, 80);
+  }
+
+  function markPinFocusPending() {
+    pendingPinFocusUntil = Date.now() + 15000;
+    [250, 700, 1200, 2000, 3500, 6000, 9000].forEach((ms) => setTimeout(focusAdminPinAfterReset, ms));
+  }
+
   function wireForgotPinButton() {
     const btn = $("forgotPinBtn");
     if (!btn || btn.__spwtForgotPinWired) return;
@@ -37,11 +66,27 @@
     }, true);
   }
 
+  function wireResetFocus() {
+    const resetBtn = $("resetPinWithOtpBtn");
+    if (resetBtn && !resetBtn.__spwtResetFocusWired) {
+      resetBtn.__spwtResetFocusWired = true;
+      resetBtn.addEventListener("click", markPinFocusPending, true);
+    }
+
+    const overlay = $("pinRecoveryOverlay");
+    if (overlay && !overlay.__spwtResetFocusObserved) {
+      overlay.__spwtResetFocusObserved = true;
+      new MutationObserver(focusAdminPinAfterReset).observe(overlay, { attributes: true, attributeFilter: ["class"] });
+    }
+  }
+
   function wireWithRetry() {
     wireForgotPinButton();
-    setTimeout(wireForgotPinButton, 500);
-    setTimeout(wireForgotPinButton, 1500);
-    setTimeout(wireForgotPinButton, 3000);
+    wireResetFocus();
+    [500, 1500, 3000].forEach((ms) => setTimeout(() => {
+      wireForgotPinButton();
+      wireResetFocus();
+    }, ms));
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireWithRetry, { once: true });
