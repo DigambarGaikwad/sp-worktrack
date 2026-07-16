@@ -97,6 +97,13 @@ function isFixedShiftEntry(entry = {}, fixedLookup, shiftFilter) {
   const matchedLabelKey = normalizeShiftName(fixedLookup.fixedLabelByKey.get(matchedKey));
   return requestedKey && (requestedKey === matchedKey || requestedKey === matchedLabelKey);
 }
+function isOvertimeWorkType(entry = {}) {
+  const typeText = [entry.work_type, entry.workType, entry.shift_work_type, entry.shiftWorkType, entry.entry_type].map(key).join(" ");
+  return typeText.includes("overtime") || typeText === "ot" || num(entry.flexible_shift_minutes ?? entry.flexibleShiftMinutes, 0) > 0;
+}
+function isPresenceEligibleEntry(entry = {}, fixedLookup, shiftFilter) {
+  return isFixedShiftEntry(entry, fixedLookup, shiftFilter) && !isOvertimeWorkType(entry) && hasBookedWork(entry);
+}
 function hasBookedWork(entry = {}) {
   return num(entry.total_actual_minutes, 0) > 0 || num(entry.total_standard_minutes, 0) > 0 || clean(entry.entry_no);
 }
@@ -144,8 +151,7 @@ function fixedShiftPresence({ base, employees, entriesRaw, shiftsRaw, plannedAbs
 
   entriesRaw
     .filter((entry) => inRange(entry.work_date, base.range || {}))
-    .filter((entry) => isFixedShiftEntry(entry, fixedLookup, shiftFilter))
-    .filter(hasBookedWork)
+    .filter((entry) => isPresenceEligibleEntry(entry, fixedLookup, shiftFilter))
     .forEach((entry) => {
       const d = clean(entry.work_date);
       const k = empKey(entry.emp_code, entry.emp_name);
@@ -251,7 +257,7 @@ async function getPeopleDashboard(params = {}) {
   base.meta = {
     ...(base.meta || {}),
     service: "peopleDashboardServiceV7",
-    attendanceRule: "present_when_work_booked_in_any_fixed_shift; flexible_overtime_shift_ignored_for_presence; shift_code_id_may_map_to_fixed_shift_label",
+    attendanceRule: "present_when_work_booked_in_fixed_shift_and_shift_work_type_is_not_overtime; flexible_overtime_shift_ignored_for_presence",
     fixedPresenceShifts: presence.fixedShiftLabels
   };
   return base;
