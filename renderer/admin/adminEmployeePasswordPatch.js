@@ -89,6 +89,7 @@
   }
 
   function employeeRows() { return Array.from($("employeesList")?.querySelectorAll("table.admin-table tbody tr") || []); }
+  function passwordInput(idx) { return $("employeesList")?.querySelector(`[data-emp-pass-input="${idx}"]`) || null; }
 
   function ensureHeader(table) {
     const headRow = table?.querySelector("thead tr");
@@ -98,6 +99,37 @@
     th.style.width = "285px";
     th.textContent = "Password";
     headRow.insertBefore(th, headRow.lastElementChild);
+  }
+
+  function focusPasswordInput(idx) {
+    const input = passwordInput(idx);
+    if (!input) return false;
+    input.scrollIntoView({ block: "center", inline: "nearest" });
+    input.focus({ preventScroll: true });
+    input.select?.();
+    return true;
+  }
+
+  function focusNextPasswordInput(currentIdx) {
+    const rows = employeeRows();
+    const indexes = rows
+      .map((row) => Number(row.querySelector('[data-field="empId"]')?.getAttribute("data-e-idx")))
+      .filter((idx) => Number.isFinite(idx));
+    const currentPos = indexes.indexOf(Number(currentIdx));
+    const nextIdx = currentPos >= 0 ? indexes[currentPos + 1] : NaN;
+
+    requestAnimationFrame(() => {
+      if (Number.isFinite(nextIdx) && focusPasswordInput(nextIdx)) return;
+      focusPasswordInput(currentIdx);
+    });
+  }
+
+  function setInlineStatus(idx, text, ok = true) {
+    const el = $("employeesList")?.querySelector(`[data-emp-pass-status="${idx}"]`);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("set", ok);
+    el.classList.toggle("missing", !ok);
   }
 
   function ensureCell(row, idx, empCode) {
@@ -127,6 +159,15 @@
     if (btn && !btn.__spwtEmpPassWired) {
       btn.__spwtEmpPassWired = true;
       btn.onclick = () => resetPassword(Number(btn.getAttribute("data-emp-pass-reset")));
+    }
+    const input = cell.querySelector("[data-emp-pass-input]");
+    if (input && !input.__spwtEmpPassEnterWired) {
+      input.__spwtEmpPassEnterWired = true;
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        resetPassword(Number(input.getAttribute("data-emp-pass-input")));
+      });
     }
   }
 
@@ -165,9 +206,11 @@
       statusByEmp.set(empCode, { empCode, hasPassword: true, updatedAt: body.data?.updatedAt || "" });
       if (input) input.value = "";
       renderPasswordCells();
-      alert(`Password reset for ${empCode}.`);
+      setInlineStatus(idx, "Password set. Next employee ready.", true);
+      focusNextPasswordInput(idx);
     } catch (err) {
       alert("Employee password reset failed:\n\n" + (err.message || err));
+      input?.focus();
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Reset"; }
     }
