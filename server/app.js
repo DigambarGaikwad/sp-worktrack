@@ -13,6 +13,7 @@ dotenv.config();
 
 require("./services/adminAccessPermissionExtensions");
 const employeesRoutes = require("./routes/employeesRoutes");
+const employeeAuthRoutes = require("./routes/employeeAuthRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const adminRecoveryRoutes = require("./routes/adminRecoveryRoutes");
 const productionRoutes = require("./routes/productionRoutes");
@@ -35,6 +36,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 
 app.use("/api/employees", employeesRoutes);
+app.use("/api/employee-auth", employeeAuthRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/pin", adminRecoveryRoutes);
 app.use("/api/production", productionRoutes);
