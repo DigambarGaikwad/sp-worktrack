@@ -46,12 +46,44 @@
     const style = document.createElement("style");
     style.id = "employeePasswordPatchStyle";
     style.textContent = `
+      #employeesList { overflow-x:auto; }
+      #employeesList .employee-table-compact { width:100%; min-width:1080px; table-layout:auto; }
+      #employeesList .employee-table-compact th,
+      #employeesList .employee-table-compact td { vertical-align:middle; white-space:nowrap; }
+      #employeesList .employee-table-compact th:nth-child(1),
+      #employeesList .employee-table-compact td:nth-child(1) { width:145px; min-width:120px; max-width:165px; }
+      #employeesList .employee-table-compact th:nth-child(2),
+      #employeesList .employee-table-compact td:nth-child(2) { width:auto; min-width:260px; }
+      #employeesList .employee-table-compact th:nth-child(3),
+      #employeesList .employee-table-compact td:nth-child(3) { width:105px; min-width:100px; }
+      #employeesList .employee-table-compact th:nth-child(4),
+      #employeesList .employee-table-compact td:nth-child(4) { width:285px; min-width:260px; }
+      #employeesList .employee-table-compact th:nth-child(5),
+      #employeesList .employee-table-compact td:nth-child(5) { width:150px; min-width:135px; }
+      #employeesList .employee-table-compact th:nth-child(6),
+      #employeesList .employee-table-compact td:nth-child(6) { width:80px; min-width:72px; }
+      #employeesList .employee-table-compact th:last-child,
+      #employeesList .employee-table-compact td:last-child { width:84px; min-width:84px; text-align:center; }
+      #employeesList .employee-table-compact td:nth-child(1) .admin-input { width:100%; min-width:0; max-width:155px; }
+      #employeesList .employee-table-compact td:nth-child(2) .admin-input { width:100%; min-width:220px; }
+      #employeesList .employee-table-compact td:nth-child(3) .admin-select { width:100%; min-width:86px; }
+      #employeesList .employee-table-compact td:nth-child(5) .admin-input { width:100%; min-width:105px; max-width:145px; }
+      #employeesList .employee-table-compact td:last-child .btn { min-width:72px; padding:10px 12px; white-space:nowrap; line-height:1.1; }
       .employee-password-cell { min-width:260px; }
-      .employee-password-wrap { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-      .employee-password-wrap .admin-input { min-width:145px; flex:1 1 145px; }
-      .employee-password-status { width:100%; margin-top:4px; font-weight:800; }
+      .employee-password-wrap { display:grid; grid-template-columns:minmax(135px, 1fr) auto; gap:8px; align-items:center; }
+      .employee-password-wrap .admin-input { width:100%; min-width:135px; }
+      .employee-password-wrap .btn { min-width:66px; padding:10px 12px; }
+      .employee-password-status { grid-column:1 / -1; margin-top:0; font-weight:800; white-space:normal; }
       .employee-password-status.set { color:#166534; }
       .employee-password-status.missing { color:#b45309; }
+      @media (max-width:1200px) {
+        #employeesList .employee-table-compact { min-width:1020px; }
+        #employeesList .employee-table-compact th:nth-child(2),
+        #employeesList .employee-table-compact td:nth-child(2) { min-width:220px; }
+        #employeesList .employee-table-compact th:nth-child(4),
+        #employeesList .employee-table-compact td:nth-child(4) { width:255px; min-width:245px; }
+        .employee-password-cell { min-width:245px; }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -63,7 +95,7 @@
     if (!headRow || headRow.querySelector(".employee-password-head")) return;
     const th = document.createElement("th");
     th.className = "employee-password-head";
-    th.style.width = "22%";
+    th.style.width = "285px";
     th.textContent = "Password";
     headRow.insertBefore(th, headRow.lastElementChild);
   }
@@ -105,6 +137,7 @@
       addStyles();
       const table = $("employeesList")?.querySelector("table.admin-table");
       if (!table) return;
+      table.classList.add("employee-table-compact");
       ensureHeader(table);
       employeeRows().forEach((row) => {
         const empInput = row.querySelector('[data-field="empId"]');
