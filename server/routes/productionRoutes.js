@@ -8,6 +8,7 @@ const {
   getBookingStatus,
   getQualityStatus
 } = require("../services/productionSubmitService");
+const { assertEmployeeAuthForSubmit } = require("../services/employeeAuthService");
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ const router = express.Router();
  */
 router.post("/submit", async (req, res) => {
   try {
+    await assertEmployeeAuthForSubmit(req.body || {});
     const result = await submitProduction(req.body);
 
     res.json({
