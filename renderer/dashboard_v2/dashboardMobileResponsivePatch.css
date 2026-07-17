@@ -21,11 +21,21 @@ body {
     padding: 16px 12px !important;
     border-radius: 14px !important;
     overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    box-sizing: border-box !important;
   }
 
-  .brand-block {
+  .brand-block,
+  .filter-bar,
+  .loss-filter-bar {
     width: 100% !important;
+    max-width: 100% !important;
     min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
   .brand-title {
@@ -46,13 +56,12 @@ body {
 
   .filter-bar,
   .loss-filter-bar {
-    width: 100% !important;
-    max-width: 100% !important;
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
     align-items: stretch !important;
-    overflow: visible !important;
+    justify-content: stretch !important;
+    overflow: hidden !important;
   }
 
   #rwOtherMachineReportControls {
@@ -65,6 +74,7 @@ body {
     min-width: 0 !important;
     max-width: 100% !important;
     width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .dash-select,
@@ -77,6 +87,7 @@ body {
     height: 38px !important;
     padding: 0 10px !important;
     font-size: 11px !important;
+    box-sizing: border-box !important;
   }
 
   .dash-btn {
