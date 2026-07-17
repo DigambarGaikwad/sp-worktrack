@@ -1,8 +1,9 @@
 // renderer/admin/adminActionFlowPatch.js
-// Keeps Admin add/action buttons floating near active tab content, not stuck at page bottom.
+// Only Work & Sub Work add buttons float at the bottom; other Admin actions stay normal.
 (function () {
   const STYLE_ID = "adminActionFlowPatchStyle";
-  const ACTION_SELECTOR = "#adminPanel .admin-floating-actions, .admin-panel .admin-floating-actions";
+  const ALL_ACTION_SELECTOR = "#adminPanel .admin-floating-actions, .admin-panel .admin-floating-actions";
+  const WORK_ACTION_SELECTOR = "#tabWork > .admin-floating-actions, #adminPanel #tabWork > .admin-floating-actions, .admin-panel #tabWork > .admin-floating-actions";
   const FOOTER_SELECTOR = "#adminPanel > .row-between:last-child, .admin-panel > .row-between:last-child";
   const FOOTER_ROW_SELECTOR = "#adminPanel > .row-between:last-child .row, .admin-panel > .row-between:last-child .row";
 
@@ -15,19 +16,36 @@
     }
 
     style.textContent = `
-      ${ACTION_SELECTOR} {
-        position: sticky !important;
-        top: var(--spwt-admin-action-top, 96px) !important;
+      ${ALL_ACTION_SELECTOR} {
+        position: static !important;
+        top: auto !important;
         bottom: auto !important;
-        z-index: 90 !important;
+        z-index: auto !important;
+        margin-top: 14px !important;
+        padding: 12px 0 8px !important;
+        background: transparent !important;
+        border-top: 1px solid rgba(15, 23, 42, .08) !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        gap: 10px !important;
+        flex-wrap: wrap !important;
+        box-shadow: none !important;
+      }
+
+      ${WORK_ACTION_SELECTOR} {
+        position: sticky !important;
+        bottom: 12px !important;
+        top: auto !important;
+        z-index: 95 !important;
         width: 100% !important;
         max-width: 100% !important;
-        margin: 10px 0 14px !important;
+        margin: 12px 0 14px !important;
         padding: 10px 12px !important;
-        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96)) !important;
+        background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.98)) !important;
         border: 1px solid rgba(15,23,42,.10) !important;
         border-radius: 16px !important;
-        box-shadow: 0 10px 24px rgba(15,23,42,.10) !important;
+        box-shadow: 0 -10px 28px rgba(15,23,42,.12) !important;
         display: flex !important;
         justify-content: flex-end !important;
         align-items: center !important;
@@ -65,17 +83,7 @@
       }
 
       @media (max-width: 700px) {
-        ${ACTION_SELECTOR} {
-          top: var(--spwt-admin-action-top-mobile, 70px) !important;
-          align-items: stretch !important;
-          justify-content: flex-start !important;
-        }
-
-        ${ACTION_SELECTOR} .btn,
-        ${ACTION_SELECTOR} button {
-          width: 100% !important;
-        }
-
+        ${ALL_ACTION_SELECTOR},
         ${FOOTER_SELECTOR},
         ${FOOTER_ROW_SELECTOR} {
           width: 100% !important;
@@ -84,35 +92,34 @@
           align-items: stretch !important;
           justify-content: flex-start !important;
         }
+
+        ${WORK_ACTION_SELECTOR} {
+          bottom: 8px !important;
+        }
       }
     `;
   }
 
-  function placeActionBarsNearContentTop() {
-    document.querySelectorAll("#adminPanel .tab-page, .admin-panel .tab-page").forEach((page) => {
-      const action = page.querySelector(":scope > .admin-floating-actions");
-      if (!action) return;
+  function restoreWorkActionOriginalPlace() {
+    const workTab = document.getElementById("tabWork");
+    const action = workTab?.querySelector(":scope > .admin-floating-actions");
+    if (!workTab || !action) return;
 
-      const workGrid = page.querySelector(":scope > .work-admin-grid");
-      const list = page.querySelector(":scope > .list");
-      const firstCard = page.querySelector(":scope > .card, :scope > .admin-db-card, :scope > .grid-2");
-      const anchor = workGrid || list || firstCard;
-
-      if (anchor && action.nextElementSibling !== anchor) {
-        page.insertBefore(action, anchor);
-      }
-    });
+    // Keep Work buttons after the Work & Sub Work grid so sticky-bottom works from start to end.
+    const grid = workTab.querySelector(":scope > .work-admin-grid");
+    if (grid && grid.nextElementSibling !== action) grid.insertAdjacentElement("afterend", action);
   }
 
   function forceActionFlow() {
     addStyles();
-    placeActionBarsNearContentTop();
+    restoreWorkActionOriginalPlace();
 
-    document.querySelectorAll(ACTION_SELECTOR).forEach((el) => {
-      el.style.setProperty("position", "sticky", "important");
-      el.style.setProperty("top", window.innerWidth <= 700 ? "70px" : "96px", "important");
-      el.style.setProperty("bottom", "auto", "important");
-      el.style.setProperty("z-index", "90", "important");
+    document.querySelectorAll(ALL_ACTION_SELECTOR).forEach((el) => {
+      const isWork = el.closest("#tabWork");
+      el.style.setProperty("position", isWork ? "sticky" : "static", "important");
+      el.style.setProperty("bottom", isWork ? (window.innerWidth <= 700 ? "8px" : "12px") : "auto", "important");
+      el.style.setProperty("top", "auto", "important");
+      el.style.setProperty("z-index", isWork ? "95" : "auto", "important");
       el.style.setProperty("display", "flex", "important");
       el.style.setProperty("flex-wrap", "wrap", "important");
       el.style.setProperty("justify-content", window.innerWidth <= 700 ? "flex-start" : "flex-end", "important");
