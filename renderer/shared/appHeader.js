@@ -12,12 +12,22 @@
   }
 
   function ensureHeaderStyles() {
-    if (document.getElementById(HEADER_STYLE_ID)) return;
+    let style = document.getElementById(HEADER_STYLE_ID);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = HEADER_STYLE_ID;
+      document.head.appendChild(style);
+    }
 
-    const style = document.createElement("style");
-    style.id = HEADER_STYLE_ID;
     style.textContent = `
-      :root { --sp-header-height: 80px; }
+      :root {
+        --sp-header-height: 86px;
+        --sp-header-bg-1: #061628;
+        --sp-header-bg-2: #0a2742;
+        --sp-header-bg-3: #07111f;
+        --sp-header-accent: #22d3ee;
+        --sp-header-accent-2: #f97316;
+      }
 
       #spAppHeader {
         position: fixed !important;
@@ -28,12 +38,11 @@
         z-index: 50000 !important;
         isolation: isolate !important;
         transform: translateZ(0) !important;
+        padding: 8px 14px 0 !important;
+        pointer-events: none !important;
       }
 
-      #spAppHeader + * {
-        margin-top: var(--sp-header-height) !important;
-      }
-
+      #spAppHeader + * { margin-top: var(--sp-header-height) !important; }
       #spAppHeader + .content {
         height: auto !important;
         min-height: calc(100vh - var(--sp-header-height)) !important;
@@ -42,9 +51,7 @@
 
       .sp-app-shell,
       .sp-page,
-      .app {
-        overflow: visible !important;
-      }
+      .app { overflow: visible !important; }
 
       .app {
         height: auto !important;
@@ -52,71 +59,288 @@
         display: block !important;
       }
 
+      .shared-topbar {
+        pointer-events: auto !important;
+        height: 72px !important;
+        min-height: 72px !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 auto !important;
+        padding: 0 22px 0 18px !important;
+        border-radius: 0 0 18px 18px !important;
+        color: #fff !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 22px !important;
+        position: relative !important;
+        overflow: hidden !important;
+        background:
+          radial-gradient(circle at 7% 20%, rgba(34, 211, 238, 0.22), transparent 22%),
+          radial-gradient(circle at 98% 18%, rgba(249, 115, 22, 0.10), transparent 18%),
+          linear-gradient(115deg, var(--sp-header-bg-1) 0%, var(--sp-header-bg-2) 48%, var(--sp-header-bg-3) 100%) !important;
+        border: 1px solid rgba(148, 163, 184, 0.16) !important;
+        box-shadow: 0 14px 34px rgba(2, 6, 23, 0.24), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+      }
+
+      .shared-topbar::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 250px;
+        background:
+          linear-gradient(120deg, rgba(34, 211, 238, 0.15), transparent 56%),
+          repeating-linear-gradient(135deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 14px);
+        clip-path: polygon(0 0, 84% 0, 62% 100%, 0 100%);
+        opacity: 0.95;
+        pointer-events: none;
+      }
+
+      .shared-topbar::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--sp-header-accent-2), var(--sp-header-accent), transparent 72%);
+        opacity: 0.78;
+        pointer-events: none;
+      }
+
+      .shared-topbar .left,
+      .shared-topbar .right,
+      .shared-nav-btn,
+      .shared-topbar .about-btn {
+        display: flex !important;
+        align-items: center !important;
+      }
+
+      .shared-topbar .left {
+        position: relative !important;
+        z-index: 2 !important;
+        gap: 16px !important;
+        min-width: 270px !important;
+        flex: 1 1 auto !important;
+      }
+
+      .shared-logo-box {
+        width: 128px !important;
+        height: 52px !important;
+        flex: 0 0 128px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 14px !important;
+        background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(34,211,238,0.04)) !important;
+        border: 1px solid rgba(255,255,255,0.10) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08) !important;
+        overflow: hidden !important;
+      }
+
+      .shared-topbar .logo {
+        width: 116px !important;
+        height: 46px !important;
+        object-fit: contain !important;
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.35)) !important;
+      }
+
+      .shared-brand-divider {
+        width: 1px !important;
+        height: 42px !important;
+        background: linear-gradient(180deg, transparent, rgba(255,255,255,0.26), transparent) !important;
+        flex: 0 0 1px !important;
+      }
+
+      .shared-topbar .brand {
+        min-width: 0 !important;
+        overflow: hidden !important;
+      }
+
+      .shared-topbar .brand .title {
+        font-size: 23px !important;
+        font-weight: 900 !important;
+        letter-spacing: -0.45px !important;
+        line-height: 1.08 !important;
+        color: #fff !important;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.32) !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
+      .shared-topbar .brand .subtitle {
+        margin-top: 4px !important;
+        font-size: 12.6px !important;
+        line-height: 1.15 !important;
+        color: rgba(226, 232, 240, 0.92) !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
+      .shared-topbar .desktop-nav {
+        position: relative !important;
+        z-index: 2 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        gap: 10px !important;
+        flex: 0 0 auto !important;
+      }
+
+      .shared-topbar #currentDate {
+        height: 42px !important;
+        padding: 0 18px !important;
+        margin: 0 12px 0 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 9px !important;
+        color: #f8fafc !important;
+        font-size: 14px !important;
+        font-weight: 850 !important;
+        border: 1px solid rgba(34, 211, 238, 0.24) !important;
+        background: rgba(15, 23, 42, 0.38) !important;
+        border-radius: 999px !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08) !important;
+        white-space: nowrap !important;
+      }
+
+      .shared-topbar #currentDate::before {
+        content: "▣";
+        color: var(--sp-header-accent);
+        font-size: 12px;
+        line-height: 1;
+      }
+
+      .shared-nav-btn {
+        position: relative !important;
+        width: 70px !important;
+        height: 58px !important;
+        padding: 8px 6px 7px !important;
+        border: 0 !important;
+        border-left: 1px solid rgba(255,255,255,0.10) !important;
+        background: transparent !important;
+        color: rgba(226, 232, 240, 0.84) !important;
+        border-radius: 0 !important;
+        cursor: pointer !important;
+        text-decoration: none !important;
+        justify-content: center !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+        font-weight: 800 !important;
+        transition: color 0.14s ease, transform 0.14s ease, background 0.14s ease, filter 0.14s ease !important;
+      }
+
+      .shared-nav-btn:hover,
+      .shared-nav-btn.active {
+        color: #ffffff !important;
+        background: linear-gradient(180deg, rgba(34,211,238,0.09), rgba(34,211,238,0.02)) !important;
+        transform: translateY(-1px) !important;
+        filter: drop-shadow(0 0 12px rgba(34,211,238,0.28)) !important;
+      }
+
+      .shared-nav-icon {
+        font-size: 24px !important;
+        line-height: 1 !important;
+      }
+
+      .shared-nav-label {
+        font-size: 11px !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+      }
+
+      .shared-nav-btn.active::after {
+        content: "";
+        position: absolute;
+        left: 18px;
+        right: 18px;
+        bottom: 2px;
+        height: 3px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--sp-header-accent), #60a5fa);
+        box-shadow: 0 0 14px rgba(34,211,238,0.68);
+      }
+
+      .shared-nav-btn.settings {
+        width: 58px !important;
+        margin-left: 6px !important;
+        border: 1px solid rgba(34,211,238,0.24) !important;
+        border-radius: 15px !important;
+        background: rgba(15, 23, 42, 0.30) !important;
+      }
+
+      .shared-nav-btn.settings .shared-nav-label { display: none !important; }
+      .shared-nav-btn.settings .shared-nav-icon { font-size: 26px !important; }
+
       .shared-topbar .mobile-menu-wrap,
       .shared-topbar .mobile-menu-panel { display: none !important; }
 
-      @media (min-width: 769px) {
-        .shared-topbar {
-          flex-direction: row !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          overflow: visible !important;
-        }
-        .shared-topbar .desktop-nav { display: flex !important; }
-        .shared-topbar .mobile-menu-wrap,
-        .shared-topbar .mobile-menu-panel { display: none !important; }
+      @media (max-width: 1180px) {
+        .shared-topbar { gap: 12px !important; padding-right: 14px !important; }
+        .shared-logo-box { width: 104px !important; flex-basis: 104px !important; }
+        .shared-topbar .logo { width: 96px !important; }
+        .shared-topbar .brand .title { font-size: 20px !important; }
+        .shared-topbar .brand .subtitle { font-size: 11px !important; }
+        .shared-nav-btn { width: 50px !important; }
+        .shared-nav-label { display: none !important; }
+        .shared-topbar #currentDate { padding: 0 12px !important; font-size: 12px !important; margin-right: 5px !important; }
       }
 
-      @media (max-width: 768px) {
-        :root { --sp-header-height: 54px; }
-        #spAppHeader { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 50000 !important; }
+      @media (max-width: 900px), (pointer: coarse) and (max-width: 1180px) {
+        :root { --sp-header-height: 58px; }
+        #spAppHeader { padding: 7px 10px 0 !important; }
 
         .shared-topbar {
-          height: 54px !important;
-          min-height: 54px !important;
-          flex-direction: row !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          gap: 8px !important;
+          height: 50px !important;
+          min-height: 50px !important;
           padding: 0 10px !important;
-          overflow: visible !important;
-          position: relative !important;
+          border-radius: 0 0 14px 14px !important;
+          justify-content: flex-start !important;
+          flex-wrap: nowrap !important;
+          gap: 8px !important;
+          overflow: hidden !important;
         }
+
+        .shared-topbar::before { width: 132px !important; opacity: 0.58 !important; }
 
         .shared-topbar .left {
           flex: 1 1 auto !important;
           min-width: 0 !important;
-          max-width: calc(100% - 46px) !important;
+          max-width: calc(100% - 48px) !important;
           gap: 7px !important;
           overflow: hidden !important;
         }
 
-        .shared-topbar .logo {
-          width: 38px !important;
-          height: 34px !important;
-          flex: 0 0 38px !important;
-          object-fit: contain !important;
+        .shared-logo-box {
+          width: 50px !important;
+          height: 36px !important;
+          flex: 0 0 50px !important;
+          border: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
         }
 
-        .shared-topbar .brand {
-          display: block !important;
-          min-width: 0 !important;
-          overflow: hidden !important;
+        .shared-topbar .logo {
+          width: 48px !important;
+          height: 34px !important;
         }
+
+        .shared-brand-divider { display: none !important; }
+        .shared-topbar .brand { min-width: 0 !important; overflow: hidden !important; }
 
         .shared-topbar .brand .title {
-          display: block !important;
           font-size: 14px !important;
           line-height: 1.05 !important;
-          font-weight: 850 !important;
+          font-weight: 900 !important;
           white-space: nowrap !important;
           overflow: hidden !important;
           text-overflow: ellipsis !important;
         }
 
         .shared-topbar .brand .subtitle {
-          display: block !important;
-          font-size: 8px !important;
+          font-size: 7.6px !important;
           line-height: 1.05 !important;
           white-space: nowrap !important;
           overflow: hidden !important;
@@ -131,6 +355,7 @@
           flex: 0 0 38px !important;
           position: relative !important;
           z-index: 52000 !important;
+          margin-left: auto !important;
         }
 
         .shared-topbar .mobile-menu-btn {
@@ -138,32 +363,32 @@
           height: 38px !important;
           min-height: 38px !important;
           padding: 0 !important;
-          border: 1px solid rgba(255, 255, 255, 0.28) !important;
-          border-radius: 10px !important;
-          background: rgba(255, 255, 255, 0.10) !important;
+          border: 1px solid rgba(34, 211, 238, 0.35) !important;
+          border-radius: 12px !important;
+          background: rgba(15, 23, 42, 0.32) !important;
           color: #ffffff !important;
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
           font-size: 24px !important;
           line-height: 1 !important;
-          box-shadow: none !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 0 16px rgba(34,211,238,0.12) !important;
         }
 
         .shared-topbar .mobile-menu-panel {
           display: none !important;
           position: fixed !important;
-          left: 8px !important;
-          right: 8px !important;
-          top: 60px !important;
+          left: 10px !important;
+          right: 10px !important;
+          top: 64px !important;
           width: auto !important;
           min-width: 0 !important;
           max-width: none !important;
-          max-height: calc(100vh - 74px) !important;
+          max-height: calc(100vh - 78px) !important;
           overflow-y: auto !important;
           padding: 10px !important;
-          border-radius: 14px !important;
-          background: #ffffff !important;
+          border-radius: 16px !important;
+          background: linear-gradient(180deg, #ffffff, #f8fbff) !important;
           color: #0f172a !important;
           box-shadow: 0 18px 46px rgba(15, 23, 42, 0.28) !important;
           border: 1px solid rgba(15, 23, 42, 0.10) !important;
@@ -197,18 +422,18 @@
 
         .mobile-menu-link.active,
         .mobile-menu-link:hover {
-          background: #eaf2ff !important;
-          color: #0b3f73 !important;
+          background: #eaf8ff !important;
+          color: #075985 !important;
         }
       }
 
       @media (max-width: 360px) {
         .shared-topbar .brand .title { font-size: 13px !important; }
-        .shared-topbar .brand .subtitle { font-size: 7.4px !important; }
+        .shared-topbar .brand .subtitle { font-size: 7px !important; }
+        .shared-logo-box { width: 44px !important; flex-basis: 44px !important; }
+        .shared-topbar .logo { width: 42px !important; }
       }
     `;
-
-    document.head.appendChild(style);
   }
 
   function pathText() {
@@ -348,12 +573,21 @@
     window.SPWT_BUTTON_OBSERVER = observer;
   }
 
-  function navLink(page, href, icon, label, extraClass = "") {
-    return `<a class="shared-nav-btn ${extraClass} ${activeClass(page)}" href="${pagePath(href)}" title="${escapeHtml(label)}">${icon}</a>`;
+  const NAV = [
+    { page: "home", href: "index.html", icon: "⌂", label: "Home" },
+    { page: "machine", href: "renderer/dashboard_v2/dashboard.html", icon: "▥", label: "Dashboard" },
+    { page: "team", href: "renderer/team/team.html", icon: "●●●", label: "People" },
+    { page: "capacity", href: "renderer/capacity/capacity.html", icon: "⌁", label: "Reports" },
+    { page: "info", href: "renderer/info/info.html", icon: "i", label: "Info" },
+    { page: "admin", href: "renderer/admin/admin.html", icon: "⚙", label: "Settings", extraClass: "settings" }
+  ];
+
+  function navLink(item) {
+    return `<a class="shared-nav-btn ${item.extraClass || ""} ${activeClass(item.page)}" href="${pagePath(item.href)}" title="${escapeHtml(item.label)}"><span class="shared-nav-icon">${item.icon}</span><span class="shared-nav-label">${escapeHtml(item.label)}</span></a>`;
   }
 
-  function mobileMenuLink(page, href, icon, label) {
-    return `<a class="mobile-menu-link ${activeClass(page)}" href="${pagePath(href)}"><span>${icon}</span><span>${escapeHtml(label)}</span></a>`;
+  function mobileMenuLink(item) {
+    return `<a class="mobile-menu-link ${activeClass(item.page)}" href="${pagePath(item.href)}"><span>${item.icon}</span><span>${escapeHtml(item.label)}</span></a>`;
   }
 
   function closeMobileMenus(except) {
@@ -395,11 +629,14 @@
 
     const title = options.title || "SP WorkTrack";
     const subtitle = options.subtitle || "Production & Performance Management System";
+    const navHtml = NAV.map(navLink).join("");
+    const mobileNavHtml = NAV.map(mobileMenuLink).join("");
 
     mount.innerHTML = `
       <div class="topbar shared-topbar">
         <div class="left">
-          <img src="${pagePath("assets/logo (2).png")}" class="logo" alt="SP Logo" />
+          <div class="shared-logo-box"><img src="${pagePath("assets/logo (2).png")}" class="logo" alt="SP Logo" /></div>
+          <div class="shared-brand-divider"></div>
           <div class="brand">
             <div class="title">${escapeHtml(title)}</div>
             <div class="subtitle">${escapeHtml(subtitle)}</div>
@@ -408,24 +645,14 @@
 
         <div class="right desktop-nav">
           <span id="currentDate">${todayText()}</span>
-          ${navLink("home", "index.html", "🏠", "Home / Production Entry")}
-          ${navLink("machine", "renderer/dashboard_v2/dashboard.html", "📊", "Machine Dashboard")}
-          ${navLink("team", "renderer/team/team.html", "👥", "Team Dashboard")}
-          ${navLink("capacity", "renderer/capacity/capacity.html", "📈", "Capacity Planning")}
-          ${navLink("info", "renderer/info/info.html", "ℹ", "Info")}
-          ${navLink("admin", "renderer/admin/admin.html", "⚙", "Admin Settings", "settings")}
+          ${navHtml}
         </div>
 
         <div class="mobile-menu-wrap">
           <button class="mobile-menu-btn" type="button" aria-label="Open navigation menu" aria-expanded="false">☰</button>
           <div class="mobile-menu-panel">
             <div class="mobile-menu-date">${todayText()}</div>
-            ${mobileMenuLink("home", "index.html", "🏠", "Home / Production Entry")}
-            ${mobileMenuLink("machine", "renderer/dashboard_v2/dashboard.html", "📊", "Machine Dashboard")}
-            ${mobileMenuLink("team", "renderer/team/team.html", "👥", "Team Dashboard")}
-            ${mobileMenuLink("capacity", "renderer/capacity/capacity.html", "📈", "Capacity Planning")}
-            ${mobileMenuLink("info", "renderer/info/info.html", "ℹ", "Info")}
-            ${mobileMenuLink("admin", "renderer/admin/admin.html", "⚙", "Admin Settings")}
+            ${mobileNavHtml}
           </div>
         </div>
       </div>
