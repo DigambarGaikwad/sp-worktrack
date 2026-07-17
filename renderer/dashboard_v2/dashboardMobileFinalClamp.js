@@ -2,11 +2,8 @@
 // Last-loaded mobile clamp for Machine Dashboard filters and report controls.
 (function () {
   const STYLE_ID = "dashboardMobileFinalClampStyle";
-  if (document.getElementById(STYLE_ID)) return;
 
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = `
+  const CSS = `
     @media (max-width: 700px) {
       html, body, .sp-app-shell, .sp-page, .dash-shell {
         width: 100% !important;
@@ -76,6 +73,7 @@
       .dash-btn,
       .dash-btn.primary,
       .dashboard-page .dash-btn,
+      #refreshBtn,
       #showRwOtherMachineReportBtn,
       #showMachineCompletionReportBtn {
         display: block !important;
@@ -94,33 +92,56 @@
       }
 
       .dash-select,
-      .dash-btn,
       .filter-bar input,
-      .loss-filter-bar input,
-      .filter-bar button,
-      .loss-filter-bar button,
-      #showRwOtherMachineReportBtn,
-      #showMachineCompletionReportBtn {
+      .loss-filter-bar input {
         height: 38px !important;
         min-height: 38px !important;
         padding: 0 9px !important;
         font-size: 10.5px !important;
         line-height: 1.15 !important;
-        white-space: normal !important;
-        overflow-wrap: anywhere !important;
-        text-align: center !important;
-      }
-
-      .dash-select,
-      .filter-bar select,
-      .loss-filter-bar select,
-      .filter-bar input,
-      .loss-filter-bar input {
         text-align: left !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
       }
+
+      .dash-btn,
+      .dash-btn.primary,
+      .filter-bar button,
+      .loss-filter-bar button,
+      #refreshBtn,
+      #showRwOtherMachineReportBtn,
+      #showMachineCompletionReportBtn {
+        height: auto !important;
+        min-height: 42px !important;
+        padding: 8px 9px !important;
+        font-size: 10.5px !important;
+        line-height: 1.15 !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+        text-align: center !important;
+        overflow: visible !important;
+      }
+
+      #showRwOtherMachineReportBtn,
+      #showMachineCompletionReportBtn {
+        min-height: 46px !important;
+      }
     }
   `;
-  document.head.appendChild(style);
+
+  function applyClamp() {
+    const old = document.getElementById(STYLE_ID);
+    if (old) old.remove();
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = CSS;
+    document.head.appendChild(style);
+  }
+
+  applyClamp();
+  window.addEventListener("load", applyClamp);
+  setTimeout(applyClamp, 900);
+  setTimeout(applyClamp, 1800);
+  setTimeout(applyClamp, 3500);
 })();
