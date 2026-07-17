@@ -133,7 +133,8 @@ body {
   }
 }
 
-@media (max-width: 380px) {
+/* Narrow phones: one filter per row. This avoids clipping after ~517/555 px views. */
+@media (max-width: 560px) {
   .people-page {
     padding: 8px !important;
   }
@@ -143,14 +144,56 @@ body {
   }
 
   .people-title {
-    font-size: 20px !important;
+    font-size: 21px !important;
+  }
+
+  .people-filters {
+    grid-template-columns: 1fr !important;
+    gap: 7px !important;
+  }
+
+  .people-filters > *,
+  .people-filters select,
+  .people-filters input,
+  .people-filters button,
+  .people-select,
+  .people-btn,
+  .people-date-range-input,
+  #showPerformanceReportBtn,
+  #showAbsentReportBtn {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-self: stretch !important;
   }
 
   .people-select,
   .people-btn,
   .people-filters input,
   .people-filters button {
+    height: 36px !important;
     padding: 0 8px !important;
     font-size: 10.5px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .people-page {
+    padding: 6px !important;
+  }
+
+  .people-hero {
+    padding: 12px 8px !important;
+  }
+
+  .people-title {
+    font-size: 19px !important;
+  }
+
+  .people-select,
+  .people-btn,
+  .people-filters input,
+  .people-filters button {
+    font-size: 10px !important;
   }
 }
