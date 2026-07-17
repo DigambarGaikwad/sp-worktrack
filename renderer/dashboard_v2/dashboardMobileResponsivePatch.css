@@ -162,7 +162,8 @@ body {
   }
 }
 
-@media (max-width: 380px) {
+/* Very narrow phones: one filter per row. This prevents right-side clipping below ~410px. */
+@media (max-width: 430px) {
   .dash-shell {
     padding: 8px !important;
   }
@@ -171,11 +172,53 @@ body {
     padding: 14px 10px !important;
   }
 
+  .filter-bar,
+  .loss-filter-bar {
+    grid-template-columns: 1fr !important;
+    gap: 7px !important;
+  }
+
+  #showRwOtherMachineReportBtn,
+  .filter-bar > *,
+  .loss-filter-bar > *,
+  #rwOtherMachineReportControls > * {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-self: stretch !important;
+  }
+
   .dash-select,
   .dash-btn,
   .filter-bar input,
   .loss-filter-bar input {
+    height: 36px !important;
     padding: 0 8px !important;
     font-size: 10.5px !important;
+  }
+
+  .brand-title {
+    font-size: 22px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .dash-shell {
+    padding: 6px !important;
+  }
+
+  .dash-topbar {
+    padding: 12px 8px !important;
+  }
+
+  .brand-title {
+    font-size: 20px !important;
+  }
+
+  .dash-select,
+  .dash-btn,
+  .filter-bar input,
+  .loss-filter-bar input {
+    font-size: 10px !important;
   }
 }
