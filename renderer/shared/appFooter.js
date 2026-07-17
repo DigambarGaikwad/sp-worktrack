@@ -1,6 +1,7 @@
 // Shared SP WorkTrack footer for all pages.
 (function () {
   const FOOTER_STYLE_ID = "spwt-shared-footer-style";
+  const RESPONSIVE_LINK_ID = "spwt-page-responsive-patch";
   const FOOTER_HTML = `
     <div class="sp-footer-left">
       <div class="sp-footer-title">SP WorkTrack</div>
@@ -11,6 +12,28 @@
       <div class="sp-footer-note">Developed for Sopan Process Technologies</div>
     </div>
   `;
+
+  function pathText() {
+    return window.location.pathname.replaceAll("\\", "/").toLowerCase();
+  }
+
+  function responsiveCssHref() {
+    const path = pathText();
+    if (path.includes("/renderer/dashboard_v2/")) return "dashboardMobileResponsivePatch.css";
+    if (path.includes("/renderer/team/")) return "teamMobileResponsivePatch.css";
+    if (path.includes("/renderer/capacity/")) return "capacityMobileResponsivePatch.css";
+    return "";
+  }
+
+  function ensureResponsivePatch() {
+    const href = responsiveCssHref();
+    if (!href || document.getElementById(RESPONSIVE_LINK_ID)) return;
+    const link = document.createElement("link");
+    link.id = RESPONSIVE_LINK_ID;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }
 
   function ensureStyles() {
     if (document.getElementById(FOOTER_STYLE_ID)) return;
@@ -109,6 +132,7 @@
   }
 
   function renderAppFooter() {
+    ensureResponsivePatch();
     ensureStyles();
     let footer = document.querySelector(".app-footer");
     if (!footer) {
