@@ -1,5 +1,5 @@
 /* Admin action behavior.
-   - Only Work & Sub Work add buttons float at the bottom.
+   - Only Work & Sub Work add buttons float at the bottom of the viewport.
    - Other Admin tab action buttons stay in their normal existing page flow.
    - Bottom Logout / Close / Save row stays normal. */
 
@@ -8,7 +8,11 @@
   position: static !important;
   top: auto !important;
   bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
   z-index: auto !important;
+  width: auto !important;
+  max-width: 100% !important;
   margin-top: 14px !important;
   padding: 12px 0 8px !important;
   background: transparent !important;
@@ -21,23 +25,33 @@
   box-shadow: none !important;
 }
 
-#tabWork > .admin-floating-actions,
-#adminPanel #tabWork > .admin-floating-actions,
-.admin-panel #tabWork > .admin-floating-actions {
-  position: sticky !important;
-  bottom: 12px !important;
+#tabWork:not(.hidden) > .admin-floating-actions,
+#adminPanel #tabWork:not(.hidden) > .admin-floating-actions,
+.admin-panel #tabWork:not(.hidden) > .admin-floating-actions {
+  position: fixed !important;
+  left: 18px !important;
+  right: 34px !important;
+  bottom: 16px !important;
   top: auto !important;
-  z-index: 95 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 12px 0 14px !important;
+  z-index: 9998 !important;
+  width: auto !important;
+  max-width: calc(100vw - 52px) !important;
+  margin: 0 !important;
   padding: 10px 12px !important;
-  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.98)) !important;
-  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(248,250,252,0.99)) !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
   border-radius: 16px !important;
-  box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.16) !important;
+  display: flex !important;
   justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
   backdrop-filter: blur(8px);
+}
+
+#tabWork:not(.hidden) {
+  padding-bottom: 92px !important;
 }
 
 #adminPanel .tab-page.hidden .admin-floating-actions,
@@ -50,6 +64,8 @@
   position: static !important;
   bottom: auto !important;
   top: auto !important;
+  left: auto !important;
+  right: auto !important;
   z-index: auto !important;
   margin-top: 18px !important;
   padding: 14px 0 0 !important;
@@ -84,9 +100,17 @@
     justify-content: flex-start !important;
   }
 
-  #tabWork > .admin-floating-actions,
-  #adminPanel #tabWork > .admin-floating-actions,
-  .admin-panel #tabWork > .admin-floating-actions {
-    bottom: 8px !important;
+  #tabWork:not(.hidden) > .admin-floating-actions,
+  #adminPanel #tabWork:not(.hidden) > .admin-floating-actions,
+  .admin-panel #tabWork:not(.hidden) > .admin-floating-actions {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: auto !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+
+  #tabWork:not(.hidden) {
+    padding-bottom: 160px !important;
   }
 }
