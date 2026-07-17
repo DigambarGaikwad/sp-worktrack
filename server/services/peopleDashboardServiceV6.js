@@ -16,6 +16,7 @@ function addDays(date, days) { const d = new Date(date.getFullYear(), date.getMo
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
 function safeYear(value) { const y = Number(value); return Number.isInteger(y) && y >= 2000 && y <= 2100 ? y : null; }
 function safeMonth(value) { const m = Number(value); return Number.isInteger(m) && m >= 1 && m <= 12 ? m : null; }
+function safeDate(value) { const text = clean(value); return /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(new Date(`${text}T00:00:00`).getTime()) ? text : ""; }
 function inRange(value, range) { const d = clean(value); return d && d >= range.from && d <= range.to; }
 function isGeneralShift(value) { const t = clean(value).toLowerCase(); return t.includes("general") || t === "g" || t === "gen"; }
 function isPresentAttendance(row = {}) {
@@ -46,6 +47,16 @@ function selectedRange(params = {}) {
   const now = new Date();
   const year = safeYear(params.year) || now.getFullYear();
   const month = safeMonth(params.month) || (now.getMonth() + 1);
+
+  if (["dateRange", "customRange", "custom"].includes(period)) {
+    let from = safeDate(params.fromDate || params.from_date || params.dateFrom || params.from);
+    let to = safeDate(params.toDate || params.to_date || params.dateTo || params.to);
+    if (!from || !to) return periodRange("last7");
+    if (from > to) [from, to] = [to, from];
+    const rangeYear = safeYear(from.slice(0, 4)) || year;
+    return capFutureRange({ from, to, label: `${from} to ${to}`, mode: "dateRange", year: rangeYear, month: "Custom" });
+  }
+
   if (period === "selectedYear") return capFutureRange({ from: `${year}-01-01`, to: `${year}-12-31`, label: `${year}`, mode: "year", year, month: "All" });
   if (period === "selectedMonth") return capFutureRange({ from: `${year}-${String(month).padStart(2, "0")}-01`, to: `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth(year, month)).padStart(2, "0")}`, label: `${monthName(month)} ${year}`, mode: "month", year, month });
   return periodRange(period);
