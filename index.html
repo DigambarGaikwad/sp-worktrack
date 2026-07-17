@@ -22,49 +22,14 @@
         </div>
 
         <div class="grid">
-          <div class="field">
-            <label>Date</label>
-            <input type="date" id="workDate" />
-          </div>
-
-          <div class="field">
-            <label>Shift</label>
-            <select id="shiftSelect"></select>
-          </div>
-
-          <div class="field">
-            <label>Team Member</label>
-            <select id="employeeSelect"></select>
-          </div>
-
-          <div class="field">
-            <label>Shift Work Type</label>
-            <select id="workTypeTop">
-              <option value="Normal">Normal</option>
-              <option value="Overtime">Overtime</option>
-            </select>
-          </div>
-
-          <div class="field" id="flexibleShiftBox" style="display:none;">
-            <label>Flexible Shift / OT Minutes</label>
-            <input type="number" id="flexibleShiftMinutes" min="0" placeholder="Example: 120" />
-          </div>
-
-          <div class="field">
-            <label>Major Loss Reason</label>
-            <select id="lossReasonSelect">
-              <option value="">No Major Loss</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label>Loss Remark</label>
-            <input type="text" id="lossRemark" placeholder="Remarks for major loss" />
-          </div>
-
-          <div class="tip">
-            Tip: Select shift work type here. Work nature (Normal / Other / Rework) is selected inside each work card.
-          </div>
+          <div class="field"><label>Date</label><input type="date" id="workDate" /></div>
+          <div class="field"><label>Shift</label><select id="shiftSelect"></select></div>
+          <div class="field"><label>Team Member</label><select id="employeeSelect"></select></div>
+          <div class="field"><label>Shift Work Type</label><select id="workTypeTop"><option value="Normal">Normal</option><option value="Overtime">Overtime</option></select></div>
+          <div class="field" id="flexibleShiftBox" style="display:none;"><label>Flexible Shift / OT Minutes</label><input type="number" id="flexibleShiftMinutes" min="0" placeholder="Example: 120" /></div>
+          <div class="field"><label>Major Loss Reason</label><select id="lossReasonSelect"><option value="">No Major Loss</option></select></div>
+          <div class="field"><label>Loss Remark</label><input type="text" id="lossRemark" placeholder="Remarks for major loss" /></div>
+          <div class="tip">Tip: Select shift work type here. Work nature (Normal / Other / Rework) is selected inside each work card.</div>
         </div>
       </div>
 
@@ -76,70 +41,30 @@
       </div>
 
       <div class="card">
-        <div class="card-head">
-          <div class="card-title">Shift Summary</div>
-        </div>
+        <div class="card-head"><div class="card-title">Shift Summary</div></div>
         <div class="summary">
-          <div>
-            <div class="metric-label">Shift Available</div>
-            <div class="metric-value"><span id="availableMin">0 min</span></div>
-          </div>
-          <div>
-            <div class="metric-label">Utilized Time</div>
-            <div class="metric-value"><span id="utilizedMin">0 min</span></div>
-          </div>
-          <div>
-            <div class="metric-label">Remaining Time</div>
-            <div class="metric-value"><span id="remainingMin">0 min</span></div>
-          </div>
-          <div>
-            <div class="metric-label">Productivity</div>
-            <div class="metric-value"><span id="productivityPct">0%</span></div>
-          </div>
+          <div><div class="metric-label">Shift Available</div><div class="metric-value"><span id="availableMin">0 min</span></div></div>
+          <div><div class="metric-label">Utilized Time</div><div class="metric-value"><span id="utilizedMin">0 min</span></div></div>
+          <div><div class="metric-label">Remaining Time</div><div class="metric-value"><span id="remainingMin">0 min</span></div></div>
+          <div><div class="metric-label">Productivity</div><div class="metric-value"><span id="productivityPct">0%</span></div></div>
         </div>
       </div>
 
-      <div class="bottom-actions">
-        <button class="btn green" id="submitBtn">Submit</button>
-      </div>
+      <div class="bottom-actions"><button class="btn green" id="submitBtn">Submit</button></div>
 
-      <!-- SUMMARY SCREEN (FULL PAGE) -->
       <div class="summary-screen hidden" id="summaryScreen">
         <div class="summary-wrap">
           <div class="summary-top">
-            <div>
-              <div class="summary-title">Submission Summary</div>
-              <div class="summary-sub" id="sumMetaLine">-</div>
-            </div>
-            <div class="summary-actions">
-              <button class="btn grey" id="backToEntryBtn" type="button">Back</button>
-              <button class="btn green" id="newEntryBtn" type="button">+ New Entry</button>
-            </div>
+            <div><div class="summary-title">Submission Summary</div><div class="summary-sub" id="sumMetaLine">-</div></div>
+            <div class="summary-actions"><button class="btn grey" id="backToEntryBtn" type="button">Back</button><button class="btn green" id="newEntryBtn" type="button">+ New Entry</button></div>
           </div>
-
           <div class="summary-cards">
-            <div class="sum-card">
-              <div class="sum-card-label">Shift Available</div>
-              <div class="sum-card-val" id="sumShiftAvail">0 min</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Utilized</div>
-              <div class="sum-card-val" id="sumUtilized">0 min</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Remaining</div>
-              <div class="sum-card-val" id="sumRemaining">0 min</div>
-            </div>
-            <div class="sum-card">
-              <div class="sum-card-label">Productivity</div>
-              <div class="sum-card-val" id="sumProductivity">0%</div>
-            </div>
+            <div class="sum-card"><div class="sum-card-label">Shift Available</div><div class="sum-card-val" id="sumShiftAvail">0 min</div></div>
+            <div class="sum-card"><div class="sum-card-label">Utilized</div><div class="sum-card-val" id="sumUtilized">0 min</div></div>
+            <div class="sum-card"><div class="sum-card-label">Remaining</div><div class="sum-card-val" id="sumRemaining">0 min</div></div>
+            <div class="sum-card"><div class="sum-card-label">Productivity</div><div class="sum-card-val" id="sumProductivity">0%</div></div>
           </div>
-
-          <div class="sum-table-wrap">
-            <div class="sum-table-title">Work Details</div>
-            <div class="sum-table" id="sumWorksTable"></div>
-          </div>
+          <div class="sum-table-wrap"><div class="sum-table-title">Work Details</div><div class="sum-table" id="sumWorksTable"></div></div>
         </div>
       </div>
       <footer class="app-footer"></footer>
@@ -148,6 +73,7 @@
 
   <script src="renderer/config.js"></script>
   <script src="renderer/shared/appHeader.js"></script>
+  <script src="renderer/shared/appHeaderPolish.js"></script>
   <script src="renderer/shared/appFooter.js"></script>
   <script>
     window.SPWT.renderAppHeader({
