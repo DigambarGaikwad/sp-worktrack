@@ -2,28 +2,363 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SP WorkTrack – Info</title>
   <link rel="stylesheet" href="../style.css" />
   <link rel="stylesheet" href="../shared/appShell.css" />
   <style>
-    .info-page-panel { padding: 24px; }
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; margin-top: 18px; }
-    .info-card { background: #ffffff; border-radius: 18px; padding: 22px; border: 1px solid rgba(15, 23, 42, 0.08); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
-    .info-card h2 { margin-top: 0; margin-bottom: 14px; font-size: 20px; font-weight: 800; color: #111827; }
-    .info-card p { line-height: 1.7; color: #374151; font-size: 14px; }
-    .info-card ul { margin: 0; padding-left: 18px; }
-    .info-card li { margin-bottom: 10px; line-height: 1.6; color: #374151; font-size: 14px; }
-    .focus-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-top: 18px; }
-    .focus-card { background: #f8fafc; border-radius: 16px; padding: 18px; border: 1px solid rgba(15, 23, 42, 0.08); }
-    .focus-icon { font-size: 28px; margin-bottom: 10px; }
-    .focus-card h3 { margin: 0 0 10px; font-size: 16px; font-weight: 800; color: #111827; }
-    .focus-card p { margin: 0; font-size: 13px; line-height: 1.6; color: #4b5563; }
-    .version-block { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid rgba(15, 23, 42, 0.08); }
-    .version-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .version-block h3 { margin: 0 0 10px; font-size: 17px; color: #111827; }
-    .highlight-box { background: linear-gradient(135deg, #1f2937, #111827); color: #ffffff; border-radius: 18px; padding: 24px; margin-top: 20px; }
-    .highlight-box h2 { color: #ffffff; margin-top: 0; }
-    .highlight-box p { color: rgba(255,255,255,0.88); }
+    :root {
+      --info-dark-1: #061628;
+      --info-dark-2: #0a2742;
+      --info-dark-3: #07111f;
+      --info-cyan: #22d3ee;
+      --info-orange: #f97316;
+      --info-muted: #64748b;
+      --info-line: rgba(15, 23, 42, 0.08);
+      --info-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+    }
+
+    .info-page-panel {
+      padding: 0;
+      overflow: hidden;
+      border-radius: 20px;
+      background: #f8fafc;
+    }
+
+    .info-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 28px 30px;
+      color: #ffffff;
+      background:
+        radial-gradient(circle at 8% 18%, rgba(34, 211, 238, 0.24), transparent 24%),
+        radial-gradient(circle at 98% 10%, rgba(249, 115, 22, 0.14), transparent 22%),
+        linear-gradient(115deg, var(--info-dark-1), var(--info-dark-2) 52%, var(--info-dark-3));
+      border-bottom: 2px solid rgba(34, 211, 238, 0.35);
+    }
+
+    .info-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 310px;
+      background:
+        linear-gradient(120deg, rgba(34, 211, 238, 0.16), transparent 58%),
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.055) 0 1px, transparent 1px 14px);
+      clip-path: polygon(0 0, 84% 0, 62% 100%, 0 100%);
+      pointer-events: none;
+    }
+
+    .info-hero-content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .info-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(34, 211, 238, 0.28);
+      background: rgba(15, 23, 42, 0.36);
+      color: #cffafe;
+      font-size: 12px;
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+
+    .info-title {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.05;
+      letter-spacing: -0.7px;
+      font-weight: 950;
+    }
+
+    .info-subtitle {
+      margin: 8px 0 0;
+      max-width: 760px;
+      color: rgba(226, 232, 240, 0.93);
+      font-size: 14px;
+      line-height: 1.6;
+      font-weight: 650;
+    }
+
+    .info-status-pill {
+      min-width: 220px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(2, 6, 23, 0.24);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+      text-align: right;
+    }
+
+    .info-status-pill span {
+      display: block;
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .info-status-pill strong {
+      display: block;
+      margin-top: 6px;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 950;
+    }
+
+    .info-body {
+      padding: 24px;
+    }
+
+    .info-card {
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 22px;
+      border: 1px solid var(--info-line);
+      box-shadow: var(--info-shadow);
+      margin-bottom: 18px;
+    }
+
+    .info-card h2,
+    .roadmap-title {
+      margin: 0 0 14px;
+      font-size: 21px;
+      font-weight: 950;
+      color: #0f172a;
+      letter-spacing: -0.25px;
+    }
+
+    .info-card p {
+      line-height: 1.7;
+      color: #374151;
+      font-size: 14px;
+      margin: 0 0 10px;
+    }
+
+    .focus-grid,
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .focus-card,
+    .feature-card {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      border-radius: 16px;
+      padding: 18px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      min-height: 124px;
+    }
+
+    .focus-card::after,
+    .feature-card::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--info-orange), var(--info-cyan));
+      opacity: 0.85;
+    }
+
+    .focus-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .focus-card h3,
+    .feature-card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .focus-card p,
+    .feature-card p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #4b5563;
+    }
+
+    .roadmap-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 24px;
+      border: 1px solid var(--info-line);
+      box-shadow: var(--info-shadow);
+      margin-bottom: 18px;
+    }
+
+    .roadmap-subtitle {
+      margin: -6px 0 20px;
+      color: var(--info-muted);
+      font-size: 13px;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+
+    .roadmap {
+      display: grid;
+      gap: 14px;
+    }
+
+    .level-card {
+      display: grid;
+      grid-template-columns: 96px 1fr auto;
+      gap: 16px;
+      align-items: stretch;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 18px;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      overflow: hidden;
+    }
+
+    .level-no {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #ffffff;
+      background:
+        radial-gradient(circle at 18% 18%, rgba(34, 211, 238, 0.22), transparent 28%),
+        linear-gradient(135deg, var(--info-dark-1), var(--info-dark-2));
+      font-weight: 950;
+    }
+
+    .level-no span {
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #bae6fd;
+    }
+
+    .level-no strong {
+      font-size: 30px;
+      line-height: 1;
+      margin-top: 4px;
+    }
+
+    .level-body {
+      padding: 17px 0;
+    }
+
+    .level-body h3 {
+      margin: 0 0 8px;
+      color: #0f172a;
+      font-size: 17px;
+      font-weight: 950;
+    }
+
+    .level-body p {
+      margin: 0;
+      color: #475569;
+      font-size: 13.5px;
+      line-height: 1.65;
+    }
+
+    .level-badge {
+      align-self: center;
+      margin-right: 16px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #1e3a8a;
+      font-size: 12px;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+
+    .level-card.current {
+      border-color: rgba(34, 211, 238, 0.34);
+      box-shadow: 0 14px 34px rgba(34, 211, 238, 0.12);
+      background: linear-gradient(180deg, #f0fdff, #ffffff);
+    }
+
+    .level-card.current .level-no {
+      background:
+        radial-gradient(circle at 18% 18%, rgba(249, 115, 22, 0.24), transparent 28%),
+        linear-gradient(135deg, #0f3b5f, #06243a);
+    }
+
+    .level-card.current .level-badge {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .final-note {
+      background:
+        radial-gradient(circle at 7% 12%, rgba(34, 211, 238, 0.18), transparent 25%),
+        linear-gradient(115deg, var(--info-dark-1), var(--info-dark-2), var(--info-dark-3));
+      color: #ffffff;
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 16px 38px rgba(2, 6, 23, 0.20);
+      border: 1px solid rgba(34, 211, 238, 0.20);
+    }
+
+    .final-note h2 {
+      margin: 0 0 12px;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 950;
+    }
+
+    .final-note p {
+      margin: 0 0 10px;
+      color: rgba(226, 232, 240, 0.94);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .footer-credit {
+      margin-top: 18px;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--info-orange);
+      box-shadow: var(--info-shadow);
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-weight: 850;
+      color: #0f172a;
+    }
+
+    .footer-credit small {
+      display: block;
+      margin-top: 4px;
+      color: #64748b;
+      font-weight: 700;
+    }
+
+    @media (max-width: 760px) {
+      .info-body { padding: 14px; }
+      .info-hero { padding: 22px 18px; }
+      .info-title { font-size: 27px; }
+      .info-status-pill { text-align: left; width: 100%; }
+      .level-card { grid-template-columns: 72px 1fr; }
+      .level-badge { grid-column: 2; justify-self: start; margin: 0 0 14px; }
+      .level-body { padding: 15px 12px 4px 0; }
+    }
   </style>
 </head>
 <body>
@@ -32,13 +367,70 @@
       <div id="spAppHeader"></div>
       <main class="sp-content">
         <section class="sp-panel info-page-panel">
-          <div class="sp-page-title-row"><div><h1 class="sp-page-title">SP WorkTrack v 2.0</h1><p class="sp-page-subtitle">Production & Performance Management System</p></div></div>
-          <div class="info-card"><h2>About SP WorkTrack</h2><p>SP WorkTrack is an in-house digital production control platform developed to improve production visibility, process discipline, traceability, accountability, and operational decision-making across the shopfloor.</p><p>The system digitally tracks production activities, machine-wise progress, manpower activity, quality checkpoints, work completion status, deviations, and operational records in a structured and traceable way.</p><p>SP WorkTrack is designed as a practical step toward lean manufacturing, digitization, operational transparency, and future Industry 4.0 readiness by converting shopfloor activities into measurable and actionable production data.</p></div>
-          <div class="info-card"><h2>Key Focus Areas</h2><div class="focus-grid"><div class="focus-card"><div class="focus-icon">📊</div><h3>Production Visibility &amp; Control</h3><p>Machine Dashboard, work progress tracking, machine status monitoring, and remaining vs completed work visibility.</p></div><div class="focus-card"><div class="focus-icon">🧾</div><h3>Digital Traceability</h3><p>Structured tracking of who performed the work, when it was done, and on which machine and department.</p></div><div class="focus-card"><div class="focus-icon">✅</div><h3>Quality &amp; Rework Control</h3><p>Quality checkpoint integration, rework tracking, root area identification, and deviation visibility.</p></div><div class="focus-card"><div class="focus-icon">👥</div><h3>Operational Accountability</h3><p>Team activity visibility, admin-controlled master data, and structured digital production records.</p></div><div class="focus-card"><div class="focus-icon">⚙️</div><h3>Performance Monitoring</h3><p>Standard vs actual tracking, workload visibility, and operational review support.</p></div><div class="focus-card"><div class="focus-icon">🏭</div><h3>Industry 4.0 Foundation</h3><p>Centralized production data, multi-device synchronization, and future-ready digital manufacturing structure.</p></div><div class="focus-card"><div class="focus-icon">📉</div><h3>Lean Manufacturing Support</h3><p>Reduction of wrong entries, deviation visibility, bottleneck identification, and operational gap analysis.</p></div><div class="focus-card"><div class="focus-icon">🧠</div><h3>Future Production Intelligence</h3><p>Backend foundation for future productivity analytics, planning systems, and intelligent decision support.</p></div></div></div>
-          <div class="info-card"><h2>Core Features</h2><ul><li>Production entry tracking</li><li>Machine-wise work tracking</li><li>Department and sub-work control</li><li>Standard time and actual time tracking</li><li>Work partition / booking point control</li><li>Quality checkpoint tracking</li><li>Rework and deviation tracking</li><li>Root area identification for rework</li><li>Wrong and duplicate entry reduction</li><li>Machine status control</li><li>Admin-controlled master data</li><li>Team and manpower activity tracking</li><li>Remaining and completed work visibility</li><li>Machine dashboard and progress monitoring</li><li>Google Sheets synchronization</li><li>Multi-device digital data entry</li></ul></div>
-          <div class="info-card"><h2>System Evolution Roadmap</h2><div class="version-block"><h3>Level 1 — Production Entry System</h3><p>Digital replacement of manual production recording with structured production entry, machine selection, shift-wise tracking, and standard vs actual time capture.</p></div><div class="version-block"><h3>Level 2 — Production Tracking System</h3><p>Expanded machine-wise and department-wise tracking with work progress visibility, machine status monitoring, and remaining vs completed work control.</p></div><div class="version-block"><h3>Level 3 — Production Control &amp; Traceability System</h3><p>Current SP WorkTrack system level focused on production control, quality integration, accountability, and centralized digital traceability.</p></div><div class="version-block"><h3>Level 4 — Production & Performance Management System</h3><p>Current SP WorkTrack system level focused on machine dashboard visibility, standard vs actual monitoring, quality and rework visibility, machine status control, team activity foundation, and performance review support.</p></div><div class="version-block"><h3>Level 5 — Production Planning &amp; Decision Support System</h3><p>Planned capability for manpower planning, overtime estimation, workload balancing, capacity analysis, and planning support.</p></div><div class="version-block"><h3>Level 6 — Production Intelligence System</h3><p>Long-term vision involving predictive analytics, intelligent production insights, automated alerts, and AI-assisted operational decision-making.</p></div></div>
-          <div class="highlight-box"><h2>Current System Position</h2><p>SP WorkTrack v 2.0 currently operates at the <strong>Production Performance Management</strong> stage, providing strong operational visibility, quality integration, process accountability, and structured digital production records.</p><p>The current backend and data structure already create a strong foundation for future productivity analytics, planning systems, and intelligent manufacturing support.</p></div>
-          <div class="info-card"><p><strong>© 2026 Digambar Gaikwad</strong><br />Developed for Sopan Process Technologies</p></div>
+          <div class="info-hero">
+            <div class="info-hero-content">
+              <div>
+                <div class="info-kicker">▣ Final Development Status</div>
+                <h1 class="info-title">SP WorkTrack v2.0</h1>
+                <p class="info-subtitle">Production &amp; Performance Management System built for shopfloor production entry, machine progress control, people performance visibility, quality/rework tracking, admin master data, and capacity planning.</p>
+              </div>
+              <div class="info-status-pill"><span>Current Stage</span><strong>Level 5 Complete</strong></div>
+            </div>
+          </div>
+
+          <div class="info-body">
+            <div class="info-card">
+              <h2>About SP WorkTrack</h2>
+              <p>SP WorkTrack is an in-house digital production control platform developed to replace scattered manual production records with structured, traceable and review-ready shopfloor data.</p>
+              <p>The system tracks who worked, on which machine, in which shift, what work was completed, how much time was booked, what quality checks were done, and where rework, other work, loss hours, absence and planning gaps are appearing.</p>
+              <p>With the addition of capacity planning, SP WorkTrack now connects production history, skill history, manpower availability, planned absence and machine demand into a practical planning support system.</p>
+            </div>
+
+            <div class="info-card">
+              <h2>Key Focus Areas</h2>
+              <div class="focus-grid">
+                <div class="focus-card"><div class="focus-icon">📝</div><h3>Production Entry Discipline</h3><p>Shift-wise production entry with employee password protection, duplicate blocking, normal/rework/other work separation, standard time and actual time tracking.</p></div>
+                <div class="focus-card"><div class="focus-icon">📊</div><h3>Machine Dashboard</h3><p>Machine-wise standard, actual, remaining, completion, efficiency, department performance, rework/other description, quality report and completion report visibility.</p></div>
+                <div class="focus-card"><div class="focus-icon">👥</div><h3>People Performance</h3><p>Present/absent visibility across fixed shifts, planned and unplanned absence, productivity, utilization, overtime, individual performance and report generation.</p></div>
+                <div class="focus-card"><div class="focus-icon">✅</div><h3>Quality &amp; Rework Control</h3><p>Quality checkpoints, observation notes, rework root area, rework/other reason visibility and printable/sendable reports for review.</p></div>
+                <div class="focus-card"><div class="focus-icon">⚙️</div><h3>Admin Control</h3><p>Machines, employees, shifts, departments, sub works, standard time, booking points, users/access, report emails, PIN recovery, backup, restore and maintenance tools.</p></div>
+                <div class="focus-card"><div class="focus-icon">📈</div><h3>Capacity Planning</h3><p>Date range planning, machine demand, priority, target date, shift manpower, overtime preference, planned absence, skill history, manpower shortage and date-wise production plan.</p></div>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <h2>Core Features Delivered</h2>
+              <div class="feature-grid">
+                <div class="feature-card"><h3>Production Entry</h3><p>Employee authentication, fixed/flexible shift handling, shift summary, submission summary, standard vs actual time and loss capture.</p></div>
+                <div class="feature-card"><h3>Dashboards</h3><p>Machine dashboard, people performance dashboard, absent report, overtime report, quality report, rework/other report and completion report.</p></div>
+                <div class="feature-card"><h3>Database Mode</h3><p>PocketBase-backed local DB, runtime folder, transfer package restore, backup before import, maintenance actions and Google Sheet backup support.</p></div>
+                <div class="feature-card"><h3>Skill &amp; Planning</h3><p>Skill matrix, past-performance efficiency, planning efficiency cap, department priority, capacity demand, manpower gap and date-wise employee plan.</p></div>
+              </div>
+            </div>
+
+            <div class="roadmap-card">
+              <h2 class="roadmap-title">System Evolution Roadmap</h2>
+              <p class="roadmap-subtitle">SP WorkTrack has reached Level 5. Level 6 is intentionally not planned under this development cycle because this implementation is being closed after the capacity planning stage.</p>
+              <div class="roadmap">
+                <div class="level-card"><div class="level-no"><span>Level</span><strong>1</strong></div><div class="level-body"><h3>Production Entry System</h3><p>Started as a digital replacement for manual production records. Operators could select date, shift, employee, machine, department, sub work, standard time and actual time, reducing paper dependency and improving daily data availability.</p></div><div class="level-badge">Completed</div></div>
+                <div class="level-card"><div class="level-no"><span>Level</span><strong>2</strong></div><div class="level-body"><h3>Production Tracking System</h3><p>Expanded into machine-wise progress tracking with remaining/completed work, standard vs actual consumption, duplicate prevention, machine status control and structured admin master data for machines, employees, departments and sub works.</p></div><div class="level-badge">Completed</div></div>
+                <div class="level-card"><div class="level-no"><span>Level</span><strong>3</strong></div><div class="level-body"><h3>Production Control &amp; Traceability System</h3><p>Added quality checkpoints, booking points, rework root areas, loss reasons, overrun controls, planned absence, reports, audit-friendly details and clear accountability of who performed each work and when.</p></div><div class="level-badge">Completed</div></div>
+                <div class="level-card"><div class="level-no"><span>Level</span><strong>4</strong></div><div class="level-body"><h3>Production &amp; Performance Management System</h3><p>Introduced machine dashboard, people performance dashboard, absent and overtime reports, quality/rework reporting, employee performance visibility, Google backup, database transfer, user access control and secured admin workflows.</p></div><div class="level-badge">Completed</div></div>
+                <div class="level-card current"><div class="level-no"><span>Level</span><strong>5</strong></div><div class="level-body"><h3>Production Planning &amp; Decision Support System</h3><p>Final delivered stage. Capacity planning now uses machine demand, monthly targets, shift manpower, overtime preference, planned absence, skill history, department priority, completed work and planning efficiency to generate date-wise employee production plans and manpower shortage visibility.</p></div><div class="level-badge">Current / Final</div></div>
+              </div>
+            </div>
+
+            <div class="final-note">
+              <h2>Final System Position</h2>
+              <p>SP WorkTrack v2.0 is now positioned as a Level 5 Production Planning &amp; Decision Support System. It is not only an entry or dashboard tool; it now supports production review, manpower planning, capacity checking, skill-based allocation and report sharing.</p>
+              <p>This development cycle is being closed at Level 5. The system has a strong practical foundation for Sopan Process Technologies shopfloor use, with future enhancement possible only if the organization decides to continue beyond this final delivered stage.</p>
+            </div>
+
+            <div class="footer-credit">
+              <div>SP WorkTrack<small>Production &amp; Performance Management System</small></div>
+              <div>© 2026 Digambar Gaikwad<small>Developed for Sopan Process Technologies</small></div>
+            </div>
+          </div>
         </section>
       </main>
     </div>
