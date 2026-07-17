@@ -196,3 +196,182 @@
     }
   }
 })();
+
+// Mobile Admin tab menu. Keeps desktop tabs unchanged and uses existing tab click logic.
+(function () {
+  const STYLE_ID = "adminMobileTabsMenuStyle";
+  const MENU_ID = "adminMobileTabsMenu";
+  const LIST_ID = "adminMobileTabsList";
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initMobileTabsMenu();
+    [400, 900, 1800, 3500].forEach((ms) => setTimeout(initMobileTabsMenu, ms));
+  });
+
+  document.addEventListener("click", (event) => {
+    const menu = document.getElementById(MENU_ID);
+    const list = document.getElementById(LIST_ID);
+    if (!menu || !list || menu.contains(event.target)) return;
+    closeMenu();
+  }, true);
+
+  function initMobileTabsMenu() {
+    ensureViewportMeta();
+    addStyles();
+    ensureMenu();
+    renderMenuItems();
+    wireObservers();
+    updateCurrentTabLabel();
+  }
+
+  function ensureViewportMeta() {
+    if (document.querySelector('meta[name="viewport"]')) return;
+    const meta = document.createElement("meta");
+    meta.name = "viewport";
+    meta.content = "width=device-width, initial-scale=1.0";
+    document.head.appendChild(meta);
+  }
+
+  function addStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      .admin-mobile-tabs-menu{display:none;}
+      @media(max-width:700px){
+        .admin-page{width:100%!important;max-width:100%!important;padding:8px!important;box-sizing:border-box!important;overflow-x:hidden!important;}
+        .admin-page-card{width:100%!important;max-width:100%!important;margin:0!important;box-sizing:border-box!important;overflow:hidden!important;}
+        .admin-page-head h1{font-size:30px!important;line-height:1.05!important;margin:0 0 8px!important;}
+        #adminPanel>.tabs{display:none!important;}
+        .admin-mobile-tabs-menu{display:block;margin:0 0 12px;position:relative;z-index:90;}
+        .admin-mobile-tabs-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:1px solid #dbe3ee;border-radius:16px;background:#fff;padding:8px;box-shadow:0 8px 18px rgba(15,23,42,.08);}
+        .admin-mobile-tabs-btn{border:0;border-radius:12px;background:#0f172a;color:#fff;min-height:42px;padding:0 14px;font-weight:1000;font-size:14px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;box-shadow:0 8px 18px rgba(15,23,42,.14);}
+        .admin-mobile-tabs-current{min-width:0;flex:1;text-align:right;color:#475569;font-size:12px;font-weight:900;line-height:1.2;}
+        .admin-mobile-tabs-current b{display:block;color:#0f172a;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .admin-mobile-tabs-list{display:none;margin-top:8px;border:1px solid #dbe3ee;border-radius:16px;background:#fff;padding:8px;box-shadow:0 18px 35px rgba(15,23,42,.18);max-height:62vh;overflow:auto;}
+        .admin-mobile-tabs-menu.open .admin-mobile-tabs-list{display:grid;grid-template-columns:1fr;gap:7px;}
+        .admin-mobile-tab-item{width:100%;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;color:#0f172a;text-align:left;min-height:42px;padding:9px 12px;font-weight:950;font-size:13px;}
+        .admin-mobile-tab-item.active{background:#0f172a;color:#fff;border-color:#0f172a;}
+        .admin-mobile-tab-item:active{transform:scale(.99);}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureMenu() {
+    const panel = document.getElementById("adminPanel");
+    const tabs = panel?.querySelector(":scope > .tabs");
+    if (!panel || !tabs) return;
+
+    let menu = document.getElementById(MENU_ID);
+    if (!menu) {
+      menu = document.createElement("div");
+      menu.id = MENU_ID;
+      menu.className = "admin-mobile-tabs-menu";
+      menu.innerHTML = `
+        <div class="admin-mobile-tabs-bar">
+          <button id="adminMobileTabsToggle" class="admin-mobile-tabs-btn" type="button" aria-expanded="false">☰ Admin Menu</button>
+          <div class="admin-mobile-tabs-current">Current Tab <b id="adminMobileTabsCurrent">Machines</b></div>
+        </div>
+        <div id="adminMobileTabsList" class="admin-mobile-tabs-list"></div>
+      `;
+      tabs.insertAdjacentElement("beforebegin", menu);
+    }
+
+    const toggle = document.getElementById("adminMobileTabsToggle");
+    if (toggle && !toggle.__spwtAdminMobileMenuWired) {
+      toggle.__spwtAdminMobileMenuWired = true;
+      toggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const isOpen = menu.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        if (isOpen) renderMenuItems();
+      });
+    }
+  }
+
+  function visibleTabs() {
+    const tabs = Array.from(document.querySelectorAll("#adminPanel > .tabs .tab[data-tab]"));
+    return tabs.filter((tab) => {
+      if (tab.disabled) return false;
+      if (tab.style.display === "none") return false;
+      if (tab.hidden || tab.classList.contains("hidden")) return false;
+      return true;
+    });
+  }
+
+  function renderMenuItems() {
+    const list = document.getElementById(LIST_ID);
+    if (!list) return;
+    const activeId = document.querySelector("#adminPanel > .tabs .tab.active[data-tab]")?.dataset?.tab || "";
+    const items = visibleTabs();
+    list.innerHTML = items.map((tab) => {
+      const tabId = tab.dataset.tab || "";
+      const label = (tab.textContent || tabId).trim();
+      const active = tabId === activeId ? " active" : "";
+      return `<button type="button" class="admin-mobile-tab-item${active}" data-mobile-tab="${escapeAttr(tabId)}">${escapeHtml(label)}</button>`;
+    }).join("");
+
+    list.querySelectorAll("[data-mobile-tab]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        const tabId = btn.getAttribute("data-mobile-tab") || "";
+        const realTab = document.querySelector(`#adminPanel > .tabs .tab[data-tab="${cssEscape(tabId)}"]`);
+        closeMenu();
+        if (realTab && realTab.style.display !== "none") realTab.click();
+        setTimeout(() => { updateCurrentTabLabel(); renderMenuItems(); }, 120);
+      });
+    });
+  }
+
+  function updateCurrentTabLabel() {
+    const out = document.getElementById("adminMobileTabsCurrent");
+    if (!out) return;
+    const active = document.querySelector("#adminPanel > .tabs .tab.active[data-tab]") || visibleTabs()[0];
+    out.textContent = (active?.textContent || "Admin").trim();
+  }
+
+  function closeMenu() {
+    const menu = document.getElementById(MENU_ID);
+    const toggle = document.getElementById("adminMobileTabsToggle");
+    if (menu) menu.classList.remove("open");
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+  }
+
+  function wireObservers() {
+    const panel = document.getElementById("adminPanel");
+    const tabs = panel?.querySelector(":scope > .tabs");
+    if (!tabs || tabs.__spwtMobileTabsObserved) return;
+    tabs.__spwtMobileTabsObserved = true;
+    const observer = new MutationObserver(() => {
+      renderMenuItems();
+      updateCurrentTabLabel();
+    });
+    observer.observe(tabs, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
+
+    document.addEventListener("click", (event) => {
+      if (event.target?.closest?.("#adminPanel > .tabs .tab[data-tab]")) {
+        setTimeout(() => { renderMenuItems(); updateCurrentTabLabel(); }, 120);
+      }
+    }, true);
+
+    setInterval(() => {
+      renderMenuItems();
+      updateCurrentTabLabel();
+    }, 1800);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, "&#096;");
+  }
+
+  function cssEscape(value) {
+    if (window.CSS?.escape) return window.CSS.escape(String(value));
+    return String(value).replace(/(["\\#.;:[\]()= ])/g, "\\$1");
+  }
+})();
