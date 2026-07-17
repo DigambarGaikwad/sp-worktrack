@@ -1,19 +1,29 @@
-/* Admin action buttons should stay in normal document flow, not sticky/fixed at screen bottom. */
+/* Admin action buttons should float near the active tab content, not at screen bottom. */
 #adminPanel .admin-floating-actions,
 .admin-panel .admin-floating-actions {
-  position: static !important;
+  position: sticky !important;
+  top: var(--spwt-admin-action-top, 96px) !important;
   bottom: auto !important;
-  top: auto !important;
-  z-index: auto !important;
-  margin-top: 14px !important;
-  padding: 12px 0 8px !important;
-  background: transparent !important;
-  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+  z-index: 90 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 10px 0 14px !important;
+  padding: 10px 12px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96)) !important;
+  border: 1px solid rgba(15, 23, 42, 0.10) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
   display: flex !important;
   justify-content: flex-end !important;
   align-items: center !important;
   gap: 10px !important;
   flex-wrap: wrap !important;
+  backdrop-filter: blur(8px);
+}
+
+#adminPanel .tab-page.hidden .admin-floating-actions,
+.admin-panel .tab-page.hidden .admin-floating-actions {
+  display: none !important;
 }
 
 #adminPanel > .row-between:last-child,
@@ -43,7 +53,19 @@
 
 @media (max-width: 700px) {
   #adminPanel .admin-floating-actions,
-  .admin-panel .admin-floating-actions,
+  .admin-panel .admin-floating-actions {
+    top: var(--spwt-admin-action-top-mobile, 70px) !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
+
+  #adminPanel .admin-floating-actions .btn,
+  .admin-panel .admin-floating-actions .btn,
+  #adminPanel .admin-floating-actions button,
+  .admin-panel .admin-floating-actions button {
+    width: 100% !important;
+  }
+
   #adminPanel > .row-between:last-child,
   .admin-panel > .row-between:last-child,
   #adminPanel > .row-between:last-child .row,
